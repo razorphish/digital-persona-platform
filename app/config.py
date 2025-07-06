@@ -3,7 +3,7 @@ Configuration management for Digital Persona Platform
 """
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, validator
+from pydantic import BaseSettings
 from pathlib import Path
 
 
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     
     # File Upload Configuration
     max_file_size: int = 10485760  # 10MB
-    allowed_file_types: str = "image/jpeg,image/png,image/gif,video/mp4,audio/mpeg,audio/wav"
+    allowed_file_types: List[str] = ["image/jpeg", "image/png", "image/gif", "video/mp4", "audio/mpeg", "audio/wav"]
     upload_dir: str = "uploads"
     
     # AI Capabilities Configuration
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     debug: bool = True
     environment: str = "development"  # Options: development, staging, production
     log_level: str = "INFO"
-    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     
     # Server Configuration
     host: str = "0.0.0.0"
@@ -76,20 +76,6 @@ class Settings(BaseSettings):
     # Development Tools
     verbose_logging: bool = False
     enable_test_endpoints: bool = False
-    
-    @validator('cors_origins', pre=True)
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from comma-separated string."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',')]
-        return v
-    
-    @validator('allowed_file_types', pre=True)
-    def parse_allowed_file_types(cls, v):
-        """Parse allowed file types from comma-separated string."""
-        if isinstance(v, str):
-            return [file_type.strip() for file_type in v.split(',')]
-        return v
     
     @property
     def is_production(self) -> bool:
