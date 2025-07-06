@@ -1,0 +1,13 @@
+{
+    "python.defaultInterpreterPath": "./venv/bin/python",
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "editor.formatOnSave": true,
+    "cursor.chat.defaultModel": "gpt-4",
+    "cursor.autocomplete.enabled": true,
+    "files.associations": {
+        "*.py": "python",
+        "*.env": "properties"
+    }
+}
