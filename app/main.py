@@ -22,7 +22,8 @@ from app.routers import ai_capabilities
 # Load environment variables
 load_dotenv()
 
-# Import database utilities
+# Import configuration and database utilities
+from app.config import settings, validate_environment
 from app.services.openai_service import openai_service
 
 # Create uploads directory
@@ -212,6 +213,39 @@ async def test_components():
         results["tests"]["environment"] = {"status": "❌ error", "error": str(e)}
     
     return results
+
+
+@app.get("/config/validate")
+async def validate_config():
+    """Validate the current environment configuration."""
+    return {
+        "timestamp": time.time(),
+        "environment": validate_environment(),
+        "recommendations": [
+            "Set OPENAI_API_KEY to enable AI features",
+            "Configure AWS S3 for production file storage",
+            "Set a secure SECRET_KEY for production",
+            "Configure Redis for caching (optional)"
+        ]
+    }
+
+
+@app.get("/config/status")
+async def config_status():
+    """Get current configuration status."""
+    return {
+        "environment": settings.environment,
+        "debug": settings.debug,
+        "openai_configured": settings.openai_available,
+        "s3_configured": settings.s3_available,
+        "redis_configured": settings.redis_available,
+        "ai_capabilities": {
+            "image_analysis": settings.enable_image_analysis,
+            "voice_synthesis": settings.enable_voice_synthesis,
+            "memory_system": settings.enable_memory_system,
+            "personality_learning": settings.enable_personality_learning
+        }
+    }
 
 @app.get("/api/status")
 async def api_status():

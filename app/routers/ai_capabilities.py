@@ -1,6 +1,7 @@
 """
 AI Capabilities Router for advanced features
 """
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,11 +13,15 @@ from app.services.computer_vision import computer_vision_service
 from app.services.voice_synthesis import voice_synthesis_service
 from app.services.memory_service import memory_service
 from app.services.personality_learning import personality_learning_service
+from app.services.openai_service import openai_service
 from app.services.auth_db import get_current_user
 from app.models.user_db import User as DBUser
 from app.crud.persona import get_persona_by_id
 from app.crud.media import get_media_file_by_id
 from app.crud.chat import get_message_by_id, get_messages_by_conversation
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["AI Capabilities"])
 
@@ -53,10 +58,27 @@ async def analyze_image(
                 detail="Image analysis is disabled for this persona"
             )
         
-        # Perform analysis
-        analysis_results = await computer_vision_service.analyze_image(
-            media_file, persona, analysis_types
-        )
+        # Check if OpenAI is available
+        if not openai_service.is_available():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Image analysis service is currently unavailable. Please check your OpenAI API configuration."
+            )
+        
+        # Perform analysis with timeout
+        import asyncio
+        try:
+            analysis_results = await asyncio.wait_for(
+                computer_vision_service.analyze_image(
+                    media_file, persona, analysis_types
+                ),
+                timeout=60.0  # 60 second timeout
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Image analysis timed out. Please try again with a smaller image or different analysis types."
+            )
         
         # Save analysis results
         await computer_vision_service.save_analysis_results(
@@ -65,20 +87,29 @@ async def analyze_image(
         
         # Learn from the image if learning is enabled
         if persona.learning_enabled:
-            await personality_learning_service.learn_from_uploaded_content(
-                db, persona, media_file
-            )
+            try:
+                await personality_learning_service.learn_from_uploaded_content(
+                    db, persona, media_file
+                )
+            except Exception as learning_error:
+                logger.warning(f"Learning from image failed: {learning_error}")
+                # Don't fail the entire request if learning fails
         
         return {
             "success": True,
             "analysis": analysis_results,
-            "media_file_id": media_file_id
+            "media_file_id": media_file_id,
+            "processing_time_ms": analysis_results.get("processing_time_ms", 0)
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
+        logger.error(f"Image analysis failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Image analysis failed: {str(e)}"
+            detail="Image analysis failed. Please try again later."
         )
 
 

@@ -8,6 +8,7 @@ import Header from "./Header";
 const ImageAnalysisPanel = lazy(() => import("../ai/ImageAnalysisPanel"));
 const VoiceSynthesisPanel = lazy(() => import("../ai/VoiceSynthesisPanel"));
 const MemoryPanel = lazy(() => import("../ai/MemoryPanel"));
+const AIStatsPanel = lazy(() => import("../ai/AIStatsPanel"));
 
 const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -74,6 +75,17 @@ const Dashboard: React.FC = () => {
               >
                 Memory Management
               </button>
+              <button
+                data-tab="stats"
+                className={`py-2 px-4 ${
+                  activeTab === "stats"
+                    ? "border-b-2 border-primary-500 text-primary-600"
+                    : "text-gray-600"
+                }`}
+                onClick={() => setActiveTab("stats")}
+              >
+                AI Statistics
+              </button>
             </div>
           </div>
 
@@ -110,6 +122,17 @@ const Dashboard: React.FC = () => {
               }
             >
               <MemoryPanel />
+            </Suspense>
+          )}
+          {activeTab === "stats" && (
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                </div>
+              }
+            >
+              <AIStatsPanel />
             </Suspense>
           )}
         </main>
