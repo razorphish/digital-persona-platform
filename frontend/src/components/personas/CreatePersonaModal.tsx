@@ -18,6 +18,11 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
     name: "",
     description: "",
     relation_type: "self",
+    // AI Capabilities
+    image_analysis_enabled: true,
+    voice_synthesis_enabled: true,
+    memory_enabled: true,
+    learning_enabled: true,
   });
 
   useEffect(() => {
@@ -123,6 +128,107 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
               className="input-field"
               placeholder="Describe the persona's personality, background, and characteristics..."
             />
+          </div>
+
+          {/* AI Capabilities Section */}
+          <div className="border-t pt-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-3">
+              AI Capabilities
+            </h3>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Image Analysis
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    Analyze uploaded images for context
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="image_analysis_enabled"
+                  checked={formData.image_analysis_enabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      image_analysis_enabled: e.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Voice Synthesis
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    Convert messages to speech
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="voice_synthesis_enabled"
+                  checked={formData.voice_synthesis_enabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      voice_synthesis_enabled: e.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Memory System
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    Remember conversations and preferences
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="memory_enabled"
+                  checked={formData.memory_enabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      memory_enabled: e.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Learning
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    Learn from interactions to improve responses
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="learning_enabled"
+                  checked={formData.learning_enabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      learning_enabled: e.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex space-x-3 pt-4">

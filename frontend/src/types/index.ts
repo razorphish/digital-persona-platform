@@ -33,6 +33,12 @@ export interface Persona {
   created_at: string;
   status: string;
   user_id: number;
+  // AI Capabilities
+  image_analysis_enabled?: boolean;
+  voice_synthesis_enabled?: boolean;
+  memory_enabled?: boolean;
+  learning_enabled?: boolean;
+  voice_settings?: string;
 }
 
 export interface CreatePersonaRequest {
@@ -47,6 +53,11 @@ export interface CreatePersonaRequest {
     | "friend"
     | "colleague"
     | "other";
+  // AI Capabilities
+  image_analysis_enabled?: boolean;
+  voice_synthesis_enabled?: boolean;
+  memory_enabled?: boolean;
+  learning_enabled?: boolean;
 }
 
 // Conversation types
