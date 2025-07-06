@@ -3,8 +3,9 @@ Digital Persona Platform - Main Application
 Working FastAPI app with JWT authentication.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, validator
 from typing import Optional, List, Dict, Any
 import os
@@ -16,12 +17,13 @@ from dotenv import load_dotenv
 
 # Import routers
 from app.routers import auth_db, personas_db, media, chat, upload
+from app.routers import ai_capabilities
 
 # Load environment variables
 load_dotenv()
 
 # Import database utilities
-from app.database import create_tables
+from app.services.openai_service import openai_service
 
 # Create uploads directory
 Path("uploads").mkdir(exist_ok=True)
@@ -65,18 +67,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 # Include routers
 app.include_router(auth_db.router)
 app.include_router(personas_db.router)
 app.include_router(media.router)
 app.include_router(chat.router)
 app.include_router(upload.router)
-
-# Database initialization
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup."""
-    await create_tables()
+app.include_router(ai_capabilities.router)
 
 app_start_time = time.time()
 
@@ -124,19 +124,30 @@ async def health_check():
     """Health check with system information."""
     uptime = time.time() - app_start_time
     
-    return {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "uptime_seconds": round(uptime, 2),
-        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-        "platform": f"{platform.system()} {platform.release()}",
-        "memory_usage": "Available via system tools",
-        "services": {
-            "fastapi": "running",
-            "pydantic": "working",
-            "file_system": "accessible"
+    try:
+        # Check OpenAI service
+        openai_status = openai_service.get_api_status()
+        
+        return {
+            "status": "healthy",
+            "timestamp": time.time(),
+            "uptime_seconds": round(uptime, 2),
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            "platform": f"{platform.system()} {platform.release()}",
+            "memory_usage": "Available via system tools",
+            "services": {
+                "fastapi": "running",
+                "pydantic": "working",
+                "file_system": "accessible",
+                "openai": openai_status,
+                "database": "connected"
+            }
         }
-    }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Service unhealthy: {str(e)}"
+        )
 
 @app.get("/test")
 async def test_components():
@@ -202,7 +213,26 @@ async def test_components():
     
     return results
 
-
+@app.get("/api/status")
+async def api_status():
+    """Get detailed API status."""
+    return {
+        "api_version": "3.0.0",
+        "openai_available": openai_service.is_available(),
+        "openai_status": openai_service.get_api_status(),
+        "features": {
+            "authentication": True,
+            "personas": True,
+            "chat": True,
+            "media_upload": True,
+            "ai_capabilities": {
+                "computer_vision": True,
+                "voice_synthesis": True,
+                "memory_storage": True,
+                "personality_learning": True
+            }
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn

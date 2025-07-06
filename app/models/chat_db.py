@@ -40,4 +40,5 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    conversation = relationship("Conversation", back_populates="messages") 
+    conversation = relationship("Conversation", back_populates="messages")
+    voice_synthesis = relationship("VoiceSynthesis", back_populates="message", cascade="all, delete-orphan") 

@@ -293,6 +293,107 @@ Remember: You ARE {persona.name}. Respond as this person would, with their uniqu
             detail="Failed to generate response after multiple attempts. Please try again later."
         )
     
+    async def analyze_image_with_vision(
+        self, 
+        image_file, 
+        prompt: str = "Describe what you see in this image."
+    ) -> Dict[str, Any]:
+        """Analyze an image using OpenAI Vision API."""
+        
+        if not self.is_available():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI service is not available. Please set OPENAI_API_KEY environment variable."
+            )
+        
+        try:
+            # Initialize client if needed
+            self._initialize_client()
+            
+            if self.client is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="OpenAI client not initialized"
+                )
+            
+            # Call OpenAI Vision API
+            response = self.client.chat.completions.create(
+                model="gpt-4-vision-preview",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_file.read()}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=1000
+            )
+            
+            return {
+                "description": response.choices[0].message.content,
+                "model_used": "gpt-4-vision-preview"
+            }
+            
+        except Exception as e:
+            logger.error(f"Image analysis failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Image analysis failed: {str(e)}"
+            )
+    
+    async def analyze_text_for_personality(
+        self, 
+        text: str, 
+        prompt: str
+    ) -> Dict[str, Any]:
+        """Analyze text for personality traits using OpenAI."""
+        
+        if not self.is_available():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI service is not available. Please set OPENAI_API_KEY environment variable."
+            )
+        
+        try:
+            # Initialize client if needed
+            self._initialize_client()
+            
+            if self.client is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="OpenAI client not initialized"
+                )
+            
+            # Call OpenAI API for personality analysis
+            response = self.client.chat.completions.create(
+                model=self.default_model,
+                messages=[
+                    {"role": "system", "content": "You are an expert in personality analysis. Provide detailed insights in JSON format."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1000,
+                temperature=0.3  # Lower temperature for more consistent analysis
+            )
+            
+            return {
+                "analysis": response.choices[0].message.content,
+                "model_used": self.default_model
+            }
+            
+        except Exception as e:
+            logger.error(f"Personality analysis failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Personality analysis failed: {str(e)}"
+            )
+    
     def validate_api_key(self) -> bool:
         """Validate that the OpenAI API key is working."""
         if not self.is_available():
