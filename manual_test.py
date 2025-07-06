@@ -10,26 +10,29 @@ def test_app_creation():
 
 def test_pydantic_models():
     """Test Pydantic models work."""
-    from app.main import PersonaCreate, PersonaResponse
+    from app.routers.personas_db import PersonaCreate, PersonaResponse
     
     # Test creation
     persona_data = PersonaCreate(
         name="Test Person",
         description="A test",
-        relationship="friend"
+        relation_type="friend"
     )
     assert persona_data.name == "Test Person"
     print("✅ Pydantic validation test passed")
 
 def test_persona_response():
     """Test persona response model."""
-    from app.main import PersonaResponse
+    from app.routers.personas_db import PersonaResponse
     
     persona = PersonaResponse(
         id=1,
         name="Test",
-        relationship="friend",
-        created_at="2024-01-01 12:00:00"
+        description="A test persona",
+        relation_type="friend",
+        created_at="2024-01-01 12:00:00",
+        status="active",
+        user_id=1
     )
     assert persona.id == 1
     print("✅ Persona response test passed")

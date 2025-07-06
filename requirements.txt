@@ -33,3 +33,7 @@ aiofiles>=23.0.0
 
 # OpenAI integration
 openai>=1.0.0
+
+# Redis integration
+redis[async]
+fakeredis[async]
