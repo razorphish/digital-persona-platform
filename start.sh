@@ -206,6 +206,9 @@ sleep 3
 # Start frontend server
 print_status "info" "Starting frontend server..."
 cd frontend
+# Fix for Node.js 17+ OpenSSL issue (apply for all versions to be safe)
+print_status "info" "Applying OpenSSL legacy provider fix"
+export NODE_OPTIONS="--openssl-legacy-provider"
 npm start &
 FRONTEND_PID=$!
 cd ..

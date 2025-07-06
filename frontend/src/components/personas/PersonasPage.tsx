@@ -9,6 +9,11 @@ const PersonasPage: React.FC = () => {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Debug modal state
+  useEffect(() => {
+    console.log("showCreateModal state changed to:", showCreateModal);
+  }, [showCreateModal]);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
 
   useEffect(() => {
@@ -27,12 +32,16 @@ const PersonasPage: React.FC = () => {
   };
 
   const handleCreatePersona = async (personaData: CreatePersonaRequest) => {
+    console.log("PersonasPage: handleCreatePersona called with:", personaData);
     try {
-      await apiService.createPersona(personaData);
+      const result = await apiService.createPersona(personaData);
+      console.log("PersonasPage: Persona created successfully:", result);
       toast.success("Persona created successfully!");
       setShowCreateModal(false);
       fetchPersonas();
     } catch (error: any) {
+      console.error("PersonasPage: Error creating persona:", error);
+      console.error("PersonasPage: Error response:", error.response?.data);
       toast.error(error.response?.data?.detail || "Failed to create persona");
     }
   };
@@ -80,8 +89,12 @@ const PersonasPage: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center"
+          onClick={() => {
+            console.log("Create Persona button clicked");
+            setShowCreateModal(true);
+            console.log("showCreateModal set to true");
+          }}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center"
         >
           <Plus className="h-5 w-5 mr-2" />
           Create Persona
@@ -164,11 +177,14 @@ const PersonasPage: React.FC = () => {
       )}
 
       {showCreateModal && (
-        <CreatePersonaModal
-          onClose={() => setShowCreateModal(false)}
-          onSubmit={handleCreatePersona}
-          editingPersona={editingPersona}
-        />
+        <>
+          {console.log("Rendering CreatePersonaModal")}
+          <CreatePersonaModal
+            onClose={() => setShowCreateModal(false)}
+            onSubmit={handleCreatePersona}
+            editingPersona={editingPersona}
+          />
+        </>
       )}
     </div>
   );

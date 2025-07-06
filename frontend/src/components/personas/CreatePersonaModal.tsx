@@ -13,6 +13,7 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
   onSubmit,
   editingPersona,
 }) => {
+  console.log("CreatePersonaModal rendered, editingPersona:", editingPersona);
   const [formData, setFormData] = useState<CreatePersonaRequest>({
     name: "",
     description: "",
