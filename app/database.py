@@ -6,18 +6,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import sessionmaker
 from app.models.base import Base
 
-# Database URL for async operations (using asyncpg)
-# Convert psycopg2 URL to asyncpg if needed
-db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://david@localhost:5432/dpp_dev")
-if db_url.startswith("postgresql+psycopg2://"):
-    db_url = db_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://")
-DATABASE_URL = db_url
+# Database URL for SQLite (async)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./digital_persona.db")
 
 # Create async engine
 engine = create_async_engine(
     DATABASE_URL,
     echo=True,  # Set to False in production
-    future=True
+    future=True,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 )
 
 # Create async session factory
