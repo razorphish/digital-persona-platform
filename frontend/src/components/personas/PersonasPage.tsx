@@ -60,6 +60,7 @@ const PersonasPage: React.FC = () => {
 
   const getRelationTypeColor = (type: string) => {
     const colors = {
+      self: "bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 font-semibold",
       parent: "bg-blue-100 text-blue-800",
       spouse: "bg-pink-100 text-pink-800",
       child: "bg-green-100 text-green-800",
@@ -83,9 +84,11 @@ const PersonasPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Personas</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Your Digital Personas
+          </h1>
           <p className="text-gray-600">
-            Manage your AI personas and their personalities
+            Create and manage your digital self and other AI personas
           </p>
         </div>
         <button
@@ -110,14 +113,14 @@ const PersonasPage: React.FC = () => {
             No personas yet
           </h3>
           <p className="text-gray-600 mb-6">
-            Create your first AI persona to start having meaningful
-            conversations.
+            Start by creating your digital self to capture your personality,
+            memories, and unique characteristics.
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="btn-primary"
           >
-            Create Your First Persona
+            Create Your Digital Self
           </button>
         </div>
       ) : (

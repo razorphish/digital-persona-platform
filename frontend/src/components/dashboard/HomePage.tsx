@@ -49,8 +49,9 @@ const HomePage: React.FC = () => {
           Welcome to Digital Persona Platform
         </h1>
         <p className="text-primary-100">
-          Create AI personas, have meaningful conversations, and explore the
-          future of digital interaction.
+          Create your digital self and build AI personas that represent you.
+          Start by creating your own digital persona to capture your
+          personality, memories, and unique characteristics.
         </p>
       </div>
 
@@ -129,7 +130,7 @@ const HomePage: React.FC = () => {
               className="flex items-center p-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors duration-200"
             >
               <Plus className="h-5 w-5 mr-3 text-primary-600" />
-              <span>Create New Persona</span>
+              <span>Create Your Digital Self</span>
             </Link>
             <Link
               to="/dashboard/conversations"
