@@ -30,7 +30,7 @@ export interface Persona {
     | "colleague"
     | "other";
   created_at: string;
-  updated_at: string;
+  status: string;
   user_id: number;
 }
 
@@ -123,4 +123,37 @@ export interface RegisterForm {
   password: string;
   username: string;
   full_name?: string;
+}
+
+// AI Capabilities types
+export interface ImageAnalysisResult {
+  success: boolean;
+  analysis: Record<string, any>;
+  media_file_id: number;
+}
+
+export interface VoiceSynthesisResult {
+  success: boolean;
+  synthesis: {
+    audio_url: string;
+    voice: string;
+    engine: string;
+    duration: number;
+  };
+  message_id: number;
+}
+
+export interface PersonaMemory {
+  id: number;
+  type: string;
+  content: string;
+  importance: number;
+  created_at: string;
+  last_accessed: string;
+}
+
+export interface PersonaMemoriesResponse {
+  success: boolean;
+  memories: PersonaMemory[];
+  count: number;
 }

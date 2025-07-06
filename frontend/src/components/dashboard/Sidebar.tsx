@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Home,
@@ -9,8 +9,45 @@ import {
   Settings,
   Plus,
 } from "lucide-react";
+import { CreatePersonaRequest, CreateConversationRequest } from "../../types";
+import apiService from "../../services/api";
+import toast from "react-hot-toast";
+import CreatePersonaModal from "../personas/CreatePersonaModal";
+import CreateConversationModal from "../conversations/CreateConversationModal";
 
 const Sidebar: React.FC = () => {
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateConversationModal, setShowCreateConversationModal] =
+    useState(false);
+
+  const handleCreatePersona = async (personaData: CreatePersonaRequest) => {
+    try {
+      await apiService.createPersona(personaData);
+      toast.success("Persona created successfully!");
+      setShowCreateModal(false);
+      // Optionally refresh the page or trigger a callback to update the parent
+      window.location.reload();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to create persona");
+    }
+  };
+
+  const handleCreateConversation = async (
+    conversationData: CreateConversationRequest
+  ) => {
+    try {
+      await apiService.createConversation(conversationData);
+      toast.success("Conversation created successfully!");
+      setShowCreateConversationModal(false);
+      // Optionally refresh the page or trigger a callback to update the parent
+      window.location.reload();
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.detail || "Failed to create conversation"
+      );
+    }
+  };
+
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: Home },
     { name: "Personas", href: "/dashboard/personas", icon: Users },
@@ -55,17 +92,41 @@ const Sidebar: React.FC = () => {
             Quick Actions
           </h3>
           <div className="space-y-2">
-            <button className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+            >
               <Plus className="h-5 w-5 mr-3" />
               New Persona
             </button>
-            <button className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+            <button
+              onClick={() => setShowCreateConversationModal(true)}
+              className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+            >
               <Plus className="h-5 w-5 mr-3" />
               New Conversation
             </button>
           </div>
         </div>
       </div>
+
+      {/* Create Persona Modal */}
+      {showCreateModal && (
+        <CreatePersonaModal
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreatePersona}
+          editingPersona={null}
+        />
+      )}
+
+      {/* Create Conversation Modal */}
+      {showCreateConversationModal && (
+        <CreateConversationModal
+          onClose={() => setShowCreateConversationModal(false)}
+          onSubmit={handleCreateConversation}
+          editingConversation={null}
+        />
+      )}
     </div>
   );
 };

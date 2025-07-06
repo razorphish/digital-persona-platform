@@ -13,6 +13,9 @@ import {
   ChatStats,
   LoginForm,
   RegisterForm,
+  ImageAnalysisResult,
+  VoiceSynthesisResult,
+  PersonaMemoriesResponse,
 } from "../types";
 
 class ApiService {
@@ -29,8 +32,11 @@ class ApiService {
 
     // Load token from localStorage on initialization
     this.token = localStorage.getItem("access_token");
+    console.log("Loading token from localStorage:", this.token);
     if (this.token) {
       this.setAuthToken(this.token);
+    } else {
+      console.log("No token found in localStorage");
     }
 
     // Add response interceptor for token refresh
@@ -51,6 +57,8 @@ class ApiService {
     this.token = token;
     this.api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     localStorage.setItem("access_token", token);
+    console.log("Auth token set:", token);
+    console.log("Headers updated:", this.api.defaults.headers.common);
   }
 
   private clearAuthToken() {
@@ -99,11 +107,23 @@ class ApiService {
   }
 
   async createPersona(personaData: CreatePersonaRequest): Promise<Persona> {
-    const response: AxiosResponse<Persona> = await this.api.post(
-      "/personas",
-      personaData
-    );
-    return response.data;
+    console.log("Creating persona with data:", personaData);
+    console.log("Current auth token:", this.token);
+    console.log("Request headers:", this.api.defaults.headers.common);
+
+    try {
+      const response: AxiosResponse<Persona> = await this.api.post(
+        "/personas",
+        personaData
+      );
+      console.log("Persona created successfully:", response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error creating persona:", error);
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      throw error;
+    }
   }
 
   async updatePersona(
@@ -235,6 +255,50 @@ class ApiService {
 
   async getAvailableModels(): Promise<any> {
     const response: AxiosResponse = await this.api.get("/chat/models");
+    return response.data;
+  }
+
+  // AI Capabilities
+  async analyzeImage(
+    mediaFileId: number,
+    analysisTypes?: string[]
+  ): Promise<ImageAnalysisResult> {
+    const response = await this.api.post(`/ai/analyze-image/${mediaFileId}`, {
+      analysis_types: analysisTypes,
+    });
+    return response.data;
+  }
+
+  async synthesizeVoice(messageId: number): Promise<VoiceSynthesisResult> {
+    const response = await this.api.post(`/ai/synthesize-voice/${messageId}`);
+    return response.data;
+  }
+
+  async getPersonaMemories(
+    personaId: number,
+    query?: string,
+    memoryTypes?: string[],
+    limit: number = 10
+  ): Promise<PersonaMemoriesResponse> {
+    const params: any = { limit };
+    if (query) params.query = query;
+    if (memoryTypes) params.memory_types = memoryTypes;
+    const response = await this.api.get(`/ai/memories/${personaId}`, {
+      params,
+    });
+    return response.data;
+  }
+
+  async storePersonaMemory(
+    personaId: number,
+    memoryType: string,
+    content: string,
+    importance: number = 1.0,
+    context?: object
+  ): Promise<any> {
+    const data: any = { memory_type: memoryType, content, importance };
+    if (context) data.context = context;
+    const response = await this.api.post(`/ai/memories/${personaId}`, data);
     return response.data;
   }
 }
