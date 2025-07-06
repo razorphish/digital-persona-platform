@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import apiService from "../../services/api";
 import { Persona, MediaFile, ImageAnalysisResult } from "../../types";
+import toast from "react-hot-toast";
 
 const ImageAnalysisPanel: React.FC = () => {
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -10,6 +11,8 @@ const ImageAnalysisPanel: React.FC = () => {
   const [analysis, setAnalysis] = useState<ImageAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number>(0);
+  const [processingStep, setProcessingStep] = useState<string>("");
 
   useEffect(() => {
     apiService.getPersonas().then(setPersonas);
@@ -21,11 +24,39 @@ const ImageAnalysisPanel: React.FC = () => {
     setLoading(true);
     setError(null);
     setAnalysis(null);
+    setProgress(0);
+    setProcessingStep("Initializing analysis...");
+
     try {
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 10;
+        });
+      }, 500);
+
+      setProcessingStep("Analyzing image content...");
       const result = await apiService.analyzeImage(selectedImage);
+
+      clearInterval(progressInterval);
+      setProgress(100);
+      setProcessingStep("Analysis complete!");
+
       setAnalysis(result);
+      toast.success("Image analysis completed successfully!");
+
+      // Reset progress after a delay
+      setTimeout(() => {
+        setProgress(0);
+        setProcessingStep("");
+      }, 2000);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || "Analysis failed");
+      const errorMessage = e?.response?.data?.detail || "Analysis failed";
+      setError(errorMessage);
+      toast.error(errorMessage);
+      setProgress(0);
+      setProcessingStep("");
     } finally {
       setLoading(false);
     }
@@ -73,6 +104,23 @@ const ImageAnalysisPanel: React.FC = () => {
       >
         {loading ? "Analyzing..." : "Analyze Image"}
       </button>
+
+      {/* Progress Indicator */}
+      {loading && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+            <span>{processingStep}</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
+
       {error && <div className="text-red-600 mt-2">{error}</div>}
       {analysis && (
         <div className="mt-4">
