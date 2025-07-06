@@ -94,4 +94,16 @@ async def get_media_files_by_type(db: AsyncSession, user_id: int, media_type: st
             MediaFile.media_type == media_type
         )
     )
+    return list(result.scalars().all())
+
+
+async def get_media_files_by_persona_and_type(db: AsyncSession, persona_id: int, user_id: int, media_type: str) -> List[MediaFile]:
+    """Get media files by persona and type (image/video) for a user."""
+    result = await db.execute(
+        select(MediaFile).where(
+            MediaFile.persona_id == persona_id,
+            MediaFile.user_id == user_id,
+            MediaFile.media_type == media_type
+        )
+    )
     return list(result.scalars().all()) 
