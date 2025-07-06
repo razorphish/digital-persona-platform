@@ -1,6 +1,6 @@
 # 🤖 Digital Persona Platform
 
-A comprehensive FastAPI-based platform for creating and interacting with digital personas, featuring JWT authentication, SQLite database, media uploads, and OpenAI-powered chat.
+A comprehensive FastAPI-based platform for creating and interacting with digital personas, featuring JWT authentication, SQLite database, media uploads, OpenAI-powered chat, and a modern React frontend.
 
 ## ✨ Features
 
@@ -33,17 +33,27 @@ A comprehensive FastAPI-based platform for creating and interacting with digital
   - Secure file storage
 
 - 💬 **OpenAI-Powered Chat**
+
   - Conversational AI with personas
   - Context-aware responses
   - Conversation history
   - Relationship-based interactions
+
+- 🌐 **Modern React Frontend**
+  - Beautiful, responsive dashboard
+  - Real-time chat interface
+  - Drag-and-drop file upload
+  - Persona management UI
+  - Authentication forms
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.13+
+- Node.js 16+ (for frontend)
 - pip (Python package manager)
+- npm (Node.js package manager)
 
 ### Installation
 
@@ -61,7 +71,7 @@ A comprehensive FastAPI-based platform for creating and interacting with digital
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. **Install dependencies:**
+3. **Install Python dependencies:**
 
    ```bash
    pip install -r requirements.txt
@@ -82,14 +92,48 @@ A comprehensive FastAPI-based platform for creating and interacting with digital
 
 6. **Start the application:**
 
+   **Option A: Start both backend and frontend together:**
+
+   ```bash
+   ./start.sh
+   ```
+
+   **Option B: Start only the backend:**
+
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-7. **Access the API:**
-   - API Documentation: http://localhost:8000/docs
-   - Health Check: http://localhost:8000/health
-   - Root Endpoint: http://localhost:8000/
+   **Option C: Start only the frontend:**
+
+   ```bash
+   ./start-frontend.sh
+   ```
+
+7. **Access the application:**
+   - **Frontend Dashboard:** http://localhost:3000
+   - **API Documentation:** http://localhost:8000/docs
+   - **Health Check:** http://localhost:8000/health
+   - **Root Endpoint:** http://localhost:8000/
+
+### Frontend Development
+
+The frontend is built with React 18, TypeScript, and Tailwind CSS. It includes:
+
+- **Authentication:** Login and registration forms
+- **Dashboard:** Overview with statistics and quick actions
+- **Personas:** Create, edit, and manage AI personas
+- **Chat:** Real-time conversations with personas
+- **File Upload:** Drag-and-drop file management
+- **Responsive Design:** Works on desktop and mobile
+
+To work on the frontend only:
+
+```bash
+cd frontend
+npm install
+npm start
+```
 
 ## 🔐 Authentication
 
