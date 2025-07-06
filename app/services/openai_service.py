@@ -15,13 +15,26 @@ class OpenAIService:
     
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client: Optional[OpenAI] = None
+        self.default_model = "gpt-3.5-turbo"
+        self.max_tokens = 1000
+        self.temperature = 0.7
+        self._initialized = False
+    
+    def _initialize_client(self):
+        """Initialize the OpenAI client if not already done."""
+        if self._initialized:
+            return
+            
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
         
         self.client = OpenAI(api_key=self.api_key)
-        self.default_model = "gpt-3.5-turbo"
-        self.max_tokens = 1000
-        self.temperature = 0.7
+        self._initialized = True
+    
+    def is_available(self) -> bool:
+        """Check if OpenAI service is available (API key is set)."""
+        return bool(self.api_key)
     
     def create_persona_system_prompt(self, persona: DBPersona) -> str:
         """Create a system prompt based on persona information."""
@@ -79,9 +92,18 @@ Remember: You are {persona.name}, not an AI assistant. Respond as this persona w
         conversation_history: List[DBChatMessage]
     ) -> Dict[str, Any]:
         """Generate a response from the persona using OpenAI."""
+        if not self.is_available():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OpenAI service is not available. Please set OPENAI_API_KEY environment variable."
+            )
+        
         start_time = time.time()
         
         try:
+            # Initialize client if needed
+            self._initialize_client()
+            
             # Create system prompt
             system_prompt = self.create_persona_system_prompt(persona)
             
@@ -91,6 +113,12 @@ Remember: You are {persona.name}, not an AI assistant. Respond as this persona w
             messages.append({"role": "user", "content": user_message})
             
             # Call OpenAI API
+            if self.client is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="OpenAI client not initialized"
+                )
+            
             response = self.client.chat.completions.create(
                 model=self.default_model,
                 messages=messages,
@@ -120,13 +148,19 @@ Remember: You are {persona.name}, not an AI assistant. Respond as this persona w
     
     def validate_api_key(self) -> bool:
         """Validate that the OpenAI API key is working."""
+        if not self.is_available():
+            return False
+            
         try:
+            self._initialize_client()
             # Make a simple test call
+            if self.client is None:
+                return False
             response = self.client.models.list()
             return True
         except Exception:
             return False
 
 
-# Global OpenAI service instance
+# Global OpenAI service instance (lazy initialization)
 openai_service = OpenAIService() 

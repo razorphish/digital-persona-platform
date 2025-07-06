@@ -37,3 +37,7 @@ openai>=1.0.0
 # Redis integration
 redis[async]
 fakeredis[async]
+
+# AWS S3 Integration
+aioboto3>=15.0.0
+boto3>=1.38.0

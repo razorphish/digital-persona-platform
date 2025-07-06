@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 from fastapi import HTTPException, status, UploadFile
 from fastapi.responses import FileResponse
 import aiofiles
+from app.utils.s3_util import upload_file_to_s3
 
 
 # File upload configuration
@@ -102,17 +103,12 @@ async def save_uploaded_file(
     file: UploadFile, 
     media_type: str,
     persona_id: int,
-    user_id: int
-) -> Tuple[str, str, int]:
+    user_id: int,
+    description: Optional[str] = None
+) -> dict:
     """
-    Save uploaded file and return file info.
-    
-    Returns:
-        Tuple of (filename, file_path, file_size)
+    Save uploaded file to S3 and return file metadata for DB.
     """
-    # Ensure upload directories exist
-    ensure_upload_directories()
-    
     # Validate file
     if not file.filename:
         raise HTTPException(
@@ -120,7 +116,7 @@ async def save_uploaded_file(
             detail="No filename provided"
         )
     
-    # Get file size (read content to get size)
+    # Read content to get size
     content = await file.read()
     file_size = len(content)
     
@@ -134,32 +130,21 @@ async def save_uploaded_file(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Could not determine file type"
         )
-    
     validate_mime_type(mime_type, media_type)
     
-    # Generate unique filename
-    filename = generate_unique_filename(file.filename)
-    
-    # Determine upload directory
-    if media_type == "image":
-        upload_dir = IMAGE_UPLOAD_DIR
-    else:  # video
-        upload_dir = VIDEO_UPLOAD_DIR
-    
-    # Create persona-specific subdirectory
-    persona_dir = upload_dir / str(persona_id)
-    persona_dir.mkdir(exist_ok=True)
-    
-    # Create user-specific subdirectory
-    user_dir = persona_dir / str(user_id)
-    user_dir.mkdir(exist_ok=True)
-    
-    # Save file
-    file_path = user_dir / filename
-    async with aiofiles.open(file_path, 'wb') as f:
-        await f.write(content)
-    
-    return filename, str(file_path), file_size
+    # Upload to S3
+    import io
+    file_obj = io.BytesIO(content)
+    s3_result = await upload_file_to_s3(
+        file_obj=file_obj,
+        user_id=user_id,
+        persona_id=persona_id,
+        original_filename=file.filename,
+        mime_type=mime_type,
+        file_size=file_size,
+        description=description
+    )
+    return s3_result
 
 
 async def get_file_response(file_path: str, filename: str) -> FileResponse:
