@@ -22,6 +22,7 @@ export interface Persona {
   name: string;
   description?: string;
   relation_type:
+    | "self"
     | "parent"
     | "spouse"
     | "child"
@@ -38,6 +39,7 @@ export interface CreatePersonaRequest {
   name: string;
   description?: string;
   relation_type:
+    | "self"
     | "parent"
     | "spouse"
     | "child"

@@ -26,7 +26,7 @@ class PersonaCreate(BaseModel):
     
     @validator('relation_type')
     def validate_relation_type(cls, v):
-        valid = ['parent', 'spouse', 'child', 'sibling', 'friend', 'colleague', 'other']
+        valid = ['self', 'parent', 'spouse', 'child', 'sibling', 'friend', 'colleague', 'other']
         if v.lower() not in valid:
             raise ValueError(f'Relation type must be one of: {", ".join(valid)}')
         return v.lower()

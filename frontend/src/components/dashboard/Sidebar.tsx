@@ -97,7 +97,7 @@ const Sidebar: React.FC = () => {
               className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
             >
               <Plus className="h-5 w-5 mr-3" />
-              New Persona
+              Create Your Digital Self
             </button>
             <button
               onClick={() => setShowCreateConversationModal(true)}

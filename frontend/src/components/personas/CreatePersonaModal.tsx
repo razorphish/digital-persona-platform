@@ -17,7 +17,7 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
   const [formData, setFormData] = useState<CreatePersonaRequest>({
     name: "",
     description: "",
-    relation_type: "friend",
+    relation_type: "self",
   });
 
   useEffect(() => {
@@ -96,6 +96,7 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
               onChange={handleChange}
               className="input-field"
             >
+              <option value="self">Self (Your Digital Persona)</option>
               <option value="parent">Parent</option>
               <option value="spouse">Spouse</option>
               <option value="child">Child</option>
