@@ -15,7 +15,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Import routers
-from app.routers import auth_db, personas_db, media, chat
+from app.routers import auth_db, personas_db, media, chat, upload
 
 # Load environment variables
 load_dotenv()
@@ -70,6 +70,7 @@ app.include_router(auth_db.router)
 app.include_router(personas_db.router)
 app.include_router(media.router)
 app.include_router(chat.router)
+app.include_router(upload.router)
 
 # Database initialization
 @app.on_event("startup")
