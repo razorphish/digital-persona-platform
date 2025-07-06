@@ -44,9 +44,15 @@ async def create_media_file(
     media_type: str,
     persona_id: int,
     user_id: int,
-    description: Optional[str] = None
+    description: Optional[str] = None,
+    file_id: Optional[str] = None,
+    s3_key: Optional[str] = None,
+    s3_bucket: Optional[str] = None,
+    s3_url: Optional[str] = None,
+    upload_method: Optional[str] = None,
+    is_s3_stored: Optional[bool] = None
 ) -> MediaFile:
-    """Create a new media file record."""
+    """Create a new media file record with S3 metadata."""
     db_media = MediaFile(
         filename=filename,
         original_filename=original_filename,
@@ -56,9 +62,14 @@ async def create_media_file(
         media_type=media_type,
         persona_id=persona_id,
         user_id=user_id,
-        description=description
+        description=description,
+        file_id=file_id,
+        s3_key=s3_key,
+        s3_bucket=s3_bucket,
+        s3_url=s3_url,
+        upload_method=upload_method,
+        is_s3_stored=is_s3_stored if is_s3_stored is not None else False
     )
-    
     db.add(db_media)
     await db.commit()
     await db.refresh(db_media)

@@ -6,7 +6,7 @@ import uuid
 import mimetypes
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, status
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, status, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -16,6 +16,8 @@ from app.services.auth_db import get_current_active_user
 from app.crud import media as media_crud, persona as persona_crud
 from app.database import get_db
 import aiofiles
+from app.services.upload import save_uploaded_file
+from app.utils.s3_util import get_file_download_url, delete_file_from_s3, get_file_upload_url
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -48,6 +50,18 @@ class MediaFileResponse(BaseModel):
     description: Optional[str] = None
     created_at: str
     updated_at: str
+
+
+class RegisterFileRequest(BaseModel):
+    file_id: str
+    s3_key: str
+    filename: str
+    original_filename: str
+    mime_type: str
+    file_size: int
+    media_type: str
+    upload_method: Optional[str] = "presigned"
+    description: Optional[str] = None
 
 
 def ensure_upload_directories(user_id: int, persona_id: int) -> Path:
@@ -97,51 +111,6 @@ def generate_unique_filename(original_filename: str) -> str:
     return f"{unique_id}{ext}"
 
 
-async def save_uploaded_file(
-    file: UploadFile,
-    persona_dir: Path
-) -> tuple[str, str, int]:
-    """
-    Save uploaded file and return file info.
-    
-    Returns:
-        Tuple of (filename, file_path, file_size)
-    """
-    # Validate file
-    if not file.filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No filename provided"
-        )
-    
-    # Read file content to get size
-    content = await file.read()
-    file_size = len(content)
-    
-    # Validate file size
-    validate_file_size(file_size)
-    
-    # Validate file type
-    mime_type = file.content_type or (mimetypes.guess_type(file.filename or "")[0] or "")
-    if not mime_type:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not determine file type"
-        )
-    
-    media_type = validate_file_type(file.filename, mime_type)
-    
-    # Generate unique filename
-    filename = generate_unique_filename(file.filename)
-    
-    # Save file
-    file_path = persona_dir / filename
-    async with aiofiles.open(file_path, 'wb') as f:
-        await f.write(content)
-    
-    return filename, str(file_path), file_size
-
-
 @router.post("/persona/{persona_id}/image", response_model=MediaFileResponse)
 async def upload_persona_image(
     persona_id: int,
@@ -150,8 +119,7 @@ async def upload_persona_image(
     current_user: DBUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload an image file for a specific persona."""
-    
+    """Upload an image file for a specific persona (S3)."""
     # Verify persona exists and belongs to user
     persona = await persona_crud.get_persona_by_id(db, persona_id, current_user.id)
     if not persona:
@@ -159,7 +127,6 @@ async def upload_persona_image(
             status_code=404,
             detail=f"Persona {persona_id} not found"
         )
-    
     # Validate file is an image
     mime_type = file.content_type or (mimetypes.guess_type(file.filename or "")[0] or "")
     if not mime_type or mime_type not in ALLOWED_IMAGE_TYPES:
@@ -167,27 +134,33 @@ async def upload_persona_image(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only JPEG and PNG images are allowed"
         )
-    
-    # Ensure upload directory exists
-    persona_dir = ensure_upload_directories(current_user.id, persona_id)
-    
-    # Save file
-    filename, file_path, file_size = await save_uploaded_file(file, persona_dir)
-    
-    # Create database record
-    db_media = await media_crud.create_media_file(
-        db=db,
-        filename=filename,
-        original_filename=file.filename or "unknown",
-        file_path=file_path,
-        file_size=file_size,
-        mime_type=mime_type,
+    # Save file to S3
+    s3_result = await save_uploaded_file(
+        file=file,
         media_type="image",
         persona_id=persona_id,
         user_id=current_user.id,
         description=description
     )
-    
+    # Create database record with S3 metadata
+    db_media = await media_crud.create_media_file(
+        db=db,
+        file_id=s3_result["file_id"],
+        filename=s3_result["s3_key"].split("/")[-1],
+        original_filename=s3_result["original_filename"],
+        file_path="",  # Not used for S3
+        s3_key=s3_result["s3_key"],
+        s3_bucket=s3_result.get("bucket", None),
+        s3_url=s3_result["public_url"],
+        file_size=s3_result["file_size"],
+        mime_type=s3_result["mime_type"],
+        media_type="image",
+        upload_method=s3_result["upload_method"],
+        is_s3_stored=True,
+        persona_id=persona_id,
+        user_id=current_user.id,
+        description=description
+    )
     return MediaFileResponse(
         id=db_media.id,
         filename=db_media.filename,
@@ -211,8 +184,7 @@ async def upload_persona_video(
     current_user: DBUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload a video file for a specific persona."""
-    
+    """Upload a video file for a specific persona (S3)."""
     # Verify persona exists and belongs to user
     persona = await persona_crud.get_persona_by_id(db, persona_id, current_user.id)
     if not persona:
@@ -220,7 +192,6 @@ async def upload_persona_video(
             status_code=404,
             detail=f"Persona {persona_id} not found"
         )
-    
     # Validate file is a video
     mime_type = file.content_type or (mimetypes.guess_type(file.filename or "")[0] or "")
     if not mime_type or mime_type not in ALLOWED_VIDEO_TYPES:
@@ -228,27 +199,33 @@ async def upload_persona_video(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only MP4 videos are allowed"
         )
-    
-    # Ensure upload directory exists
-    persona_dir = ensure_upload_directories(current_user.id, persona_id)
-    
-    # Save file
-    filename, file_path, file_size = await save_uploaded_file(file, persona_dir)
-    
-    # Create database record
-    db_media = await media_crud.create_media_file(
-        db=db,
-        filename=filename,
-        original_filename=file.filename or "unknown",
-        file_path=file_path,
-        file_size=file_size,
-        mime_type=mime_type,
+    # Save file to S3
+    s3_result = await save_uploaded_file(
+        file=file,
         media_type="video",
         persona_id=persona_id,
         user_id=current_user.id,
         description=description
     )
-    
+    # Create database record with S3 metadata
+    db_media = await media_crud.create_media_file(
+        db=db,
+        file_id=s3_result["file_id"],
+        filename=s3_result["s3_key"].split("/")[-1],
+        original_filename=s3_result["original_filename"],
+        file_path="",  # Not used for S3
+        s3_key=s3_result["s3_key"],
+        s3_bucket=s3_result.get("bucket", None),
+        s3_url=s3_result["public_url"],
+        file_size=s3_result["file_size"],
+        mime_type=s3_result["mime_type"],
+        media_type="video",
+        upload_method=s3_result["upload_method"],
+        is_s3_stored=True,
+        persona_id=persona_id,
+        user_id=current_user.id,
+        description=description
+    )
     return MediaFileResponse(
         id=db_media.id,
         filename=db_media.filename,
@@ -348,27 +325,12 @@ async def download_file(
     current_user: DBUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Download a media file."""
-    
+    """Download a file from S3 (returns presigned URL)."""
     db_media = await media_crud.get_media_file_by_id(db, file_id, current_user.id)
-    if not db_media:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Media file {file_id} not found"
-        )
-    
-    # Check if file exists on filesystem
-    if not os.path.exists(db_media.file_path):
-        raise HTTPException(
-            status_code=404,
-            detail="File not found on filesystem"
-        )
-    
-    return FileResponse(
-        path=db_media.file_path,
-        filename=db_media.original_filename,
-        media_type=db_media.mime_type
-    )
+    if not db_media or not db_media.s3_key:
+        raise HTTPException(status_code=404, detail="File not found")
+    url = await get_file_download_url(db_media.s3_key)
+    return {"download_url": url}
 
 
 @router.put("/files/{file_id}", response_model=MediaFileResponse)
@@ -415,34 +377,15 @@ async def delete_file(
     current_user: DBUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a media file."""
-    
+    """Delete a file from S3 and the database."""
     db_media = await media_crud.get_media_file_by_id(db, file_id, current_user.id)
-    if not db_media:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Media file {file_id} not found"
-        )
-    
-    # Delete file from filesystem
-    if os.path.exists(db_media.file_path):
-        try:
-            os.remove(db_media.file_path)
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to delete file from filesystem: {str(e)}"
-            )
-    
-    # Delete database record
-    success = await media_crud.delete_media_file(db, file_id, current_user.id)
-    if not success:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete file record from database"
-        )
-    
-    return {"message": f"Media file {file_id} deleted successfully"}
+    if not db_media or not db_media.s3_key:
+        raise HTTPException(status_code=404, detail="File not found")
+    # Delete from S3
+    await delete_file_from_s3(db_media.s3_key)
+    # Delete from DB
+    await media_crud.delete_media_file(db, file_id, current_user.id)
+    return {"detail": "File deleted"}
 
 
 @router.get("/stats")
@@ -481,4 +424,115 @@ async def get_upload_stats(
         "video_count": video_count,
         "persona_stats": persona_stats,
         "file_size_limit_mb": MAX_FILE_SIZE // (1024 * 1024)
-    } 
+    }
+
+
+@router.post("/persona/{persona_id}/presigned-upload")
+async def get_presigned_upload_url(
+    persona_id: int,
+    filename: str = Body(...),
+    mime_type: str = Body(...),
+    current_user: DBUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate a presigned S3 upload URL for direct browser upload."""
+    # Verify persona exists and belongs to user
+    persona = await persona_crud.get_persona_by_id(db, persona_id, current_user.id)
+    if not persona:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Persona {persona_id} not found"
+        )
+    # Validate file type
+    file_ext = Path(filename).suffix.lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed extensions: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+    if mime_type not in ALLOWED_IMAGE_TYPES and mime_type not in ALLOWED_VIDEO_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid MIME type. Only JPEG, PNG, and MP4 allowed."
+        )
+    # Determine media type
+    if mime_type in ALLOWED_IMAGE_TYPES:
+        media_type = "images"
+    else:
+        media_type = "videos"
+    import uuid
+    file_id = str(uuid.uuid4())
+    s3_key = f"uploads/{current_user.id}/{persona_id}/{media_type}/{file_id}_{filename}"
+    url = await get_file_upload_url(s3_key, mime_type)
+    return {
+        "upload_url": url,
+        "s3_key": s3_key,
+        "file_id": file_id,
+        "bucket": os.getenv("AWS_S3_BUCKET", "digital-persona-platform")
+    }
+
+
+@router.post("/persona/{persona_id}/register", response_model=MediaFileResponse)
+async def register_uploaded_file(
+    persona_id: int,
+    req: RegisterFileRequest,
+    current_user: DBUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Register file metadata after presigned S3 upload."""
+    # Verify persona exists and belongs to user
+    persona = await persona_crud.get_persona_by_id(db, persona_id, current_user.id)
+    if not persona:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Persona {persona_id} not found"
+        )
+    # Validate file type
+    file_ext = Path(req.filename).suffix.lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed extensions: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+    if req.mime_type not in ALLOWED_IMAGE_TYPES and req.mime_type not in ALLOWED_VIDEO_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid MIME type. Only JPEG, PNG, and MP4 allowed."
+        )
+    # Determine media type
+    if req.mime_type in ALLOWED_IMAGE_TYPES:
+        media_type = "image"
+    else:
+        media_type = "video"
+    # Persist metadata in DB
+    db_media = await media_crud.create_media_file(
+        db=db,
+        file_id=req.file_id,
+        filename=req.filename,
+        original_filename=req.original_filename,
+        file_path="",  # Not used for S3
+        s3_key=req.s3_key,
+        s3_bucket=os.getenv("AWS_S3_BUCKET", "digital-persona-platform"),
+        s3_url=f"https://{os.getenv('AWS_S3_BUCKET', 'digital-persona-platform')}.s3.amazonaws.com/{req.s3_key}",
+        file_size=req.file_size,
+        mime_type=req.mime_type,
+        media_type=media_type,
+        upload_method=req.upload_method,
+        is_s3_stored=True,
+        persona_id=persona_id,
+        user_id=current_user.id,
+        description=req.description
+    )
+    return MediaFileResponse(
+        id=db_media.id,
+        filename=db_media.filename,
+        original_filename=db_media.original_filename,
+        file_size=db_media.file_size,
+        mime_type=db_media.mime_type,
+        media_type=db_media.media_type,
+        persona_id=db_media.persona_id,
+        user_id=db_media.user_id,
+        description=db_media.description,
+        created_at=db_media.created_at.isoformat(),
+        updated_at=db_media.updated_at.isoformat()
+    ) 
