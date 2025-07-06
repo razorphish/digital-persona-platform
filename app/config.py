@@ -5,40 +5,41 @@ import os
 from typing import List, Optional
 from pydantic import BaseSettings
 from pathlib import Path
+from pydantic import EmailStr
 
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
     # Database Configuration
-    database_url: str = "sqlite+aiosqlite:///./digital_persona.db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./digital_persona.db"
     
     # Security & Authentication
-    secret_key: str = "your-super-secret-key-here-change-this-in-production"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    SECRET_KEY: str = "your-secret-key-here-change-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     refresh_token_expire_days: int = 7
     
     # OpenAI Configuration
-    openai_api_key: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
     openai_model: str = "gpt-4-turbo-preview"
     openai_vision_model: str = "gpt-4-vision-preview"
     openai_max_tokens: int = 4000
     openai_temperature: float = 0.7
     
     # AWS S3 Configuration (Optional)
-    aws_access_key_id: Optional[str] = None
-    aws_secret_access_key: Optional[str] = None
-    aws_region: str = "us-east-1"
-    aws_s3_bucket: Optional[str] = None
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_DEFAULT_REGION: str = "us-east-1"
+    S3_BUCKET_NAME: Optional[str] = None
     aws_s3_endpoint_url: str = "https://s3.amazonaws.com"
     
     # Redis Configuration (Optional)
-    redis_url: Optional[str] = None
-    redis_db: int = 0
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_PASSWORD: Optional[str] = None
     
     # File Upload Configuration
-    max_file_size: int = 10485760  # 10MB
+    MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100MB
     allowed_file_types: List[str] = ["image/jpeg", "image/png", "image/gif", "video/mp4", "audio/mpeg", "audio/wav"]
     upload_dir: str = "uploads"
     
@@ -58,10 +59,14 @@ class Settings(BaseSettings):
     learning_confidence_threshold: float = 0.7
     
     # Application Configuration
-    debug: bool = True
-    environment: str = "development"  # Options: development, staging, production
-    log_level: str = "INFO"
-    cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    LOG_LEVEL: str = "INFO"
+    ENVIRONMENT: str = "development"  # Options: development, staging, production
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+    ]
     
     # Server Configuration
     host: str = "0.0.0.0"
@@ -69,42 +74,45 @@ class Settings(BaseSettings):
     workers: int = 1
     
     # Monitoring & Analytics (Optional)
-    enable_metrics: bool = False
-    metrics_port: int = 9090
+    ENABLE_METRICS: bool = True
+    METRICS_PORT: int = 9090
     sentry_dsn: Optional[str] = None
     
     # Development Tools
     verbose_logging: bool = False
     enable_test_endpoints: bool = False
     
+    # Security
+    RATE_LIMIT_ENABLED: bool = True
+    
     @property
     def is_production(self) -> bool:
         """Check if running in production environment."""
-        return self.environment.lower() == "production"
+        return self.ENVIRONMENT.lower() == "production"
     
     @property
     def is_development(self) -> bool:
         """Check if running in development environment."""
-        return self.environment.lower() == "development"
+        return self.ENVIRONMENT.lower() == "development"
     
     @property
     def openai_available(self) -> bool:
         """Check if OpenAI API is configured."""
-        return bool(self.openai_api_key)
+        return bool(self.OPENAI_API_KEY)
     
     @property
     def s3_available(self) -> bool:
         """Check if AWS S3 is configured."""
         return all([
-            self.aws_access_key_id,
-            self.aws_secret_access_key,
-            self.aws_s3_bucket
+            self.AWS_ACCESS_KEY_ID,
+            self.AWS_SECRET_ACCESS_KEY,
+            self.S3_BUCKET_NAME
         ])
     
     @property
     def redis_available(self) -> bool:
         """Check if Redis is configured."""
-        return bool(self.redis_url)
+        return bool(self.REDIS_URL)
     
     def get_upload_path(self) -> Path:
         """Get the upload directory path."""
@@ -121,7 +129,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-        case_sensitive = False
+        case_sensitive = True
 
 
 # Create global settings instance
@@ -138,11 +146,11 @@ def validate_environment() -> dict:
     validation_results = {
         "database": {
             "status": "✅ Configured",
-            "url": settings.database_url
+            "url": settings.DATABASE_URL
         },
         "security": {
-            "status": "✅ Configured" if settings.secret_key != "your-super-secret-key-here-change-this-in-production" else "⚠️ Using default key",
-            "algorithm": settings.algorithm
+            "status": "✅ Configured" if settings.SECRET_KEY != "your-super-secret-key-here-change-this-in-production" else "⚠️ Using default key",
+            "algorithm": settings.ALGORITHM
         },
         "openai": {
             "status": "✅ Configured" if settings.openai_available else "❌ Not configured",
@@ -151,11 +159,11 @@ def validate_environment() -> dict:
         },
         "aws_s3": {
             "status": "✅ Configured" if settings.s3_available else "⚠️ Not configured (optional)",
-            "bucket": settings.aws_s3_bucket
+            "bucket": settings.S3_BUCKET_NAME
         },
         "redis": {
             "status": "✅ Configured" if settings.redis_available else "⚠️ Not configured (optional)",
-            "url": settings.redis_url
+            "url": settings.REDIS_URL
         },
         "ai_capabilities": {
             "image_analysis": "✅ Enabled" if settings.enable_image_analysis else "❌ Disabled",
@@ -164,9 +172,9 @@ def validate_environment() -> dict:
             "personality_learning": "✅ Enabled" if settings.enable_personality_learning else "❌ Disabled"
         },
         "environment": {
-            "mode": settings.environment,
-            "debug": settings.debug,
-            "log_level": settings.log_level
+            "mode": settings.ENVIRONMENT,
+            "debug": settings.verbose_logging,
+            "log_level": settings.LOG_LEVEL
         }
     }
     
