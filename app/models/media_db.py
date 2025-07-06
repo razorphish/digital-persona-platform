@@ -33,4 +33,5 @@ class MediaFile(Base):
     
     # Relationships
     persona = relationship("Persona", back_populates="media_files")
-    user = relationship("User", back_populates="media_files") 
+    user = relationship("User", back_populates="media_files")
+    analyses = relationship("ImageAnalysis", back_populates="media_file", cascade="all, delete-orphan") 

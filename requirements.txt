@@ -41,3 +41,17 @@ fakeredis[async]
 # AWS S3 Integration
 aioboto3>=15.0.0
 boto3>=1.38.0
+
+# Advanced AI Capabilities
+Pillow>=10.0.0  # Image processing
+opencv-python>=4.8.0  # Computer vision
+numpy>=1.24.0  # Numerical computing
+scikit-learn>=1.3.0  # Machine learning utilities
+transformers>=4.30.0  # Hugging Face transformers
+torch>=2.0.0  # PyTorch for ML
+sentence-transformers>=2.2.0  # Text embeddings
+chromadb>=0.4.0  # Vector database for memory
+pydub>=0.25.1  # Audio processing
+gTTS>=2.3.2  # Google Text-to-Speech
+edge-tts>=6.1.0  # Microsoft Edge TTS
+python-magic>=0.4.27  # File type detection
