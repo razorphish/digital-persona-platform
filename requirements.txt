@@ -31,7 +31,7 @@ aioboto3==12.3.0
 openai==1.3.7
 
 # File Processing
-Pillow==10.1.0
+Pillow==10.3.0
 python-magic==0.4.27
 
 # Monitoring & Observability
