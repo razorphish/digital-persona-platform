@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Users, MessageSquare, Upload, BarChart3, Plus } from "lucide-react";
+import {
+  Users,
+  MessageSquare,
+  Upload,
+  BarChart3,
+  Plus,
+  Eye,
+  Volume2,
+  Brain,
+  Zap,
+} from "lucide-react";
 import { Persona, Conversation, ChatStats } from "../../types";
 import apiService from "../../services/api";
 import toast from "react-hot-toast";
@@ -146,6 +156,67 @@ const HomePage: React.FC = () => {
               <Upload className="h-5 w-5 mr-3 text-blue-600" />
               <span>Upload Files</span>
             </Link>
+          </div>
+
+          {/* AI Capabilities Quick Actions */}
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">
+              AI Capabilities
+            </h4>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  // Switch to Image Analysis tab in Dashboard
+                  const dashboard = document.querySelector(
+                    '[data-tab="image"]'
+                  ) as HTMLElement;
+                  if (dashboard) dashboard.click();
+                }}
+                className="flex items-center p-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors duration-200 w-full text-left"
+              >
+                <Eye className="h-4 w-4 mr-2 text-green-600" />
+                <span className="text-sm">Analyze Images</span>
+              </button>
+              <button
+                onClick={() => {
+                  // Switch to Voice Synthesis tab in Dashboard
+                  const dashboard = document.querySelector(
+                    '[data-tab="voice"]'
+                  ) as HTMLElement;
+                  if (dashboard) dashboard.click();
+                }}
+                className="flex items-center p-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors duration-200 w-full text-left"
+              >
+                <Volume2 className="h-4 w-4 mr-2 text-blue-600" />
+                <span className="text-sm">Voice Synthesis</span>
+              </button>
+              <button
+                onClick={() => {
+                  // Switch to Memory Management tab in Dashboard
+                  const dashboard = document.querySelector(
+                    '[data-tab="memory"]'
+                  ) as HTMLElement;
+                  if (dashboard) dashboard.click();
+                }}
+                className="flex items-center p-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors duration-200 w-full text-left"
+              >
+                <Brain className="h-4 w-4 mr-2 text-purple-600" />
+                <span className="text-sm">Memory Management</span>
+              </button>
+              <button
+                onClick={() => {
+                  // Switch to main dashboard
+                  const dashboard = document.querySelector(
+                    '[data-tab="main"]'
+                  ) as HTMLElement;
+                  if (dashboard) dashboard.click();
+                }}
+                className="flex items-center p-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors duration-200 w-full text-left"
+              >
+                <Zap className="h-4 w-4 mr-2 text-orange-600" />
+                <span className="text-sm">AI Learning</span>
+              </button>
+            </div>
           </div>
         </div>
 

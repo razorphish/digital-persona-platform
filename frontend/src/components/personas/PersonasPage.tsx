@@ -165,6 +165,43 @@ const PersonasPage: React.FC = () => {
                 </p>
               )}
 
+              {/* AI Capabilities Status */}
+              <div className="mb-4">
+                <h4 className="text-xs font-medium text-gray-700 mb-2">
+                  AI Capabilities
+                </h4>
+                <div className="flex flex-wrap gap-1">
+                  {persona.image_analysis_enabled && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Image Analysis
+                    </span>
+                  )}
+                  {persona.voice_synthesis_enabled && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Voice
+                    </span>
+                  )}
+                  {persona.memory_enabled && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Memory
+                    </span>
+                  )}
+                  {persona.learning_enabled && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                      Learning
+                    </span>
+                  )}
+                  {!persona.image_analysis_enabled &&
+                    !persona.voice_synthesis_enabled &&
+                    !persona.memory_enabled &&
+                    !persona.learning_enabled && (
+                      <span className="text-xs text-gray-500">
+                        No AI capabilities enabled
+                      </span>
+                    )}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between text-sm text-gray-500">
                 <span>
                   Created {new Date(persona.created_at).toLocaleDateString()}
