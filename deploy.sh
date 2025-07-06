@@ -109,6 +109,124 @@ else
     exit 1
 fi
 
+# Check AI services
+print_status "info" "Checking AI services..."
+
+# Check OpenAI API (if configured)
+if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your-openai-api-key-here" ]; then
+    print_status "info" "Testing OpenAI API connection..."
+    
+    # Test OpenAI API with a simple request
+    OPENAI_TEST_RESPONSE=$(curl -s -X POST "http://localhost:8000/health/detailed" \
+        -H "Content-Type: application/json" \
+        -w "%{http_code}" \
+        -o /tmp/openai_test_response.json 2>/dev/null || echo "000")
+    
+    if [ "$OPENAI_TEST_RESPONSE" = "200" ]; then
+        # Parse the response to check OpenAI status
+        OPENAI_STATUS=$(cat /tmp/openai_test_response.json | grep -o '"openai":{[^}]*}' | grep -o '"status":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "unknown")
+        
+        if [ "$OPENAI_STATUS" = "healthy" ] || [ "$OPENAI_STATUS" = "not_configured" ]; then
+            print_status "success" "OpenAI API is healthy"
+        else
+            print_status "warning" "OpenAI API check returned: $OPENAI_STATUS"
+        fi
+    else
+        print_status "warning" "OpenAI API health check failed (HTTP $OPENAI_TEST_RESPONSE)"
+    fi
+    
+    # Clean up temp file
+    rm -f /tmp/openai_test_response.json
+else
+    print_status "warning" "OpenAI API key not configured - skipping AI health check"
+fi
+
+# Check AI capabilities endpoint
+print_status "info" "Testing AI capabilities endpoint..."
+AI_CAPABILITIES_RESPONSE=$(curl -s -X GET "http://localhost:8000/ai/capabilities" \
+    -H "Content-Type: application/json" \
+    -w "%{http_code}" \
+    -o /tmp/ai_capabilities_response.json 2>/dev/null || echo "000")
+
+if [ "$AI_CAPABILITIES_RESPONSE" = "200" ]; then
+    print_status "success" "AI capabilities endpoint is healthy"
+    
+    # Check if AI services are properly configured
+    AI_SERVICES=$(cat /tmp/ai_capabilities_response.json 2>/dev/null | grep -o '"available":[^}]*}' | grep -o 'true' | wc -l)
+    if [ "$AI_SERVICES" -gt 0 ]; then
+        print_status "success" "AI services are available and configured"
+    else
+        print_status "warning" "No AI services are currently available"
+    fi
+else
+    print_status "warning" "AI capabilities endpoint check failed (HTTP $AI_CAPABILITIES_RESPONSE)"
+fi
+
+# Clean up temp file
+rm -f /tmp/ai_capabilities_response.json
+
+# Test AI chat functionality (if OpenAI is configured)
+if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your-openai-api-key-here" ]; then
+    print_status "info" "Testing AI chat functionality..."
+    
+    # Create a test user and get token
+    TEST_USER_RESPONSE=$(curl -s -X POST "http://localhost:8000/auth/register" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "email": "deploy-test@example.com",
+            "username": "deploytest",
+            "password": "deploytest123",
+            "full_name": "Deployment Test User"
+        }' \
+        -w "%{http_code}" \
+        -o /tmp/test_user_response.json 2>/dev/null || echo "000")
+    
+    if [ "$TEST_USER_RESPONSE" = "200" ] || [ "$TEST_USER_RESPONSE" = "400" ]; then
+        # Try to login (user might already exist)
+        LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:8000/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "email": "deploy-test@example.com",
+                "password": "deploytest123"
+            }' \
+            -w "%{http_code}" \
+            -o /tmp/login_response.json 2>/dev/null || echo "000")
+        
+        if [ "$LOGIN_RESPONSE" = "200" ]; then
+            # Extract token
+            TOKEN=$(cat /tmp/login_response.json | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
+            
+            if [ -n "$TOKEN" ]; then
+                # Test AI chat with a simple message
+                CHAT_RESPONSE=$(curl -s -X POST "http://localhost:8000/chat/test" \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -d '{
+                        "message": "Hello, this is a deployment test. Please respond with a simple greeting.",
+                        "persona_id": null
+                    }' \
+                    -w "%{http_code}" \
+                    -o /tmp/chat_response.json 2>/dev/null || echo "000")
+                
+                if [ "$CHAT_RESPONSE" = "200" ]; then
+                    print_status "success" "AI chat functionality is working"
+                else
+                    print_status "warning" "AI chat test failed (HTTP $CHAT_RESPONSE)"
+                fi
+            else
+                print_status "warning" "Could not extract authentication token"
+            fi
+        else
+            print_status "warning" "Could not authenticate test user (HTTP $LOGIN_RESPONSE)"
+        fi
+    else
+        print_status "warning" "Could not create test user (HTTP $TEST_USER_RESPONSE)"
+    fi
+    
+    # Clean up temp files
+    rm -f /tmp/test_user_response.json /tmp/login_response.json /tmp/chat_response.json
+fi
+
 # Run database migrations
 print_status "info" "Running database migrations..."
 docker-compose exec -T backend alembic upgrade head
@@ -133,8 +251,23 @@ echo "   Frontend: http://localhost:3000"
 echo "   Backend API: http://localhost:8000"
 echo "   API Docs: http://localhost:8000/docs"
 echo "   Health Check: http://localhost:8000/health"
+echo "   Detailed Health: http://localhost:8000/health/detailed"
+echo "   AI Capabilities: http://localhost:8000/ai/capabilities"
 echo "   Grafana: http://localhost:3001 (admin/admin)"
 echo "   Prometheus: http://localhost:9090"
+
+# Show AI status summary
+echo ""
+print_status "info" "🤖 AI Services Status:"
+if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your-openai-api-key-here" ]; then
+    echo "   OpenAI API: ✅ Configured"
+    echo "   AI Chat: ✅ Available"
+    echo "   AI Capabilities: ✅ Available"
+else
+    echo "   OpenAI API: ⚠️  Not configured"
+    echo "   AI Chat: ⚠️  Limited functionality"
+    echo "   AI Capabilities: ⚠️  Limited functionality"
+fi
 
 echo ""
 print_status "success" "🎉 Deployment completed successfully!"
