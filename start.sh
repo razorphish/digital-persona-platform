@@ -47,6 +47,10 @@ print_status "success" "Virtual environment activated"
 # Check Python version
 PYTHON_VERSION=$(python --version 2>&1)
 print_status "info" "Python: $PYTHON_VERSION"
+if [[ $PYTHON_VERSION != "Python 3.12"* ]]; then
+    print_status "error" "Python 3.12 is required in the virtual environment."
+    exit 1
+fi
 
 # Check Node.js version
 if ! command -v node &> /dev/null; then
@@ -57,6 +61,11 @@ fi
 
 NODE_VERSION=$(node --version)
 print_status "info" "Node.js: $NODE_VERSION"
+NODE_MAJOR=$(echo $NODE_VERSION | sed 's/v\([0-9]*\).*/\1/')
+if [ "$NODE_MAJOR" -lt 16 ]; then
+    print_status "error" "Node.js 16+ is required. Found $NODE_VERSION."
+    exit 1
+fi
 
 # Check if required packages are installed
 print_status "info" "Checking Python dependencies..."
@@ -101,7 +110,7 @@ fi
 python -c "
 import fastapi, pydantic
 print(f'⚡ FastAPI: {fastapi.__version__}')
-print(f'📦 Pydantic: {pydantic.VERSION}')
+print(f'📦 Pydantic: {getattr(pydantic, '__version__', getattr(pydantic, 'VERSION', 'unknown'))}')
 "
 
 # Check for .env file
@@ -133,28 +142,104 @@ EOF
     print_status "warning" "Please update .env with your actual configuration"
 fi
 
+# Parse arguments
+FORCE=0
+for arg in "$@"; do
+  if [ "$arg" = "--force" ]; then
+    FORCE=1
+  fi
+done
+
 # Check if ports are available
 if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    print_status "warning" "Port 8000 (backend) is already in use"
-    print_status "info" "You can either:"
-    print_status "info" "  1. Stop the service using port 8000"
-    print_status "info" "  2. Use a different port by modifying this script"
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    if [ $FORCE -eq 1 ]; then
+        print_status "warning" "Port 8000 (backend) is in use. Killing process..."
+        lsof -ti :8000 | xargs kill -9
+        # Wait for port to be free, up to 5 seconds
+        for i in {1..5}; do
+            sleep 1
+            if ! lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+                break
+            fi
+            if [ $i -eq 5 ]; then
+                print_status "error" "Port 8000 is still in use after kill. Diagnostics:"
+                lsof -i :8000
+                exit 1
+            fi
+        done
+    else
+        print_status "warning" "Port 8000 (backend) is already in use"
+        print_status "info" "You can either:"
+        print_status "info" "  1. Kill the process using port 8000"
+        print_status "info" "  2. Stop the service manually"
+        print_status "info" "  3. Use a different port by modifying this script"
+        read -p "Kill the process on port 8000? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            print_status "warning" "Killing process on port 8000..."
+            lsof -ti :8000 | xargs kill -9
+            # Wait for port to be free, up to 5 seconds
+            for i in {1..5}; do
+                sleep 1
+                if ! lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+                    print_status "success" "Port 8000 is now free"
+                    break
+                fi
+                if [ $i -eq 5 ]; then
+                    print_status "error" "Port 8000 is still in use after kill. Diagnostics:"
+                    lsof -i :8000
+                    exit 1
+                fi
+            done
+        else
+            print_status "info" "Skipping port 8000 check. You may need to stop the service manually."
+        fi
     fi
 fi
 
 if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    print_status "warning" "Port 3000 (frontend) is already in use"
-    print_status "info" "You can either:"
-    print_status "info" "  1. Stop the service using port 3000"
-    print_status "info" "  2. Use a different port by modifying this script"
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    if [ $FORCE -eq 1 ]; then
+        print_status "warning" "Port 3000 (frontend) is in use. Killing process..."
+        lsof -ti :3000 | xargs kill -9
+        # Wait for port to be free, up to 5 seconds
+        for i in {1..5}; do
+            sleep 1
+            if ! lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+                break
+            fi
+            if [ $i -eq 5 ]; then
+                print_status "error" "Port 3000 is still in use after kill. Diagnostics:"
+                lsof -i :3000
+                exit 1
+            fi
+        done
+    else
+        print_status "warning" "Port 3000 (frontend) is already in use"
+        print_status "info" "You can either:"
+        print_status "info" "  1. Kill the process using port 3000"
+        print_status "info" "  2. Stop the service manually"
+        print_status "info" "  3. Use a different port by modifying this script"
+        read -p "Kill the process on port 3000? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            print_status "warning" "Killing process on port 3000..."
+            lsof -ti :3000 | xargs kill -9
+            # Wait for port to be free, up to 5 seconds
+            for i in {1..5}; do
+                sleep 1
+                if ! lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+                    print_status "success" "Port 3000 is now free"
+                    break
+                fi
+                if [ $i -eq 5 ]; then
+                    print_status "error" "Port 3000 is still in use after kill. Diagnostics:"
+                    lsof -i :3000
+                    exit 1
+                fi
+            done
+        else
+            print_status "info" "Skipping port 3000 check. You may need to stop the service manually."
+        fi
     fi
 fi
 
@@ -203,6 +288,12 @@ BACKEND_PID=$!
 # Wait a moment for backend to start
 sleep 3
 
+# Check if backend is still running
+if ! kill -0 $BACKEND_PID 2>/dev/null; then
+    print_status "error" "Backend server failed to start. Check logs above."
+    exit 1
+fi
+
 # Start frontend server
 print_status "info" "Starting frontend server..."
 cd frontend
@@ -212,6 +303,19 @@ export NODE_OPTIONS="--openssl-legacy-provider"
 npm start &
 FRONTEND_PID=$!
 cd ..
+
+# Wait a moment for frontend to start
+sleep 3
+
+# Check if frontend is still running
+if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+    print_status "error" "Frontend server failed to start. Check logs above."
+    kill $BACKEND_PID 2>/dev/null
+    exit 1
+fi
+
+# Unset NODE_OPTIONS to avoid side effects
+unset NODE_OPTIONS
 
 # Wait for both processes
 wait

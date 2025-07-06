@@ -1,0 +1,197 @@
+import pytest
+import asyncio
+import subprocess
+import time
+import requests
+import signal
+import os
+import sys
+from pathlib import Path
+import uuid
+
+# Add the app directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
+
+# Test configuration
+TEST_SERVER_HOST = "127.0.0.1"
+TEST_SERVER_PORT = 8001  # Use different port to avoid conflicts
+BASE_URL = f"http://{TEST_SERVER_HOST}:{TEST_SERVER_PORT}"
+TEST_DB_PATH = Path(__file__).parent.parent / "test.db"
+INIT_DB_SQL = Path(__file__).parent.parent / "init-db.sql"
+
+@pytest.fixture(scope="session", autouse=True)
+def reset_test_db():
+    """
+    Fixture to set up the test database.
+    Uses the existing database file for simplicity.
+    """
+    # Use the existing database file
+    existing_db = Path(__file__).parent.parent / "digital_persona.db"
+    if not existing_db.exists():
+        existing_db = Path(__file__).parent.parent / "dpp.db"
+    
+    if existing_db.exists():
+        # Copy the existing database to test location
+        import shutil
+        shutil.copy2(existing_db, TEST_DB_PATH)
+        print(f"✅ Test database copied from {existing_db} to {TEST_DB_PATH}")
+    else:
+        # Create an empty database if none exists
+        import sqlite3
+        with sqlite3.connect(TEST_DB_PATH) as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)")
+        print(f"✅ Empty test database created at {TEST_DB_PATH}")
+    
+    # Set environment variable so the app uses test.db
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+    
+    yield
+    
+    # Clean up after tests
+    TEST_DB_PATH.unlink(missing_ok=True)
+
+@pytest.fixture(scope="session")
+def test_server(reset_test_db):
+    """
+    Fixture to start and stop the test server for integration tests.
+    Uses a different port to avoid conflicts with development server.
+    """
+    server_process = None
+    
+    try:
+        # Start the server with DATABASE_URL env set
+        print(f"🚀 Starting test server on {BASE_URL}")
+        env = os.environ.copy()
+        env["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+        server_process = subprocess.Popen([
+            sys.executable, "-m", "uvicorn", 
+            "app.main:app", 
+            "--host", TEST_SERVER_HOST,
+            "--port", str(TEST_SERVER_PORT)
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        
+        # Give the server a moment to start
+        time.sleep(2)
+        
+        # Check if process is still running
+        if server_process.poll() is not None:
+            # Process died, get error output
+            stdout, stderr = server_process.communicate()
+            print(f"❌ Server process failed to start:")
+            print(f"STDOUT: {stdout.decode()}")
+            print(f"STDERR: {stderr.decode()}")
+            raise Exception("Server process failed to start")
+        
+        # Wait for server to start
+        max_attempts = 30
+        for attempt in range(max_attempts):
+            try:
+                response = requests.get(f"{BASE_URL}/health", timeout=1)
+                if response.status_code == 200:
+                    print(f"✅ Test server started successfully on {BASE_URL}")
+                    break
+            except requests.exceptions.RequestException:
+                if attempt == max_attempts - 1:
+                    raise Exception(f"Failed to start test server after {max_attempts} attempts")
+                time.sleep(1)
+        
+        yield BASE_URL
+        
+    finally:
+        # Stop the server
+        if server_process:
+            print("🛑 Stopping test server...")
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+                server_process.wait()
+            print("✅ Test server stopped")
+
+@pytest.fixture
+def api_client(test_server):
+    """
+    Fixture providing a requests session configured for the test server.
+    """
+    import requests
+    session = requests.Session()
+    
+    # Store the original request method
+    original_request = session.request
+    
+    # Create a custom request method that prepends the base URL
+    def request_with_base_url(method, url, *args, **kwargs):
+        if not url.startswith('http'):
+            url = f"{test_server}{url}"
+        return original_request(method, url, *args, **kwargs)
+    
+    # Replace the request method
+    session.request = request_with_base_url
+    return session
+
+@pytest.fixture
+def auth_headers(api_client):
+    """
+    Fixture providing authentication headers for authenticated requests.
+    """
+    def _get_auth_headers(token=None):
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
+    return _get_auth_headers
+
+@pytest.fixture
+def test_user_credentials():
+    """
+    Fixture providing test user credentials with a unique email.
+    """
+    unique_id = uuid.uuid4().hex[:8]
+    return {
+        "email": f"test_{unique_id}@example.com",
+        "password": "testpass123",
+        "username": f"testuser_{unique_id}",
+        "full_name": "Test User"
+    }
+
+@pytest.fixture
+def authenticated_user(api_client, test_user_credentials, auth_headers):
+    """
+    Fixture providing an authenticated user session.
+    """
+    # Register user if not exists
+    try:
+        response = api_client.post("/auth/register", json=test_user_credentials)
+        if response.status_code not in [200, 201, 422]:  # 422 means user already exists
+            print(f"Warning: Registration failed with status {response.status_code}")
+    except Exception as e:
+        print(f"Warning: Registration failed: {e}")
+    
+    # Login to get token
+    response = api_client.post("/auth/login", json={
+        "email": test_user_credentials["email"],
+        "password": test_user_credentials["password"]
+    })
+    
+    if response.status_code == 200:
+        token = response.json().get("access_token")
+        return {
+            "token": token,
+            "headers": auth_headers(token),
+            "credentials": test_user_credentials
+        }
+    else:
+        pytest.skip("Could not authenticate test user")
+
+# Mark tests that require the server
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "integration: mark test as integration test requiring server"
+    )
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        # Mark tests that use the test_server fixture as integration tests
+        if "test_server" in item.fixturenames:
+            item.add_marker(pytest.mark.integration) 

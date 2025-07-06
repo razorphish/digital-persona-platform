@@ -51,6 +51,8 @@ class MessageCreate(BaseModel):
         return v.strip()
 
 class MessageResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     id: int
     conversation_id: int
     role: str
