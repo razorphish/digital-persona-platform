@@ -108,7 +108,7 @@ create_iam_roles() {
     print_status "Creating IAM roles for ECS..."
     
     # ECS Execution Role
-    if ! aws iam get-role --role-name hibiji-ecs-execution-role &> /dev/null; then
+    if ! aws iam get-role --role-name hibiji-ecs-execution-role --no-cli-pager &> /dev/null; then
         aws iam create-role \
             --role-name hibiji-ecs-execution-role \
             --assume-role-policy-document '{
@@ -138,7 +138,7 @@ create_iam_roles() {
     fi
     
     # ECS Task Role
-    if ! aws iam get-role --role-name hibiji-ecs-task-role &> /dev/null; then
+    if ! aws iam get-role --role-name hibiji-ecs-task-role --no-cli-pager &> /dev/null; then
         aws iam create-role \
             --role-name hibiji-ecs-task-role \
             --assume-role-policy-document '{

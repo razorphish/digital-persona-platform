@@ -24,7 +24,7 @@ echo "✓ Secret key generated (length: ${#SECRET_KEY})"
 
 # Test AWS Secrets Manager
 echo "Testing AWS Secrets Manager access..."
-if aws secretsmanager list-secrets --max-items 1 &> /dev/null; then
+if aws secretsmanager list-secrets --max-items 1 --no-cli-pager &> /dev/null; then
     echo "✓ AWS Secrets Manager access works"
 else
     echo "✗ AWS Secrets Manager access failed"
@@ -38,7 +38,8 @@ TEST_SECRET_NAME="hibiji-test-secret-$(date +%s)"
 aws secretsmanager create-secret \
     --name "$TEST_SECRET_NAME" \
     --description "Test secret for debugging" \
-    --secret-string "{\"test\":\"value\"}"
+    --secret-string "{\"test\":\"value\"}" \
+    --no-cli-pager
 
 echo "✓ Test secret created: $TEST_SECRET_NAME"
 
@@ -46,7 +47,8 @@ echo "✓ Test secret created: $TEST_SECRET_NAME"
 echo "Cleaning up test secret..."
 aws secretsmanager delete-secret \
     --secret-id "$TEST_SECRET_NAME" \
-    --force-delete-without-recovery
+    --force-delete-without-recovery \
+    --no-cli-pager
 
 echo "✓ Test secret cleaned up"
 

@@ -108,7 +108,7 @@ create_iam_roles() {
     print_status "Creating IAM roles for ECS..."
     
     # ECS Execution Role
-    if ! aws iam get-role --role-name hibiji-ecs-execution-role &> /dev/null; then
+    if ! aws iam get-role --role-name hibiji-ecs-execution-role --no-cli-pager &> /dev/null; then
         aws iam create-role \
             --role-name hibiji-ecs-execution-role \
             --assume-role-policy-document '{
@@ -138,7 +138,7 @@ create_iam_roles() {
     fi
     
     # ECS Task Role
-    if ! aws iam get-role --role-name hibiji-ecs-task-role &> /dev/null; then
+    if ! aws iam get-role --role-name hibiji-ecs-task-role --no-cli-pager &> /dev/null; then
         aws iam create-role \
             --role-name hibiji-ecs-task-role \
             --assume-role-policy-document '{
@@ -195,22 +195,24 @@ create_secrets() {
     SECRET_KEY=$(openssl rand -base64 64)
     
     # Database password secret
-    if ! aws secretsmanager describe-secret --secret-id hibiji-database-password &> /dev/null; then
+    if ! aws secretsmanager describe-secret --secret-id hibiji-database-password --no-cli-pager &> /dev/null; then
         aws secretsmanager create-secret \
             --name hibiji-database-password \
             --description "Database password for Hibiji platform" \
-            --secret-string "{\"password\":\"$DB_PASSWORD\"}"
+            --secret-string "{\"password\":\"$DB_PASSWORD\"}" \
+            --no-cli-pager
         print_success "Database password secret created"
     else
         print_warning "Database password secret already exists"
     fi
     
     # Application secret key
-    if ! aws secretsmanager describe-secret --secret-id hibiji-secret-key &> /dev/null; then
+    if ! aws secretsmanager describe-secret --secret-id hibiji-secret-key --no-cli-pager &> /dev/null; then
         aws secretsmanager create-secret \
             --name hibiji-secret-key \
             --description "Application secret key for Hibiji platform" \
-            --secret-string "{\"secret_key\":\"$SECRET_KEY\"}"
+            --secret-string "{\"secret_key\":\"$SECRET_KEY\"}" \
+            --no-cli-pager
         print_success "Application secret key created"
     else
         print_warning "Application secret key already exists"
