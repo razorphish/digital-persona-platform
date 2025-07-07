@@ -60,9 +60,11 @@ const MemoryPanel: React.FC = () => {
 
   return (
     <div className="p-4 max-w-xl mx-auto">
-      <h2 className="text-xl font-bold mb-2">Memory Management</h2>
+      <h2 className="text-xl font-bold radiant-text mb-2">Memory Management</h2>
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">Select Persona</label>
+        <label className="block mb-1 font-semibold radiant-text">
+          Select Persona
+        </label>
         <select
           className="w-full border rounded p-2"
           value={selectedPersona ?? ""}
@@ -114,16 +116,19 @@ const MemoryPanel: React.FC = () => {
         ) : (
           <ul className="space-y-2">
             {memories.map((m) => (
-              <li key={m.id} className="bg-gray-100 p-2 rounded text-sm">
-                <div className="font-semibold">{m.type}</div>
-                <div>{m.content}</div>
-                <div className="text-xs text-gray-500">
+              <li
+                key={m.id}
+                className="bg-white/10 p-2 rounded text-sm border border-white/20"
+              >
+                <div className="font-semibold radiant-text">{m.type}</div>
+                <div className="radiant-text">{m.content}</div>
+                <div className="text-xs radiant-text-secondary">
                   Importance: {m.importance} | Last accessed: {m.last_accessed}
                 </div>
               </li>
             ))}
             {memories.length === 0 && (
-              <li className="text-gray-500">No memories found.</li>
+              <li className="radiant-text-secondary">No memories found.</li>
             )}
           </ul>
         )}

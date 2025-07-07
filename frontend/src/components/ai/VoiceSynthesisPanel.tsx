@@ -57,9 +57,11 @@ const VoiceSynthesisPanel: React.FC = () => {
 
   return (
     <div className="p-4 max-w-xl mx-auto">
-      <h2 className="text-xl font-bold mb-2">Voice Synthesis</h2>
+      <h2 className="text-xl font-bold radiant-text mb-2">Voice Synthesis</h2>
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">Select Persona</label>
+        <label className="block mb-1 font-semibold radiant-text">
+          Select Persona
+        </label>
         <select
           className="w-full border rounded p-2"
           value={selectedPersona ?? ""}
@@ -74,7 +76,7 @@ const VoiceSynthesisPanel: React.FC = () => {
         </select>
       </div>
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">
+        <label className="block mb-1 font-semibold radiant-text">
           Select Assistant Message
         </label>
         <select
@@ -103,7 +105,7 @@ const VoiceSynthesisPanel: React.FC = () => {
         <div className="mt-4">
           <h3 className="font-semibold mb-1">Audio:</h3>
           <audio controls src={synthesis.synthesis.audio_url} />
-          <div className="text-sm text-gray-600 mt-1">
+          <div className="text-sm radiant-text-secondary mt-1">
             Voice: {synthesis.synthesis.voice}, Engine:{" "}
             {synthesis.synthesis.engine}
           </div>

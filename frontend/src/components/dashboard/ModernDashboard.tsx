@@ -13,7 +13,7 @@ import {
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
-  { name: "Personas", href: "/dashboard/personas", icon: UserGroupIcon },
+  { name: "Persona", href: "/dashboard/personas", icon: UserGroupIcon },
   {
     name: "Conversations",
     href: "/dashboard/conversations",
@@ -35,7 +35,7 @@ const ModernDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen radiant-bg">
       {/* Top Navigation Bar */}
       <div className="header">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -43,7 +43,7 @@ const ModernDashboard: React.FC = () => {
             {/* Logo */}
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold gradient-text">
                   Digital Persona
                 </h1>
               </div>
@@ -52,21 +52,23 @@ const ModernDashboard: React.FC = () => {
             {/* User Menu */}
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
                   <span className="text-white text-sm font-medium">
                     {user?.username?.charAt(0).toUpperCase() || "U"}
                   </span>
                 </div>
                 <div className="hidden md:block">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium radiant-text">
                     {user?.username}
                   </p>
-                  <p className="text-xs text-gray-500">{user?.email}</p>
+                  <p className="text-xs radiant-text-secondary">
+                    {user?.email}
+                  </p>
                 </div>
               </div>
               <button
                 onClick={handleLogout}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 title="Logout"
               >
                 <ArrowRightOnRectangleIcon className="h-5 w-5" />
@@ -95,7 +97,7 @@ const ModernDashboard: React.FC = () => {
                   >
                     <item.icon
                       className={`mr-3 h-5 w-5 ${
-                        isActive ? "text-purple-500" : "text-gray-400"
+                        isActive ? "text-purple-400" : "text-white/60"
                       }`}
                     />
                     {item.name}

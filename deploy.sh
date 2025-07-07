@@ -197,21 +197,89 @@ if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your-openai-api-key-here"
             TOKEN=$(cat /tmp/login_response.json | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
             
             if [ -n "$TOKEN" ]; then
-                # Test AI chat with a simple message
-                CHAT_RESPONSE=$(curl -s -X POST "http://localhost:8000/chat/test" \
+                # Test self persona functionality
+                SELF_PERSONA_RESPONSE=$(curl -s -X GET "http://localhost:8000/personas/self" \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -w "%{http_code}" \
+                    -o /tmp/self_persona_response.json 2>/dev/null || echo "000")
+                
+                if [ "$SELF_PERSONA_RESPONSE" = "200" ]; then
+                    print_status "success" "Self persona functionality is working"
+                    
+                    # Extract persona ID for chat test
+                    PERSONA_ID=$(cat /tmp/self_persona_response.json | grep -o '"id":[0-9]*' | cut -d':' -f2 2>/dev/null || echo "")
+                    
+                    if [ -n "$PERSONA_ID" ]; then
+                                        # Test merged persona page functionality (AI summary and learning data)
+                print_status "info" "Testing merged persona page functionality..."
+                
+                # Test persona summary
+                SUMMARY_RESPONSE=$(curl -s -X GET "http://localhost:8000/personas/$PERSONA_ID/summary" \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -w "%{http_code}" \
+                    -o /tmp/persona_summary_response.json 2>/dev/null || echo "000")
+                
+                if [ "$SUMMARY_RESPONSE" = "200" ]; then
+                    print_status "success" "AI summary functionality is working"
+                else
+                    print_status "warning" "AI summary test failed (HTTP $SUMMARY_RESPONSE)"
+                fi
+                
+                # Test adding learning data
+                LEARNING_RESPONSE=$(curl -s -X POST "http://localhost:8000/personas/$PERSONA_ID/learn" \
                     -H "Content-Type: application/json" \
                     -H "Authorization: Bearer $TOKEN" \
                     -d '{
-                        "message": "Hello, this is a deployment test. Please respond with a simple greeting.",
-                        "persona_id": null
+                        "text": "I am a deployment test user who loves testing new features and ensuring quality."
                     }' \
                     -w "%{http_code}" \
-                    -o /tmp/chat_response.json 2>/dev/null || echo "000")
+                    -o /tmp/persona_learning_response.json 2>/dev/null || echo "000")
                 
-                if [ "$CHAT_RESPONSE" = "200" ]; then
-                    print_status "success" "AI chat functionality is working"
+                if [ "$LEARNING_RESPONSE" = "200" ]; then
+                    print_status "success" "Learning data functionality is working"
+                    
+                    # Test that the learning data is reflected in the persona
+                    UPDATED_PERSONA_RESPONSE=$(curl -s -X GET "http://localhost:8000/personas/$PERSONA_ID" \
+                        -H "Authorization: Bearer $TOKEN" \
+                        -w "%{http_code}" \
+                        -o /tmp/updated_persona_response.json 2>/dev/null || echo "000")
+                    
+                    if [ "$UPDATED_PERSONA_RESPONSE" = "200" ]; then
+                        # Check if learning data is in memory context
+                        LEARNING_DATA_PRESENT=$(cat /tmp/updated_persona_response.json 2>/dev/null | grep -o "deployment test user" | wc -l)
+                        if [ "$LEARNING_DATA_PRESENT" -gt 0 ]; then
+                            print_status "success" "Learning data integration is working"
+                        else
+                            print_status "warning" "Learning data not found in persona memory context"
+                        fi
+                    else
+                        print_status "warning" "Could not verify learning data integration (HTTP $UPDATED_PERSONA_RESPONSE)"
+                    fi
                 else
-                    print_status "warning" "AI chat test failed (HTTP $CHAT_RESPONSE)"
+                    print_status "warning" "Learning data test failed (HTTP $LEARNING_RESPONSE)"
+                fi
+                        
+                        # Test AI chat with self persona
+                        CHAT_RESPONSE=$(curl -s -X POST "http://localhost:8000/chat/test" \
+                            -H "Content-Type: application/json" \
+                            -H "Authorization: Bearer $TOKEN" \
+                            -d "{
+                                \"message\": \"Hello, this is a deployment test. Please respond with a simple greeting.\",
+                                \"persona_id\": $PERSONA_ID
+                            }" \
+                            -w "%{http_code}" \
+                            -o /tmp/chat_response.json 2>/dev/null || echo "000")
+                        
+                        if [ "$CHAT_RESPONSE" = "200" ]; then
+                            print_status "success" "AI chat with self persona is working"
+                        else
+                            print_status "warning" "AI chat with self persona test failed (HTTP $CHAT_RESPONSE)"
+                        fi
+                    else
+                        print_status "warning" "Could not extract persona ID from self persona response"
+                    fi
+                else
+                    print_status "warning" "Self persona test failed (HTTP $SELF_PERSONA_RESPONSE)"
                 fi
             else
                 print_status "warning" "Could not extract authentication token"
@@ -224,7 +292,7 @@ if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your-openai-api-key-here"
     fi
     
     # Clean up temp files
-    rm -f /tmp/test_user_response.json /tmp/login_response.json /tmp/chat_response.json
+    rm -f /tmp/test_user_response.json /tmp/login_response.json /tmp/chat_response.json /tmp/self_persona_response.json /tmp/persona_summary_response.json /tmp/persona_learning_response.json /tmp/updated_persona_response.json
 fi
 
 # Run database migrations
@@ -263,10 +331,14 @@ if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your-openai-api-key-here"
     echo "   OpenAI API: ✅ Configured"
     echo "   AI Chat: ✅ Available"
     echo "   AI Capabilities: ✅ Available"
+    echo "   AI Summary: ✅ Available"
+    echo "   Learning Data: ✅ Available"
 else
     echo "   OpenAI API: ⚠️  Not configured"
     echo "   AI Chat: ⚠️  Limited functionality"
     echo "   AI Capabilities: ⚠️  Limited functionality"
+    echo "   AI Summary: ✅ Available (basic)"
+    echo "   Learning Data: ✅ Available"
 fi
 
 echo ""

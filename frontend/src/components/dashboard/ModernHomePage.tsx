@@ -21,14 +21,14 @@ const ModernHomePage: React.FC = () => {
       icon: ChatBubbleLeftRightIcon,
       title: "AI Conversations",
       description:
-        "Engage in natural conversations with your personalized AI personas",
+        "Engage in natural conversations with your personalized AI persona",
       color: "from-purple-500 to-pink-500",
     },
     {
       icon: UserGroupIcon,
-      title: "Persona Management",
+      title: "Persona",
       description:
-        "Create and manage multiple AI personas with unique personalities",
+        "Your single, personal AI persona that learns and adapts to you",
       color: "from-blue-500 to-cyan-500",
     },
     {
@@ -47,7 +47,7 @@ const ModernHomePage: React.FC = () => {
   ];
 
   const stats = [
-    { label: "Active Personas", value: "3", icon: UserGroupIcon },
+    { label: "Active Persona", value: "1", icon: UserGroupIcon },
     {
       label: "Total Conversations",
       value: "12",
@@ -79,7 +79,7 @@ const ModernHomePage: React.FC = () => {
               <h1 className="text-4xl md:text-6xl font-bold gradient-text mb-4">
                 Welcome back, {user?.username || "User"}!
               </h1>
-              <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              <p className="text-xl radiant-text-secondary max-w-2xl mx-auto">
                 Ready to continue your conversations with AI personas? Your
                 digital companions are waiting to chat with you.
               </p>
@@ -98,7 +98,7 @@ const ModernHomePage: React.FC = () => {
                 className="btn-secondary flex items-center gap-2"
               >
                 <UserGroupIcon className="w-5 h-5" />
-                Manage Personas
+                View Persona
               </button>
             </div>
           </div>
@@ -111,7 +111,7 @@ const ModernHomePage: React.FC = () => {
           <div key={index} className="card hover-lift group">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">
+                <p className="text-sm font-medium radiant-text-secondary">
                   {stat.label}
                 </p>
                 <p className="text-3xl font-bold gradient-text">{stat.value}</p>
@@ -130,7 +130,7 @@ const ModernHomePage: React.FC = () => {
           <h2 className="text-3xl font-bold gradient-text mb-2">
             Platform Features
           </h2>
-          <p className="text-gray-600">
+          <p className="radiant-text-secondary">
             Discover what makes Digital Persona Platform unique
           </p>
         </div>
@@ -153,10 +153,12 @@ const ModernHomePage: React.FC = () => {
                   <feature.icon className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  <h3 className="text-lg font-semibold radiant-text mb-2">
                     {feature.title}
                   </h3>
-                  <p className="text-gray-600">{feature.description}</p>
+                  <p className="radiant-text-secondary">
+                    {feature.description}
+                  </p>
                 </div>
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <StarIcon className="w-5 h-5 text-yellow-400" />
@@ -175,33 +177,33 @@ const ModernHomePage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
             onClick={() => navigate("/dashboard/conversations")}
-            className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-200 hover:from-purple-100 hover:to-blue-100 transition-all duration-200 group"
+            className="p-4 bg-white/10 rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-200 group"
           >
-            <ChatBubbleLeftRightIcon className="w-8 h-8 text-purple-600 mb-2 group-hover:scale-110 transition-transform duration-200" />
-            <h4 className="font-semibold text-gray-900">New Conversation</h4>
-            <p className="text-sm text-gray-600">
+            <ChatBubbleLeftRightIcon className="w-8 h-8 text-purple-400 mb-2 group-hover:scale-110 transition-transform duration-200" />
+            <h4 className="font-semibold radiant-text">New Conversation</h4>
+            <p className="text-sm radiant-text-secondary">
               Start chatting with your AI personas
             </p>
           </button>
 
           <button
             onClick={() => navigate("/dashboard/upload")}
-            className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 hover:from-green-100 hover:to-emerald-100 transition-all duration-200 group"
+            className="p-4 bg-white/10 rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-200 group"
           >
-            <CloudArrowUpIcon className="w-8 h-8 text-green-600 mb-2 group-hover:scale-110 transition-transform duration-200" />
-            <h4 className="font-semibold text-gray-900">Upload Media</h4>
-            <p className="text-sm text-gray-600">
+            <CloudArrowUpIcon className="w-8 h-8 text-green-400 mb-2 group-hover:scale-110 transition-transform duration-200" />
+            <h4 className="font-semibold radiant-text">Upload Media</h4>
+            <p className="text-sm radiant-text-secondary">
               Share images and videos with AI
             </p>
           </button>
 
           <button
             onClick={() => navigate("/dashboard/stats")}
-            className="p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-xl border border-orange-200 hover:from-orange-100 hover:to-red-100 transition-all duration-200 group"
+            className="p-4 bg-white/10 rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-200 group"
           >
-            <ChartBarIcon className="w-8 h-8 text-orange-600 mb-2 group-hover:scale-110 transition-transform duration-200" />
-            <h4 className="font-semibold text-gray-900">View Analytics</h4>
-            <p className="text-sm text-gray-600">
+            <ChartBarIcon className="w-8 h-8 text-orange-400 mb-2 group-hover:scale-110 transition-transform duration-200" />
+            <h4 className="font-semibold radiant-text">View Analytics</h4>
+            <p className="text-sm radiant-text-secondary">
               Check your conversation insights
             </p>
           </button>
@@ -217,16 +219,16 @@ const ModernHomePage: React.FC = () => {
           {[1, 2, 3].map((item) => (
             <div
               key={item}
-              className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors duration-200"
+              className="flex items-center space-x-3 p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-colors duration-200 border border-white/20"
             >
               <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
                 <ChatBubbleLeftRightIcon className="w-4 h-4 text-white" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium radiant-text">
                   Conversation with Persona {item}
                 </p>
-                <p className="text-xs text-gray-500">2 hours ago</p>
+                <p className="text-xs radiant-text-secondary">2 hours ago</p>
               </div>
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
             </div>

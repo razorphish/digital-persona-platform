@@ -106,6 +106,13 @@ class ApiService {
     return response.data;
   }
 
+  async getSelfPersona(): Promise<Persona> {
+    const response: AxiosResponse<Persona> = await this.api.get(
+      "/personas/self"
+    );
+    return response.data;
+  }
+
   async createPersona(personaData: CreatePersonaRequest): Promise<Persona> {
     console.log("Creating persona with data:", personaData);
     console.log("Current auth token:", this.token);
@@ -139,6 +146,24 @@ class ApiService {
 
   async deletePersona(id: number): Promise<void> {
     await this.api.delete(`/personas/${id}`);
+  }
+
+  async getPersonaSummary(personaId: number): Promise<any> {
+    const response: AxiosResponse<any> = await this.api.get(
+      `/personas/${personaId}/summary`
+    );
+    return response.data;
+  }
+
+  async addPersonaLearning(
+    personaId: number,
+    learningData: { text: string }
+  ): Promise<Persona> {
+    const response: AxiosResponse<Persona> = await this.api.post(
+      `/personas/${personaId}/learn`,
+      learningData
+    );
+    return response.data;
   }
 
   // Conversation management

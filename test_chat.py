@@ -43,30 +43,26 @@ async def test_chat_system():
         print(f"❌ Registration error: {e}")
         return
     
-    # Test 2: Create a persona
-    print("\n2. Creating test persona...")
-    persona_data = {
-        "name": "Alex",
-        "description": "A friendly and supportive friend who loves technology and gives great advice",
-        "relation_type": "friend"
-    }
+    # Test 2: Get or create self persona
+    print("\n2. Getting or creating self persona...")
     
     headers = {"Authorization": f"Bearer {access_token}"}
     
     try:
-        response = requests.post(f"{BASE_URL}/personas/", json=persona_data, headers=headers)
+        response = requests.get(f"{BASE_URL}/personas/self", headers=headers)
         if response.status_code == 200:
             persona = response.json()
             persona_id = persona['id']
-            print(f"✅ Persona created successfully! ID: {persona_id}")
+            print(f"✅ Self persona retrieved/created successfully! ID: {persona_id}")
             print(f"   Name: {persona['name']}")
             print(f"   Relation: {persona['relation_type']}")
+            print(f"   Description: {persona.get('description', 'N/A')}")
         else:
-            print(f"❌ Persona creation failed: {response.status_code}")
+            print(f"❌ Self persona retrieval failed: {response.status_code}")
             print(f"   Response: {response.text}")
             return
     except Exception as e:
-        print(f"❌ Persona creation error: {e}")
+        print(f"❌ Self persona retrieval error: {e}")
         return
     
     # Test 3: Check OpenAI health
@@ -85,9 +81,9 @@ async def test_chat_system():
         print(f"❌ Health check error: {e}")
     
     # Test 4: Create a conversation
-    print("\n4. Creating conversation with persona...")
+    print("\n4. Creating conversation with self persona...")
     conversation_data = {
-        "title": "First Chat with Alex",
+        "title": "First Chat with My Digital Self",
         "persona_id": persona_id
     }
     
@@ -122,9 +118,9 @@ async def test_chat_system():
         print(f"❌ List conversations error: {e}")
     
     # Test 6: Send a message (if OpenAI is available)
-    print("\n6. Testing send message to persona...")
+    print("\n6. Testing send message to self persona...")
     message_data = {
-        "content": "Hi Alex! How are you doing today?"
+        "content": "Hello! How are you doing today?"
     }
     
     try:
@@ -205,37 +201,22 @@ async def test_chat_system():
     except Exception as e:
         print(f"❌ Get chat stats error: {e}")
     
-    # Test 10: Create another conversation with different persona
-    print("\n10. Testing conversation with different persona...")
-    persona2_data = {
-        "name": "Dr. Sarah",
-        "description": "A wise and experienced mentor who provides professional guidance",
-        "relation_type": "colleague"
-    }
+    # Test 10: Test self persona uniqueness
+    print("\n10. Testing self persona uniqueness...")
     
     try:
-        response = requests.post(f"{BASE_URL}/personas/", json=persona2_data, headers=headers)
+        # Try to get the self persona again - should return the same one
+        response = requests.get(f"{BASE_URL}/personas/self", headers=headers)
         if response.status_code == 200:
             persona2 = response.json()
-            persona2_id = persona2['id']
-            print(f"✅ Second persona created! ID: {persona2_id}")
-            
-            # Create conversation with second persona
-            conv2_data = {
-                "title": "Professional Discussion with Dr. Sarah",
-                "persona_id": persona2_id
-            }
-            
-            response = requests.post(f"{BASE_URL}/chat/conversations", json=conv2_data, headers=headers)
-            if response.status_code == 200:
-                conv2 = response.json()
-                print(f"✅ Second conversation created! ID: {conv2['id']}")
+            if persona2['id'] == persona_id:
+                print("✅ Self persona uniqueness confirmed - same persona returned")
             else:
-                print(f"❌ Second conversation creation failed: {response.status_code}")
+                print("⚠️ Different self persona returned - this might indicate an issue")
         else:
-            print(f"❌ Second persona creation failed: {response.status_code}")
+            print(f"❌ Self persona retrieval failed: {response.status_code}")
     except Exception as e:
-        print(f"❌ Second persona/conversation error: {e}")
+        print(f"❌ Self persona uniqueness test error: {e}")
     
     # Test 11: List conversations by persona
     print("\n11. Testing list conversations by persona...")

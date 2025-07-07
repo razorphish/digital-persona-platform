@@ -53,15 +53,12 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+      <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 w-full max-w-md mx-4 border border-white/20">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl font-semibold radiant-text">
             {editingPersona ? "Edit Persona" : "Create New Persona"}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
+          <button onClick={onClose} className="text-white/60 hover:text-white">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -70,7 +67,7 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
           <div>
             <label
               htmlFor="name"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium radiant-text mb-1"
             >
               Name *
             </label>
@@ -89,7 +86,7 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
           <div>
             <label
               htmlFor="relation_type"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium radiant-text mb-1"
             >
               Relation Type *
             </label>
@@ -115,7 +112,7 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
           <div>
             <label
               htmlFor="description"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium radiant-text mb-1"
             >
               Description
             </label>
@@ -132,17 +129,17 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
 
           {/* AI Capabilities Section */}
           <div className="border-t pt-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-3">
+            <h3 className="text-lg font-medium radiant-text mb-3">
               AI Capabilities
             </h3>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium radiant-text">
                     Image Analysis
                   </label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs radiant-text-secondary">
                     Analyze uploaded images for context
                   </p>
                 </div>
@@ -162,10 +159,10 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
 
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium radiant-text">
                     Voice Synthesis
                   </label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs radiant-text-secondary">
                     Convert messages to speech
                   </p>
                 </div>
@@ -185,10 +182,10 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
 
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium radiant-text">
                     Memory System
                   </label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs radiant-text-secondary">
                     Remember conversations and preferences
                   </p>
                 </div>
@@ -208,10 +205,10 @@ const CreatePersonaModal: React.FC<CreatePersonaModalProps> = ({
 
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium radiant-text">
                     Learning
                   </label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs radiant-text-secondary">
                     Learn from interactions to improve responses
                   </p>
                 </div>

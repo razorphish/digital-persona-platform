@@ -13,7 +13,7 @@ import ModernLoginForm from "./components/auth/ModernLoginForm";
 import ModernRegisterForm from "./components/auth/ModernRegisterForm";
 import ModernDashboard from "./components/dashboard/ModernDashboard";
 import ModernHomePage from "./components/dashboard/ModernHomePage";
-import PersonasPage from "./components/personas/PersonasPage";
+import SelfPersonaPage from "./components/personas/SelfPersonaPage";
 import ConversationsPage from "./components/conversations/ConversationsPage";
 import ModernChatPage from "./components/chat/ModernChatPage";
 import UploadPage from "./components/upload/UploadPage";
@@ -93,7 +93,7 @@ const AppRoutes: React.FC = () => {
         }
       >
         <Route index element={<ModernHomePage />} />
-        <Route path="personas" element={<PersonasPage />} />
+        <Route path="personas" element={<SelfPersonaPage />} />
         <Route path="conversations" element={<ConversationsPage />} />
         <Route path="conversations/:id" element={<ModernChatPage />} />
         <Route path="upload" element={<UploadPage />} />

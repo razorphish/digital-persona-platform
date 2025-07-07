@@ -78,8 +78,8 @@ const UploadPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">File Upload</h1>
-        <p className="text-gray-600">
+        <h1 className="text-2xl font-bold radiant-text">File Upload</h1>
+        <p className="radiant-text-secondary">
           Upload files to share with your AI personas
         </p>
       </div>
@@ -89,20 +89,20 @@ const UploadPage: React.FC = () => {
         {...getRootProps()}
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-200 ${
           isDragActive
-            ? "border-primary-400 bg-primary-50"
-            : "border-gray-300 hover:border-primary-400 hover:bg-gray-50"
+            ? "border-purple-400 bg-purple-500/10"
+            : "border-white/30 hover:border-purple-400 hover:bg-white/5"
         }`}
       >
         <input {...getInputProps()} />
-        <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <Upload className="mx-auto h-12 w-12 text-white/60 mb-4" />
         {isDragActive ? (
-          <p className="text-lg text-primary-600">Drop the files here...</p>
+          <p className="text-lg text-purple-400">Drop the files here...</p>
         ) : (
           <div>
-            <p className="text-lg text-gray-900 mb-2">
+            <p className="text-lg radiant-text mb-2">
               Drag & drop files here, or click to select files
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm radiant-text-secondary">
               Supports images, videos, audio, PDFs, and text files
             </p>
           </div>
@@ -112,7 +112,7 @@ const UploadPage: React.FC = () => {
       {/* Upload Progress */}
       {uploading && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <h3 className="text-lg font-semibold radiant-text mb-4">
             Uploading Files...
           </h3>
           <div className="space-y-3">
@@ -120,20 +120,22 @@ const UploadPage: React.FC = () => {
               <div key={fileName} className="flex items-center space-x-3">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-sm font-medium radiant-text">
                       {fileName}
                     </span>
-                    <span className="text-sm text-gray-500">{progress}%</span>
+                    <span className="text-sm radiant-text-secondary">
+                      {progress}%
+                    </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-white/20 rounded-full h-2">
                     <div
-                      className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${progress}%` }}
                     ></div>
                   </div>
                 </div>
                 {progress === 100 && (
-                  <Check className="h-5 w-5 text-green-500" />
+                  <Check className="h-5 w-5 text-green-400" />
                 )}
               </div>
             ))}
@@ -144,14 +146,14 @@ const UploadPage: React.FC = () => {
       {/* Uploaded Files */}
       {files.length > 0 && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <h3 className="text-lg font-semibold radiant-text mb-4">
             Uploaded Files
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {files.map((file) => (
               <div
                 key={file.id}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-200"
+                className="border border-white/20 rounded-lg p-4 hover:bg-white/5 transition-all duration-200"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3 flex-1">
@@ -159,20 +161,20 @@ const UploadPage: React.FC = () => {
                       {getFileIcon(file.file_type)}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium radiant-text truncate">
                         {file.filename}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs radiant-text-secondary">
                         {formatFileSize(file.file_size)}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs radiant-text-secondary">
                         {new Date(file.created_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={() => handleDeleteFile(file.id)}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors duration-200"
+                    className="p-1 text-white/60 hover:text-red-400 transition-colors duration-200"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -185,29 +187,33 @@ const UploadPage: React.FC = () => {
 
       {/* File Type Info */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <h3 className="text-lg font-semibold radiant-text mb-4">
           Supported File Types
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
+          <div className="text-center p-4 bg-white/10 rounded-lg border border-white/20">
             <div className="text-2xl mb-2">🖼️</div>
-            <h4 className="font-medium text-gray-900">Images</h4>
-            <p className="text-sm text-gray-600">JPEG, PNG, GIF, WebP</p>
+            <h4 className="font-medium radiant-text">Images</h4>
+            <p className="text-sm radiant-text-secondary">
+              JPEG, PNG, GIF, WebP
+            </p>
           </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
+          <div className="text-center p-4 bg-white/10 rounded-lg border border-white/20">
             <div className="text-2xl mb-2">🎥</div>
-            <h4 className="font-medium text-gray-900">Videos</h4>
-            <p className="text-sm text-gray-600">MP4, AVI, MOV, WMV</p>
+            <h4 className="font-medium radiant-text">Videos</h4>
+            <p className="text-sm radiant-text-secondary">MP4, AVI, MOV, WMV</p>
           </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
+          <div className="text-center p-4 bg-white/10 rounded-lg border border-white/20">
             <div className="text-2xl mb-2">🎵</div>
-            <h4 className="font-medium text-gray-900">Audio</h4>
-            <p className="text-sm text-gray-600">MP3, WAV, FLAC, AAC</p>
+            <h4 className="font-medium radiant-text">Audio</h4>
+            <p className="text-sm radiant-text-secondary">
+              MP3, WAV, FLAC, AAC
+            </p>
           </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
+          <div className="text-center p-4 bg-white/10 rounded-lg border border-white/20">
             <div className="text-2xl mb-2">📄</div>
-            <h4 className="font-medium text-gray-900">Documents</h4>
-            <p className="text-sm text-gray-600">PDF, TXT, MD, JSON</p>
+            <h4 className="font-medium radiant-text">Documents</h4>
+            <p className="text-sm radiant-text-secondary">PDF, TXT, MD, JSON</p>
           </div>
         </div>
       </div>

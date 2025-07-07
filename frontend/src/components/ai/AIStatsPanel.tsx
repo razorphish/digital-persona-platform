@@ -78,41 +78,41 @@ const AIStatsPanel: React.FC = () => {
       title: "Image Analyses",
       value: stats.total_analyses,
       icon: Eye,
-      color: "text-green-600",
-      bgColor: "bg-green-100",
+      color: "text-green-400",
+      bgColor: "bg-green-500/20",
     },
     {
       title: "Voice Syntheses",
       value: stats.total_syntheses,
       icon: Volume2,
-      color: "text-blue-600",
-      bgColor: "bg-blue-100",
+      color: "text-blue-400",
+      bgColor: "bg-blue-500/20",
     },
     {
       title: "Memories Stored",
       value: stats.total_memories,
       icon: Brain,
-      color: "text-purple-600",
-      bgColor: "bg-purple-100",
+      color: "text-purple-400",
+      bgColor: "bg-purple-500/20",
     },
     {
       title: "Learning Events",
       value: stats.total_learning_events,
       icon: Zap,
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
+      color: "text-orange-400",
+      bgColor: "bg-orange-500/20",
     },
   ];
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900">
+        <h2 className="text-xl font-bold radiant-text">
           AI Capabilities Statistics
         </h2>
         <button
           onClick={fetchAIStats}
-          className="text-primary-600 hover:text-primary-700 text-sm"
+          className="text-purple-400 hover:text-purple-300 text-sm"
         >
           Refresh
         </button>
@@ -127,10 +127,10 @@ const AIStatsPanel: React.FC = () => {
                 <stat.icon className={`h-6 w-6 ${stat.color}`} />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
+                <p className="text-sm font-medium radiant-text-secondary">
                   {stat.title}
                 </p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-2xl font-semibold radiant-text">
                   {stat.value}
                 </p>
               </div>
@@ -144,51 +144,55 @@ const AIStatsPanel: React.FC = () => {
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">
+              <p className="text-sm font-medium radiant-text-secondary">
                 Avg Processing Time
               </p>
-              <p className="text-2xl font-semibold text-gray-900">
+              <p className="text-2xl font-semibold radiant-text">
                 {stats.processing_time_avg}s
               </p>
             </div>
-            <TrendingUp className="h-8 w-8 text-green-600" />
+            <TrendingUp className="h-8 w-8 text-purple-400" />
           </div>
         </div>
 
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Success Rate</p>
-              <p className="text-2xl font-semibold text-gray-900">
+              <p className="text-sm font-medium radiant-text-secondary">
+                Success Rate
+              </p>
+              <p className="text-2xl font-semibold radiant-text">
                 {stats.success_rate}%
               </p>
             </div>
-            <BarChart3 className="h-8 w-8 text-blue-600" />
+            <BarChart3 className="h-8 w-8 text-purple-400" />
           </div>
         </div>
 
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">
+              <p className="text-sm font-medium radiant-text-secondary">
                 Estimated Cost
               </p>
-              <p className="text-2xl font-semibold text-gray-900">
+              <p className="text-2xl font-semibold radiant-text">
                 ${stats.cost_estimate}
               </p>
             </div>
-            <div className="text-green-600 text-sm font-medium">This Month</div>
+            <div className="text-purple-400 text-sm font-medium">
+              This Month
+            </div>
           </div>
         </div>
       </div>
 
       {/* Usage Chart Placeholder */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <h3 className="text-lg font-semibold radiant-text mb-4">
           Usage Over Time
         </h3>
-        <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-          <div className="text-center text-gray-500">
+        <div className="h-64 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
+          <div className="text-center radiant-text-secondary">
             <BarChart3 className="h-12 w-12 mx-auto mb-2" />
             <p>Usage chart will be displayed here</p>
             <p className="text-sm">Shows daily/weekly AI capability usage</p>
