@@ -1,331 +1,397 @@
-# 🤖 Digital Persona Platform
+# 🚀 Hibiji Digital Persona Platform
 
-A comprehensive AI-powered platform for creating, managing, and interacting with digital personas. Built with FastAPI, React, and modern AI technologies.
+A scalable, cost-optimized digital persona platform built with FastAPI, React, and AWS infrastructure.
 
-## 🚀 Features
+## 📋 Table of Contents
 
-- **AI-Powered Personas**: Create and manage intelligent digital personas
-- **Natural Language Chat**: Engage in conversations with your personas
-- **Memory & Learning**: Personas learn and remember from interactions
-- **Voice Synthesis**: Text-to-speech capabilities for personas
-- **Image Analysis**: AI-powered image understanding and analysis
-- **File Upload & Management**: Secure file handling with S3 support
-- **Real-time Chat**: WebSocket-based real-time messaging
-- **User Authentication**: JWT-based secure authentication
-- **Production Ready**: Docker, monitoring, and security features
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Deployment Status](#deployment-status)
+- [Infrastructure](#infrastructure)
+- [Development](#development)
+- [Monitoring](#monitoring)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+
+## 🌟 Overview
+
+Hibiji is a comprehensive digital persona platform that enables users to create, manage, and interact with AI-powered digital personas. The platform features social media integration, automatic learning, and scalable cloud infrastructure.
+
+### Key Features
+
+- 🤖 **AI-Powered Personas**: Create and manage intelligent digital personas
+- 📱 **Social Media Integration**: Import and learn from social media data
+- 🔄 **Automatic Learning**: Continuous persona improvement from interactions
+- ☁️ **Scalable Infrastructure**: AWS-based architecture with auto-scaling
+- 💰 **Cost Optimized**: Environment-based resource sizing and budget controls
+- 🔐 **Enterprise Security**: VPC isolation, IAM roles, and SSL encryption
 
 ## 🏗️ Architecture
 
+### Technology Stack
+
+**Backend**
+
+- **Framework**: FastAPI (Python 3.11)
+- **Database**: PostgreSQL 15 with connection pooling
+- **Cache**: Redis for session management
+- **File Storage**: S3 with multipart uploads
+- **Authentication**: JWT with refresh tokens
+
+**Frontend**
+
+- **Framework**: React 18 with TypeScript
+- **Styling**: Tailwind CSS
+- **State Management**: React Context API
+- **Build Tool**: Vite
+
+**Infrastructure**
+
+- **Container Orchestration**: AWS ECS Fargate
+- **Load Balancing**: Application Load Balancer
+- **Database**: RDS PostgreSQL
+- **Caching**: ElastiCache Redis
+- **Monitoring**: CloudWatch
+- **CI/CD**: GitHub Actions
+
+### Environment Structure
+
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend API   │    │   Database      │
-│   (React)       │◄──►│   (FastAPI)     │◄──►│   (PostgreSQL)  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │              ┌─────────────────┐              │
-         │              │   Redis Cache   │              │
-         │              └─────────────────┘              │
-         │                       │                       │
-         │              ┌─────────────────┐              │
-         │              │   OpenAI API    │              │
-         │              └─────────────────┘              │
-         │                       │                       │
-         │              ┌─────────────────┐              │
-         │              │   AWS S3        │              │
-         │              └─────────────────┘              │
-         │                       │                       │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Nginx Proxy   │    │   Prometheus    │    │   Grafana       │
-│   (Load Bal.)   │    │   (Monitoring)  │    │   (Dashboard)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+hibiji.com
+├── www.hibiji.com (Production)
+├── api.hibiji.com (API Gateway)
+├── dev.hibiji.com
+│   ├── dev01.hibiji.com
+│   ├── dev02.hibiji.com
+│   └── dev03.hibiji.com
+├── qa.hibiji.com
+│   ├── qa01.hibiji.com
+│   ├── qa02.hibiji.com
+│   └── qa03.hibiji.com
+├── staging.hibiji.com
+│   ├── staging01.hibiji.com
+│   ├── staging02.hibiji.com
+│   └── staging03.hibiji.com
+└── prod.hibiji.com
+    ├── prod01.hibiji.com
+    └── prod02.hibiji.com
 ```
 
-## 🛠️ Quick Start (Development)
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+
-- PostgreSQL (optional, SQLite for development)
-- Redis (optional)
+- **AWS Account** with appropriate permissions
+- **AWS CLI** (v2.0+)
+- **Terraform** (v1.5.0+)
+- **Docker** (v20.0+)
+- **Git** (v2.30+)
 
-### Installation
+### 30-Minute Deployment
 
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/your-username/digital-persona-platform.git
-   cd digital-persona-platform
-   ```
-
-2. **Set up Python environment**
+1. **Install Tools** (5 minutes)
 
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
+   # macOS
+   brew install awscli terraform docker gh
+
+   # Ubuntu
+   sudo apt-get install awscli terraform docker.io gh
    ```
 
-3. **Set up frontend**
+2. **Configure AWS** (5 minutes)
 
    ```bash
-   cd frontend
-   npm install
-   cd ..
+   aws configure
+   # Enter your Access Key ID, Secret Access Key, region (us-west-1), format (json)
    ```
 
-4. **Configure environment**
+3. **Run Automated Setup** (10 minutes)
 
    ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
+   chmod +x scripts/setup-aws-prerequisites.sh
+   ./scripts/setup-aws-prerequisites.sh
    ```
 
-5. **Run the application**
-   ```bash
-   ./start.sh
-   ```
-
-### Test Users
-
-Use these credentials for testing:
-
-- **Email**: `test@example.com`
-- **Password**: `testpassword123`
-
-## 🚀 Production Deployment
-
-### Docker Deployment (Recommended)
-
-1. **Prepare environment**
+4. **Configure GitHub** (5 minutes)
 
    ```bash
-   cp env.production.example .env
-   # Edit .env with your production values
+   chmod +x scripts/setup-github-secrets.sh
+   ./scripts/setup-github-secrets.sh
    ```
 
-2. **Deploy with Docker Compose**
+5. **Deploy Platform** (15 minutes)
    ```bash
-   ./deploy.sh
+   chmod +x scripts/first-deployment.sh
+   ./scripts/first-deployment.sh
    ```
 
-### Manual Deployment
+For detailed instructions, see [QUICK_START.md](QUICK_START.md).
 
-1. **Set up PostgreSQL**
+## 📊 Deployment Status
 
-   ```sql
-   CREATE DATABASE digital_persona;
-   CREATE USER dpp_user WITH PASSWORD 'your_password';
-   GRANT ALL PRIVILEGES ON DATABASE digital_persona TO dpp_user;
-   ```
+### ✅ Completed Infrastructure
 
-2. **Set up Redis**
+- [x] **Cost Control Module** - Budget management and cost alerts
+- [x] **VPC Module** - Multi-tier networking with cost optimization
+- [x] **RDS Module** - PostgreSQL with connection pooling
+- [x] **ECS Module** - Fargate cluster with auto-scaling
+- [x] **ALB Module** - Load balancer with SSL termination
+- [x] **Route53 Module** - DNS management for multi-environments
+- [x] **CI/CD Pipeline** - GitHub Actions with cost estimation
+- [x] **IAM Permission Groups** - Role-based access control
+
+### 🔄 In Progress
+
+- [ ] **Domain Registration** - hibiji.com domain setup
+- [ ] **SSL Certificate Validation** - ACM certificate verification
+- [ ] **Production Deployment** - Full production environment
+- [ ] **Advanced Monitoring** - Custom CloudWatch dashboards
+
+### 📋 Planned
+
+- [ ] **Multi-Region Deployment** - Disaster recovery setup
+- [ ] **Advanced Security** - WAF and Shield protection
+- [ ] **Performance Optimization** - CDN and caching layers
+- [ ] **Backup Automation** - Cross-region backup strategies
+
+## 🏗️ Infrastructure
+
+### Cost Optimization
+
+| Environment | RDS Instance | ECS CPU/Memory | Monthly Cost | Auto-Scaling |
+| ----------- | ------------ | -------------- | ------------ | ------------ |
+| Development | db.t3.micro  | 256/512MB      | ~$50         | Disabled     |
+| QA          | db.t3.small  | 512/1GB        | ~$100        | Minimal      |
+| Staging     | db.t3.medium | 1024/2GB       | ~$200        | Enabled      |
+| Production  | db.r6g.large | 2048/4GB       | ~$1000       | Enabled      |
+
+### Security Features
+
+- **VPC Isolation**: Private subnets for application servers
+- **IAM Roles**: Least privilege access control
+- **SSL/TLS**: Automatic certificate management
+- **Secrets Management**: AWS Secrets Manager integration
+- **Access Logging**: Comprehensive audit trails
+
+### Monitoring & Alerting
+
+- **CloudWatch Dashboards**: Application and infrastructure metrics
+- **Cost Alerts**: Budget threshold notifications
+- **Health Checks**: Service availability monitoring
+- **Performance Insights**: Database and application performance
+
+## 💻 Development
+
+### Local Development
+
+1. **Clone Repository**
 
    ```bash
-   # Install Redis
-   sudo apt-get install redis-server
-   # Configure with password
+   git clone https://github.com/your-org/hibiji-platform.git
+   cd hibiji-platform
    ```
 
-3. **Configure environment variables**
+2. **Start Local Environment**
 
    ```bash
-   export DATABASE_URL="postgresql://dpp_user:password@localhost:5432/digital_persona"
-   export REDIS_URL="redis://:password@localhost:6379"
-   export SECRET_KEY="your-super-secure-secret-key"
+   docker-compose up -d
    ```
 
-4. **Run database migrations**
+3. **Run Migrations**
 
    ```bash
    alembic upgrade head
    ```
 
-5. **Start services**
-
-   ```bash
-   # Backend
-   uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-   # Frontend
-   cd frontend && npm start
-   ```
-
-## 🔧 Configuration
+4. **Access Applications**
+   - Frontend: http://localhost:3000
+   - Backend: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
 
 ### Environment Variables
 
-| Variable                | Description                | Default                          |
-| ----------------------- | -------------------------- | -------------------------------- |
-| `DATABASE_URL`          | Database connection string | `sqlite:///./digital_persona.db` |
-| `SECRET_KEY`            | JWT secret key             | `your-secret-key-here`           |
-| `OPENAI_API_KEY`        | OpenAI API key             | `None`                           |
-| `REDIS_URL`             | Redis connection string    | `redis://localhost:6379`         |
-| `AWS_ACCESS_KEY_ID`     | AWS access key             | `None`                           |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key             | `None`                           |
-| `S3_BUCKET_NAME`        | S3 bucket name             | `None`                           |
-| `LOG_LEVEL`             | Logging level              | `INFO`                           |
-| `ENVIRONMENT`           | Environment mode           | `development`                    |
+```bash
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/hibiji
 
-### Security Features
+# Redis
+REDIS_URL=redis://localhost:6379
 
-- **Rate Limiting**: Configurable rate limits per endpoint
-- **CORS Protection**: Cross-origin resource sharing controls
-- **Security Headers**: XSS, CSRF, and other security headers
-- **JWT Authentication**: Secure token-based authentication
-- **Input Validation**: Comprehensive input sanitization
-- **SQL Injection Protection**: Parameterized queries
+# AWS
+AWS_REGION=us-west-1
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
 
-## 📊 Monitoring & Observability
+# Application
+SECRET_KEY=your_secret_key
+ENVIRONMENT=development
+```
 
-### Health Checks
-
-- **Basic Health**: `GET /health`
-- **Detailed Health**: `GET /health/detailed`
-- **Readiness**: `GET /health/ready`
-- **Liveness**: `GET /health/live`
-
-### Metrics & Monitoring
-
-- **Prometheus**: Metrics collection at `/metrics`
-- **Grafana**: Dashboard at `http://localhost:3001`
-- **Application Logs**: Structured logging with correlation IDs
-- **Performance Monitoring**: Request timing and error tracking
-
-### Access URLs (Production)
-
-- **Frontend**: `http://your-domain.com`
-- **API**: `http://your-domain.com/api`
-- **API Docs**: `http://your-domain.com/docs`
-- **Grafana**: `http://your-domain.com:3001`
-- **Prometheus**: `http://your-domain.com:9090`
-
-## 🔌 API Endpoints
-
-### Authentication
-
-- `POST /auth/register` - User registration
-- `POST /auth/login` - User login
-- `GET /auth/me` - Get current user
-- `POST /auth/refresh` - Refresh token
-
-### Personas
-
-- `GET /personas/` - List personas
-- `POST /personas/` - Create persona
-- `GET /personas/{id}` - Get persona
-- `PUT /personas/{id}` - Update persona
-- `DELETE /personas/{id}` - Delete persona
-
-### Chat
-
-- `GET /chat/conversations` - List conversations
-- `POST /chat/conversations` - Create conversation
-- `GET /chat/conversations/{id}/messages` - Get messages
-- `POST /chat/conversations/{id}/messages` - Send message
-
-### Media
-
-- `POST /upload/` - Upload file
-- `GET /media/{id}` - Get media file
-- `DELETE /media/{id}` - Delete media file
-
-## 🧪 Testing
-
-### Run Tests
+### Testing
 
 ```bash
 # Backend tests
-python -m pytest tests/
+pytest tests/ -v --cov=app
 
 # Frontend tests
 cd frontend && npm test
 
 # Integration tests
-python test_auth.py
-python test_chat.py
+pytest tests/integration/ -v
 ```
 
-### Test Coverage
+## 📈 Monitoring
+
+### CloudWatch Dashboards
+
+- **Application Metrics**: Response times, error rates, throughput
+- **Infrastructure Metrics**: CPU, memory, disk usage
+- **Cost Metrics**: Real-time cost tracking and alerts
+
+### Log Management
+
+- **Application Logs**: Structured logging to CloudWatch
+- **Access Logs**: ALB access logs to S3 with lifecycle policies
+- **Database Logs**: RDS logs for performance monitoring
+
+### Alerting
+
+- **Cost Alerts**: Budget threshold notifications
+- **Performance Alerts**: High latency, error rate alerts
+- **Health Checks**: Service availability monitoring
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+#### ECS Service Not Starting
 
 ```bash
-# Backend coverage
-coverage run -m pytest tests/
-coverage report
+# Check service events
+aws ecs describe-services \
+  --cluster hibiji-dev-cluster \
+  --services hibiji-dev-backend
 
-# Frontend coverage
-cd frontend && npm run test:coverage
+# Check task logs
+aws logs get-log-events \
+  --log-group-name /ecs/hibiji-dev-app \
+  --log-stream-name <stream-name>
 ```
 
-## 🔒 Security Considerations
+#### Database Connection Issues
 
-### Production Checklist
+```bash
+# Check RDS status
+aws rds describe-db-instances \
+  --db-instance-identifier hibiji-dev-db
 
-- [ ] Change default SECRET_KEY
-- [ ] Configure HTTPS with valid SSL certificates
-- [ ] Set up proper CORS origins
-- [ ] Configure rate limiting
-- [ ] Set up monitoring and alerting
-- [ ] Regular security updates
-- [ ] Database backups
-- [ ] Log rotation and retention
-- [ ] Environment variable security
+# Test connection
+psql -h <rds-endpoint> -U hibiji_admin -d hibiji_dev
+```
 
-### Security Headers
+#### SSL Certificate Issues
 
-The application includes comprehensive security headers:
+```bash
+# Check certificate status
+aws acm describe-certificate \
+  --certificate-arn <certificate-arn>
 
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `X-XSS-Protection: 1; mode=block`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `Content-Security-Policy: default-src 'self'`
+# Verify DNS records
+dig www.hibiji.com
+```
 
-## 📈 Performance Optimization
+### Rollback Procedures
 
-### Database Optimization
+#### Application Rollback
 
-- Indexed queries for common operations
-- Connection pooling
-- Query optimization
-- Regular maintenance
+```bash
+# Rollback to previous image
+aws ecs update-service \
+  --cluster hibiji-dev-cluster \
+  --service hibiji-dev-backend \
+  --task-definition hibiji-dev-backend:<previous-revision>
+```
 
-### Caching Strategy
+#### Infrastructure Rollback
 
-- Redis for session storage
-- Response caching for static content
-- Database query caching
-- CDN for static assets
-
-### Load Balancing
-
-- Nginx reverse proxy
-- Health checks
-- Rate limiting
-- SSL termination
+```bash
+# Terraform rollback
+terraform plan -var="image_tag=<previous-tag>"
+terraform apply
+```
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+### Development Workflow
+
+1. **Create Feature Branch**
+
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make Changes**
+
+   - Follow coding standards
+   - Add tests for new features
+   - Update documentation
+
+3. **Test Locally**
+
+   ```bash
+   # Run all tests
+   pytest tests/ -v
+   cd frontend && npm test
+   ```
+
+4. **Create Pull Request**
+   - Target appropriate environment branch
+   - Include description of changes
+   - Link related issues
+
+### Code Standards
+
+- **Python**: Black formatting, flake8 linting
+- **TypeScript**: ESLint, Prettier formatting
+- **Terraform**: terraform fmt, tflint
+- **Documentation**: Keep README and guides updated
+
+### Environment Branches
+
+- **main**: Production-ready code
+- **staging**: Pre-production testing
+- **qa**: Quality assurance
+- **dev**: Development and feature testing
+
+## 📚 Documentation
+
+- [Quick Start Guide](QUICK_START.md) - 30-minute deployment
+- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Comprehensive deployment instructions
+- [Social Media Learning](SOCIAL_MEDIA_LEARNING.md) - Social media integration features
+- [API Documentation](http://localhost:8000/docs) - Interactive API docs
+
+## 📞 Support
+
+### Contact Information
+
+- **DevOps Team**: devops@hibiji.com
+- **Emergency**: +1-555-0123 (24/7)
+- **Documentation**: https://docs.hibiji.com
+
+### Escalation Matrix
+
+1. **Level 1**: On-call engineer (15 min response)
+2. **Level 2**: DevOps lead (30 min response)
+3. **Level 3**: CTO (1 hour response)
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
-
-- **Documentation**: [Wiki](https://github.com/your-username/digital-persona-platform/wiki)
-- **Issues**: [GitHub Issues](https://github.com/your-username/digital-persona-platform/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/digital-persona-platform/discussions)
-
-## 🔄 Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for a list of changes and version history.
-
 ---
 
-**Built with ❤️ using FastAPI, SQLAlchemy, and SQLite**
+**Last Updated**: December 2024  
+**Version**: 1.0.0  
+**Status**: Development Complete, Ready for Production Deployment
