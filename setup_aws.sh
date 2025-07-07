@@ -24,11 +24,11 @@ echo ""
 read -p "Enter your AWS Access Key ID: " AWS_ACCESS_KEY_ID
 read -s -p "Enter your AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
 echo ""
-read -p "Enter your AWS Region (e.g., us-east-1): " AWS_REGION
+read -p "Enter your AWS Region (e.g., us-west-1): " AWS_REGION
 
 # Set default region if empty
 if [ -z "$AWS_REGION" ]; then
-    AWS_REGION="us-east-1"
+    AWS_REGION="us-west-1"
 fi
 
 echo ""

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "digital-persona-platform")
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_REGION = os.getenv("AWS_REGION", "us-west-1")
 AWS_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")  # For localstack testing
 
 # Upload configuration

@@ -135,7 +135,7 @@ REDIS_URL=redis://localhost:6379
 # AWS S3 (optional)
 AWS_ACCESS_KEY_ID=your-aws-access-key
 AWS_SECRET_ACCESS_KEY=your-aws-secret-key
-AWS_DEFAULT_REGION=us-east-1
+AWS_DEFAULT_REGION=us-west-1
 S3_BUCKET_NAME=your-bucket-name
 EOF
     print_status "success" ".env file created with default values"
