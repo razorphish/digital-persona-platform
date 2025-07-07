@@ -188,9 +188,7 @@ const Dashboard: React.FC = () => {
               >
                 <Menu className="h-6 w-6" />
               </button>
-              <h1 className="text-xl font-semibold text-white">
-                Digital Persona Platform
-              </h1>
+              <h1 className="text-xl font-semibold text-white">Hibiji</h1>
             </div>
 
             <div className="flex items-center space-x-4">

@@ -191,7 +191,7 @@ const IntegrationsPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold radiant-text">Integrations</h1>
           <p className="text-lg radiant-text-secondary mt-2">
-            Connect your social media accounts to enhance your digital persona
+            Connect your social media accounts to enhance your persona
           </p>
         </div>
         <button

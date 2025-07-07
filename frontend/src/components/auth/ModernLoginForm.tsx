@@ -37,7 +37,7 @@ const ModernLoginForm: React.FC = () => {
               <Sparkles className="h-8 w-8 text-white" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold gradient-text">Digital Persona</h1>
+          <h1 className="text-4xl font-bold gradient-text">Hibiji</h1>
           <p className="mt-2 radiant-text-secondary">Sign in to your account</p>
         </div>
 
@@ -125,7 +125,7 @@ const ModernLoginForm: React.FC = () => {
         {/* Footer */}
         <div className="text-center">
           <p className="radiant-text-muted text-xs">
-            © 2024 Digital Persona Platform. All rights reserved.
+            © 2024 Hibiji. All rights reserved.
           </p>
         </div>
       </div>

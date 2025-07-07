@@ -64,7 +64,7 @@ const HomePage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">
-              Welcome to Digital Persona Platform
+              Welcome to Hibiji
             </h1>
             <p className="text-white/80 text-lg">
               Create your digital self and build AI personas that represent you.
@@ -72,9 +72,9 @@ const HomePage: React.FC = () => {
           </div>
         </div>
         <p className="text-white/70">
-          Start by creating your own digital persona to capture your
-          personality, memories, and unique characteristics. Your AI companions
-          are ready to learn from you.
+          Start by creating your own persona to capture your personality,
+          memories, and unique characteristics. Your AI companions are ready to
+          learn from you.
         </p>
       </div>
 

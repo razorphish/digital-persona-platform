@@ -32,7 +32,7 @@ const LandingPage: React.FC = () => {
       icon: MessageSquare,
       title: "Natural Conversations",
       description:
-        "Engage in meaningful conversations with your digital personas using advanced natural language processing.",
+        "Engage in meaningful conversations with your personas using advanced natural language processing.",
     },
     {
       icon: Users,
@@ -50,13 +50,13 @@ const LandingPage: React.FC = () => {
       icon: Shield,
       title: "Privacy First",
       description:
-        "Your data is encrypted and secure. You maintain full control over your digital personas and conversations.",
+        "Your data is encrypted and secure. You maintain full control over your personas and conversations.",
     },
     {
       icon: Globe,
       title: "Cross-Platform",
       description:
-        "Access your digital personas from anywhere - web, mobile, and soon desktop applications.",
+        "Access your personas from anywhere - web, mobile, and soon desktop applications.",
     },
   ];
 
@@ -103,9 +103,7 @@ const LandingPage: React.FC = () => {
               <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-3">
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">
-                Digital Persona Platform
-              </span>
+              <span className="text-xl font-bold text-white">Hibiji</span>
             </div>
 
             {/* Desktop Navigation */}
@@ -289,11 +287,11 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
               <h2 className="text-4xl md:text-5xl font-bold text-white mb-8">
-                Why Choose Digital Persona Platform?
+                Why Choose Hibiji?
               </h2>
               <p className="text-xl text-white/70 mb-8 leading-relaxed">
                 Our platform offers unique advantages that make creating and
-                managing your digital personas both powerful and accessible.
+                managing your personas both powerful and accessible.
               </p>
               <div className="space-y-4">
                 {benefits.map((benefit, index) => (
@@ -400,8 +398,8 @@ const LandingPage: React.FC = () => {
             Ready to Create Your Digital Legacy?
           </h2>
           <p className="text-xl text-white/80 mb-8">
-            Start building your AI-powered digital personas today and preserve
-            your unique personality for future generations.
+            Start building your AI-powered personas today and preserve your
+            unique personality for future generations.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -430,9 +428,7 @@ const LandingPage: React.FC = () => {
                 <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-3">
                   <Sparkles className="h-5 w-5 text-white" />
                 </div>
-                <span className="text-xl font-bold text-white">
-                  Digital Persona Platform
-                </span>
+                <span className="text-xl font-bold text-white">Hibiji</span>
               </div>
               <p className="text-white/70 mb-4 max-w-md">
                 Creating intelligent digital representations of yourself with
@@ -538,9 +534,7 @@ const LandingPage: React.FC = () => {
             </div>
           </div>
           <div className="border-t border-white/10 mt-8 pt-8 text-center">
-            <p className="text-white/60">
-              © 2024 Digital Persona Platform. All rights reserved.
-            </p>
+            <p className="text-white/60">© 2024 Hibiji. All rights reserved.</p>
           </div>
         </div>
       </footer>
