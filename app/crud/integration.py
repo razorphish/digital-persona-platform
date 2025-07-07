@@ -1,5 +1,5 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, desc, select
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from app.models.integration_db import SocialMediaIntegration, SocialMediaPost, IntegrationAnalytics
@@ -7,9 +7,9 @@ from app.models.user_db import User
 
 
 class IntegrationCRUD:
-    def create_integration(
+    async def create_integration(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         user_id: int, 
         platform: str, 
         platform_user_id: str, 
@@ -30,39 +30,48 @@ class IntegrationCRUD:
             last_sync_at=datetime.utcnow()
         )
         db.add(db_integration)
-        db.commit()
-        db.refresh(db_integration)
+        await db.commit()
+        await db.refresh(db_integration)
         return db_integration
     
-    def get_integration_by_id(self, db: Session, integration_id: int) -> Optional[SocialMediaIntegration]:
+    async def get_integration_by_id(self, db: AsyncSession, integration_id: int) -> Optional[SocialMediaIntegration]:
         """Get integration by ID."""
-        return db.query(SocialMediaIntegration).filter(SocialMediaIntegration.id == integration_id).first()
+        result = await db.execute(
+            select(SocialMediaIntegration).where(SocialMediaIntegration.id == integration_id)
+        )
+        return result.scalar_one_or_none()
     
-    def get_integrations_by_user(self, db: Session, user_id: int) -> List[SocialMediaIntegration]:
+    async def get_integrations_by_user(self, db: AsyncSession, user_id: int) -> List[SocialMediaIntegration]:
         """Get all integrations for a user."""
-        return db.query(SocialMediaIntegration).filter(
-            SocialMediaIntegration.user_id == user_id,
-            SocialMediaIntegration.is_active == True
-        ).all()
-    
-    def get_integration_by_platform(self, db: Session, user_id: int, platform: str) -> Optional[SocialMediaIntegration]:
-        """Get integration by user and platform."""
-        return db.query(SocialMediaIntegration).filter(
-            and_(
+        result = await db.execute(
+            select(SocialMediaIntegration).where(
                 SocialMediaIntegration.user_id == user_id,
-                SocialMediaIntegration.platform == platform,
                 SocialMediaIntegration.is_active == True
             )
-        ).first()
+        )
+        return list(result.scalars().all())
     
-    def update_integration(
+    async def get_integration_by_platform(self, db: AsyncSession, user_id: int, platform: str) -> Optional[SocialMediaIntegration]:
+        """Get integration by user and platform."""
+        result = await db.execute(
+            select(SocialMediaIntegration).where(
+                and_(
+                    SocialMediaIntegration.user_id == user_id,
+                    SocialMediaIntegration.platform == platform,
+                    SocialMediaIntegration.is_active == True
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+    
+    async def update_integration(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         integration_id: int, 
         updates: Dict[str, Any]
     ) -> Optional[SocialMediaIntegration]:
         """Update an integration."""
-        db_integration = self.get_integration_by_id(db, integration_id)
+        db_integration = await self.get_integration_by_id(db, integration_id)
         if not db_integration:
             return None
         
@@ -71,65 +80,71 @@ class IntegrationCRUD:
                 setattr(db_integration, key, value)
         
         db_integration.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(db_integration)
+        await db.commit()
+        await db.refresh(db_integration)
         return db_integration
     
-    def delete_integration(self, db: Session, integration_id: int) -> bool:
+    async def delete_integration(self, db: AsyncSession, integration_id: int) -> bool:
         """Delete an integration (soft delete by setting is_active to False)."""
-        db_integration = self.get_integration_by_id(db, integration_id)
+        db_integration = await self.get_integration_by_id(db, integration_id)
         if not db_integration:
             return False
         
         db_integration.is_active = False
         db_integration.updated_at = datetime.utcnow()
-        db.commit()
+        await db.commit()
         return True
     
-    def update_last_sync(self, db: Session, integration_id: int) -> None:
+    async def update_last_sync(self, db: AsyncSession, integration_id: int) -> None:
         """Update the last sync timestamp for an integration."""
-        db_integration = self.get_integration_by_id(db, integration_id)
+        db_integration = await self.get_integration_by_id(db, integration_id)
         if db_integration:
             db_integration.last_sync_at = datetime.utcnow()
-            db.commit()
+            await db.commit()
 
 
 class SocialPostCRUD:
-    def create_post(self, db: Session, post_data: Dict[str, Any]) -> SocialMediaPost:
+    async def create_post(self, db: AsyncSession, post_data: Dict[str, Any]) -> SocialMediaPost:
         """Create a new social media post."""
         db_post = SocialMediaPost(**post_data)
         db.add(db_post)
-        db.commit()
-        db.refresh(db_post)
+        await db.commit()
+        await db.refresh(db_post)
         return db_post
     
-    def get_posts_by_integration(
+    async def get_posts_by_integration(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         integration_id: int, 
         limit: int = 100,
         offset: int = 0
     ) -> List[SocialMediaPost]:
         """Get posts for an integration."""
-        return db.query(SocialMediaPost).filter(
-            SocialMediaPost.integration_id == integration_id
-        ).order_by(desc(SocialMediaPost.posted_at)).offset(offset).limit(limit).all()
+        result = await db.execute(
+            select(SocialMediaPost).where(
+                SocialMediaPost.integration_id == integration_id
+            ).order_by(desc(SocialMediaPost.posted_at)).offset(offset).limit(limit)
+        )
+        return list(result.scalars().all())
     
-    def get_post_by_platform_id(
+    async def get_post_by_platform_id(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         integration_id: int, 
         platform_post_id: str
     ) -> Optional[SocialMediaPost]:
         """Get post by platform post ID."""
-        return db.query(SocialMediaPost).filter(
-            and_(
-                SocialMediaPost.integration_id == integration_id,
-                SocialMediaPost.platform_post_id == platform_post_id
+        result = await db.execute(
+            select(SocialMediaPost).where(
+                and_(
+                    SocialMediaPost.integration_id == integration_id,
+                    SocialMediaPost.platform_post_id == platform_post_id
+                )
             )
-        ).first()
+        )
+        return result.scalar_one_or_none()
     
-    def bulk_create_posts(self, db: Session, posts_data: List[Dict[str, Any]]) -> List[SocialMediaPost]:
+    async def bulk_create_posts(self, db: AsyncSession, posts_data: List[Dict[str, Any]]) -> List[SocialMediaPost]:
         """Bulk create posts."""
         db_posts = []
         for post_data in posts_data:
@@ -137,50 +152,56 @@ class SocialPostCRUD:
             db.add(db_post)
             db_posts.append(db_post)
         
-        db.commit()
+        await db.commit()
         for post in db_posts:
-            db.refresh(post)
+            await db.refresh(post)
         
         return db_posts
     
-    def update_post_sentiment(
+    async def update_post_sentiment(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         post_id: int, 
         sentiment_score: float
     ) -> Optional[SocialMediaPost]:
         """Update sentiment score for a post."""
-        db_post = db.query(SocialMediaPost).filter(SocialMediaPost.id == post_id).first()
+        result = await db.execute(
+            select(SocialMediaPost).where(SocialMediaPost.id == post_id)
+        )
+        db_post = result.scalar_one_or_none()
         if not db_post:
             return None
         
         db_post.sentiment_score = sentiment_score
         db_post.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(db_post)
+        await db.commit()
+        await db.refresh(db_post)
         return db_post
     
-    def get_posts_for_analytics(
+    async def get_posts_for_analytics(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         integration_id: int, 
         start_date: datetime,
         end_date: datetime
     ) -> List[SocialMediaPost]:
         """Get posts for analytics within a date range."""
-        return db.query(SocialMediaPost).filter(
-            and_(
-                SocialMediaPost.integration_id == integration_id,
-                SocialMediaPost.posted_at >= start_date,
-                SocialMediaPost.posted_at <= end_date
+        result = await db.execute(
+            select(SocialMediaPost).where(
+                and_(
+                    SocialMediaPost.integration_id == integration_id,
+                    SocialMediaPost.posted_at >= start_date,
+                    SocialMediaPost.posted_at <= end_date
+                )
             )
-        ).all()
+        )
+        return list(result.scalars().all())
 
 
 class AnalyticsCRUD:
-    def create_analytics(
+    async def create_analytics(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         integration_id: int, 
         analytics_data: Dict[str, Any]
     ) -> IntegrationAnalytics:
@@ -191,34 +212,40 @@ class AnalyticsCRUD:
             **analytics_data
         )
         db.add(db_analytics)
-        db.commit()
-        db.refresh(db_analytics)
+        await db.commit()
+        await db.refresh(db_analytics)
         return db_analytics
     
-    def get_analytics_by_integration(
+    async def get_analytics_by_integration(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         integration_id: int, 
         days: int = 30
     ) -> List[IntegrationAnalytics]:
         """Get analytics for an integration over a period."""
         start_date = datetime.utcnow().date() - timedelta(days=days)
-        return db.query(IntegrationAnalytics).filter(
-            and_(
-                IntegrationAnalytics.integration_id == integration_id,
-                IntegrationAnalytics.date >= start_date
-            )
-        ).order_by(desc(IntegrationAnalytics.date)).all()
+        result = await db.execute(
+            select(IntegrationAnalytics).where(
+                and_(
+                    IntegrationAnalytics.integration_id == integration_id,
+                    IntegrationAnalytics.date >= start_date
+                )
+            ).order_by(desc(IntegrationAnalytics.date))
+        )
+        return list(result.scalars().all())
     
-    def get_latest_analytics(
+    async def get_latest_analytics(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         integration_id: int
     ) -> Optional[IntegrationAnalytics]:
         """Get the latest analytics for an integration."""
-        return db.query(IntegrationAnalytics).filter(
-            IntegrationAnalytics.integration_id == integration_id
-        ).order_by(desc(IntegrationAnalytics.date)).first()
+        result = await db.execute(
+            select(IntegrationAnalytics).where(
+                IntegrationAnalytics.integration_id == integration_id
+            ).order_by(desc(IntegrationAnalytics.date))
+        )
+        return result.scalar_one_or_none()
 
 
 # Global instances
