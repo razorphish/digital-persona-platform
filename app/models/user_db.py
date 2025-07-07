@@ -17,4 +17,5 @@ class User(Base):
 
     personas = relationship("Persona", back_populates="user", cascade="all, delete-orphan")
     media_files = relationship("MediaFile", back_populates="user", cascade="all, delete-orphan")
-    conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan") 
+    conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
+    social_integrations = relationship("SocialMediaIntegration", back_populates="user", cascade="all, delete-orphan") 

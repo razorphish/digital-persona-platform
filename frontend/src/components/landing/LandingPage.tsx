@@ -439,24 +439,27 @@ const LandingPage: React.FC = () => {
                 cutting-edge AI technology.
               </p>
               <div className="flex space-x-4">
-                <a
-                  href="#"
+                <button
+                  type="button"
                   className="text-white/60 hover:text-white transition-colors"
+                  aria-label="Visit our website"
                 >
                   <Globe className="h-5 w-5" />
-                </a>
-                <a
-                  href="#"
+                </button>
+                <button
+                  type="button"
                   className="text-white/60 hover:text-white transition-colors"
+                  aria-label="Mobile app"
                 >
                   <Smartphone className="h-5 w-5" />
-                </a>
-                <a
-                  href="#"
+                </button>
+                <button
+                  type="button"
                   className="text-white/60 hover:text-white transition-colors"
+                  aria-label="Cloud services"
                 >
                   <Cloud className="h-5 w-5" />
-                </a>
+                </button>
               </div>
             </div>
             <div>
@@ -500,36 +503,36 @@ const LandingPage: React.FC = () => {
               <h3 className="text-white font-semibold mb-4">Support</h3>
               <ul className="space-y-2">
                 <li>
-                  <a
-                    href="#"
+                  <button
+                    type="button"
                     className="text-white/60 hover:text-white transition-colors"
                   >
                     Help Center
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <button
+                    type="button"
                     className="text-white/60 hover:text-white transition-colors"
                   >
                     Privacy Policy
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <button
+                    type="button"
                     className="text-white/60 hover:text-white transition-colors"
                   >
                     Terms of Service
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <button
+                    type="button"
                     className="text-white/60 hover:text-white transition-colors"
                   >
                     Contact Us
-                  </a>
+                  </button>
                 </li>
               </ul>
             </div>

@@ -30,11 +30,11 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "BROWSER=none react-scripts start",
+    "start": "NODE_OPTIONS=--openssl-legacy-provider BROWSER=none react-scripts start",
     "start:zen": "./start-zen.sh",
-    "start:zen:manual": "BROWSER=none react-scripts start && open -a 'Google Chrome' --args --start-maximized --app=http://localhost:3000",
-    "start:fullscreen": "BROWSER=none react-scripts start && sleep 3 && open -a 'Google Chrome' --args --kiosk http://localhost:3000",
-    "build": "react-scripts build",
+    "start:zen:manual": "NODE_OPTIONS=--openssl-legacy-provider BROWSER=none react-scripts start && open -a 'Google Chrome' --args --start-maximized --app=http://localhost:3000",
+    "start:fullscreen": "NODE_OPTIONS=--openssl-legacy-provider BROWSER=none react-scripts start && sleep 3 && open -a 'Google Chrome' --args --kiosk http://localhost:3000",
+    "build": "NODE_OPTIONS=--openssl-legacy-provider react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

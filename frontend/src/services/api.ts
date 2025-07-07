@@ -326,6 +326,78 @@ class ApiService {
     const response = await this.api.post(`/ai/memories/${personaId}`, data);
     return response.data;
   }
+
+  // Integration management
+  async getIntegrations(): Promise<any[]> {
+    const response: AxiosResponse<any[]> = await this.api.get("/integrations/");
+    return response.data;
+  }
+
+  async connectIntegration(integrationData: {
+    platform: string;
+    access_token: string;
+    access_token_secret?: string;
+    refresh_token?: string;
+  }): Promise<any> {
+    const response: AxiosResponse<any> = await this.api.post(
+      "/integrations/connect",
+      integrationData
+    );
+    return response.data;
+  }
+
+  async syncIntegration(
+    integrationId: number,
+    forceFullSync: boolean = false
+  ): Promise<any> {
+    const response: AxiosResponse<any> = await this.api.post(
+      `/integrations/${integrationId}/sync`,
+      { force_full_sync: forceFullSync }
+    );
+    return response.data;
+  }
+
+  async getIntegrationPosts(
+    integrationId: number,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<any[]> {
+    const response: AxiosResponse<any[]> = await this.api.get(
+      `/integrations/${integrationId}/posts`,
+      { params: { limit, offset } }
+    );
+    return response.data;
+  }
+
+  async getIntegrationAnalytics(
+    integrationId: number,
+    days: number = 30
+  ): Promise<any[]> {
+    const response: AxiosResponse<any[]> = await this.api.get(
+      `/integrations/${integrationId}/analytics`,
+      { params: { days } }
+    );
+    return response.data;
+  }
+
+  async updateIntegration(integrationId: number, updates: any): Promise<any> {
+    const response: AxiosResponse<any> = await this.api.put(
+      `/integrations/${integrationId}`,
+      updates
+    );
+    return response.data;
+  }
+
+  async deleteIntegration(integrationId: number): Promise<void> {
+    await this.api.delete(`/integrations/${integrationId}`);
+  }
+
+  async analyzeIntegrationSentiment(integrationId: number): Promise<any> {
+    const response: AxiosResponse<any> = await this.api.post(
+      `/integrations/${integrationId}/analyze-sentiment`
+    );
+    return response.data;
+  }
 }
 
 export const apiService = new ApiService();
