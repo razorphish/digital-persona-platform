@@ -7,13 +7,15 @@ import {
 } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import LoginForm from "./components/auth/LoginForm";
-import RegisterForm from "./components/auth/RegisterForm";
-import Dashboard from "./components/dashboard/Dashboard";
-import HomePage from "./components/dashboard/HomePage";
+import LandingPage from "./components/landing/LandingPage";
+import TestStyling from "./components/TestStyling";
+import ModernLoginForm from "./components/auth/ModernLoginForm";
+import ModernRegisterForm from "./components/auth/ModernRegisterForm";
+import ModernDashboard from "./components/dashboard/ModernDashboard";
+import ModernHomePage from "./components/dashboard/ModernHomePage";
 import PersonasPage from "./components/personas/PersonasPage";
 import ConversationsPage from "./components/conversations/ConversationsPage";
-import ChatPage from "./components/chat/ChatPage";
+import ModernChatPage from "./components/chat/ModernChatPage";
 import UploadPage from "./components/upload/UploadPage";
 import StatsPage from "./components/stats/StatsPage";
 import SettingsPage from "./components/settings/SettingsPage";
@@ -27,7 +29,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
       </div>
     );
   }
@@ -42,7 +44,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
       </div>
     );
   }
@@ -57,12 +59,18 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
+      {/* Test Route - Remove this after testing */}
+      <Route path="/test" element={<TestStyling />} />
+
+      {/* Landing Page - Public */}
+      <Route path="/" element={<LandingPage />} />
+
       {/* Public Routes */}
       <Route
         path="/login"
         element={
           <PublicRoute>
-            <LoginForm />
+            <ModernLoginForm />
           </PublicRoute>
         }
       />
@@ -70,7 +78,7 @@ const AppRoutes: React.FC = () => {
         path="/register"
         element={
           <PublicRoute>
-            <RegisterForm />
+            <ModernRegisterForm />
           </PublicRoute>
         }
       />
@@ -80,22 +88,21 @@ const AppRoutes: React.FC = () => {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <ModernDashboard />
           </ProtectedRoute>
         }
       >
-        <Route index element={<HomePage />} />
+        <Route index element={<ModernHomePage />} />
         <Route path="personas" element={<PersonasPage />} />
         <Route path="conversations" element={<ConversationsPage />} />
-        <Route path="conversations/:id" element={<ChatPage />} />
+        <Route path="conversations/:id" element={<ModernChatPage />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="stats" element={<StatsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 
-      {/* Default redirect */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Catch all other routes and redirect to landing page */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };
