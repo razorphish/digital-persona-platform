@@ -123,7 +123,7 @@ create_iam_roles() {
     
     # ECS Execution Role
     print_debug "Checking ECS execution role..."
-    if ! aws iam get-role --role-name hibiji-ecs-execution-role &> /dev/null; then
+    if ! aws iam get-role --role-name hibiji-ecs-execution-role --no-cli-pager &> /dev/null; then
         print_debug "Creating ECS execution role..."
         aws iam create-role \
             --role-name hibiji-ecs-execution-role \
@@ -157,7 +157,7 @@ create_iam_roles() {
     
     # ECS Task Role
     print_debug "Checking ECS task role..."
-    if ! aws iam get-role --role-name hibiji-ecs-task-role &> /dev/null; then
+    if ! aws iam get-role --role-name hibiji-ecs-task-role --no-cli-pager &> /dev/null; then
         print_debug "Creating ECS task role..."
         aws iam create-role \
             --role-name hibiji-ecs-task-role \
@@ -232,12 +232,13 @@ create_secrets() {
     
     # Database password secret
     print_debug "Checking database password secret..."
-    if ! aws secretsmanager describe-secret --secret-id hibiji-database-password &> /dev/null; then
+    if ! aws secretsmanager describe-secret --secret-id hibiji-database-password --no-cli-pager &> /dev/null; then
         print_debug "Creating database password secret..."
         aws secretsmanager create-secret \
             --name hibiji-database-password \
             --description "Database password for Hibiji platform" \
-            --secret-string "{\"password\":\"$DB_PASSWORD\"}"
+            --secret-string "{\"password\":\"$DB_PASSWORD\"}" \
+            --no-cli-pager
         print_success "Database password secret created"
     else
         print_warning "Database password secret already exists"
@@ -245,12 +246,13 @@ create_secrets() {
     
     # Application secret key
     print_debug "Checking application secret key..."
-    if ! aws secretsmanager describe-secret --secret-id hibiji-secret-key &> /dev/null; then
+    if ! aws secretsmanager describe-secret --secret-id hibiji-secret-key --no-cli-pager &> /dev/null; then
         print_debug "Creating application secret key..."
         aws secretsmanager create-secret \
             --name hibiji-secret-key \
             --description "Application secret key for Hibiji platform" \
-            --secret-string "{\"secret_key\":\"$SECRET_KEY\"}"
+            --secret-string "{\"secret_key\":\"$SECRET_KEY\"}" \
+            --no-cli-pager
         print_success "Application secret key created"
     else
         print_warning "Application secret key already exists"
