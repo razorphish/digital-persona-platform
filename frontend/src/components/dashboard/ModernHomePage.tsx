@@ -131,7 +131,7 @@ const ModernHomePage: React.FC = () => {
             Platform Features
           </h2>
           <p className="radiant-text-secondary">
-            Discover what makes Digital Persona Platform unique
+            Discover what makes Hibiji unique
           </p>
         </div>
 

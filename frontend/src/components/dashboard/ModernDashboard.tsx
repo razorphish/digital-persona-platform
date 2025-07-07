@@ -49,9 +49,7 @@ const ModernDashboard: React.FC = () => {
             {/* Logo */}
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <h1 className="text-2xl font-bold gradient-text">
-                  Digital Persona
-                </h1>
+                <h1 className="text-2xl font-bold gradient-text">Hibiji</h1>
               </div>
             </div>
 
