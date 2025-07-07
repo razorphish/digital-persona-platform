@@ -7,7 +7,15 @@ from fastapi import HTTPException
 import tweepy
 import facebook
 from app.config import settings
+import logging
+from app.models.integration_db import SocialMediaIntegration
+from app.models.persona_db import Persona as DBPersona
+from app.services.personality_learning import PersonalityLearningService
+from app.crud import persona as persona_crud
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class SocialMediaService:
     def __init__(self):
@@ -239,6 +247,153 @@ class SocialMediaService:
             "peak_activity_hours": {}  # Would need to analyze timestamps
         }
 
+    async def learn_from_social_media_posts(
+        self,
+        db,
+        user_id: int,
+        posts_data: List[Dict[str, Any]],
+        target_personas: Optional[List[int]] = None,
+        update_self_persona: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Learn from social media posts and update personas.
+        
+        Args:
+            db: Database session
+            user_id: ID of the user who owns the posts
+            posts_data: List of social media post data
+            target_personas: List of specific persona IDs to update (optional)
+            update_self_persona: Whether to update the 'self' persona (default: True)
+        
+        Returns:
+            Dict with learning results
+        """
+        if not posts_data:
+            return {"updated_personas": [], "learning_count": 0}
+        
+        try:
+            # Get personas to update
+            personas_to_update = []
+            
+            # Always update self persona if requested
+            if update_self_persona:
+                self_persona = await persona_crud.get_or_create_self_persona(db, user_id)
+                if self_persona:
+                    personas_to_update.append(self_persona)
+            
+            # Add specific target personas if provided
+            if target_personas:
+                for persona_id in target_personas:
+                    persona = await persona_crud.get_persona_by_id(db, persona_id, user_id)
+                    if persona and persona not in personas_to_update:
+                        personas_to_update.append(persona)
+            
+            if not personas_to_update:
+                logger.warning(f"No personas found to update for user {user_id}")
+                return {"updated_personas": [], "learning_count": 0}
+            
+            # Aggregate post content for learning
+            aggregated_content = self._aggregate_posts_for_learning(posts_data)
+            
+            # Initialize learning service
+            learning_service = PersonalityLearningService()
+            
+            # Update each persona
+            updated_personas = []
+            total_learning_count = 0
+            
+            for persona in personas_to_update:
+                if not persona.learning_enabled:
+                    logger.info(f"Learning disabled for persona {persona.id}")
+                    continue
+                
+                try:
+                    # Create learning data from social media posts
+                    learning_data = {
+                        "text": aggregated_content,
+                        "source": "social_media",
+                        "post_count": len(posts_data),
+                        "platforms": list(set(post.get("platform", "unknown") for post in posts_data)),
+                        "date_range": {
+                            "earliest": min(post.get("posted_at", datetime.now()) for post in posts_data).isoformat(),
+                            "latest": max(post.get("posted_at", datetime.now()) for post in posts_data).isoformat()
+                        }
+                    }
+                    
+                    # Update persona with new learning data
+                    current_context = persona.memory_context or ""
+                    new_context = f"{current_context}\n\n[Social Media Learning - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]\n{aggregated_content}" if current_context else f"[Social Media Learning - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]\n{aggregated_content}"
+                    
+                    updated_persona = await persona_crud.update_persona_learning(
+                        db=db,
+                        persona=persona,
+                        memory_context=new_context,
+                        interaction_count=persona.interaction_count + 1
+                    )
+                    
+                    updated_personas.append(updated_persona.id)
+                    total_learning_count += 1
+                    
+                    logger.info(f"Updated persona {persona.id} ({persona.name}) with social media learning data")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to update persona {persona.id}: {e}")
+                    continue
+            
+            return {
+                "updated_personas": updated_personas,
+                "learning_count": total_learning_count,
+                "total_posts_processed": len(posts_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to learn from social media posts: {e}")
+            return {"updated_personas": [], "learning_count": 0, "error": str(e)}
+    
+    def _aggregate_posts_for_learning(self, posts_data: List[Dict[str, Any]]) -> str:
+        """
+        Aggregate social media posts into a format suitable for persona learning.
+        """
+        if not posts_data:
+            return ""
+        
+        # Sort posts by date (newest first)
+        sorted_posts = sorted(posts_data, key=lambda x: x.get("posted_at", datetime.now()), reverse=True)
+        
+        # Extract and format content
+        content_parts = []
+        
+        for post in sorted_posts:
+            content = post.get("content", "")
+            if not content:
+                continue
+            
+            # Add hashtags and mentions as context
+            hashtags = post.get("hashtags", [])
+            mentions = post.get("mentions", [])
+            
+            post_text = content
+            
+            if hashtags:
+                post_text += f"\nHashtags: {', '.join(hashtags)}"
+            
+            if mentions:
+                post_text += f"\nMentions: {', '.join(mentions)}"
+            
+            # Add engagement metrics as context
+            likes = post.get("likes_count", 0)
+            comments = post.get("comments_count", 0)
+            shares = post.get("shares_count", 0)
+            
+            if likes > 0 or comments > 0 or shares > 0:
+                post_text += f"\nEngagement: {likes} likes, {comments} comments, {shares} shares"
+            
+            content_parts.append(post_text)
+        
+        # Combine all content with separators
+        aggregated_content = "\n\n---\n\n".join(content_parts)
+        
+        return aggregated_content
 
 # Global instance
 social_media_service = SocialMediaService() 

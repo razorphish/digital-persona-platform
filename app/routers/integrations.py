@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.middleware.security import get_current_user
+from app.utils.auth import get_current_user_from_token as get_current_user
 from app.models.user_db import User
 from app.crud.integration import integration_crud, social_post_crud, analytics_crud
 from app.services.social_media_service import social_media_service
@@ -100,12 +100,12 @@ async def get_auth_urls():
 async def connect_social_account(
     integration_data: IntegrationCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Connect a social media account."""
     try:
         # Check if integration already exists
-        existing = integration_crud.get_integration_by_platform(
+        existing = await integration_crud.get_integration_by_platform(
             db, current_user.id, integration_data.platform
         )
         if existing:
@@ -137,7 +137,7 @@ async def connect_social_account(
             )
 
         # Create integration in database
-        integration = integration_crud.create_integration(
+        integration = await integration_crud.create_integration(
             db=db,
             user_id=current_user.id,
             platform=platform_data["platform"],
@@ -156,10 +156,10 @@ async def connect_social_account(
 @router.get("/", response_model=List[IntegrationResponse])
 async def get_integrations(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get all integrations for the current user."""
-    integrations = integration_crud.get_integrations_by_user(db, current_user.id)
+    integrations = await integration_crud.get_integrations_by_user(db, current_user.id)
     return integrations
 
 
@@ -167,10 +167,10 @@ async def get_integrations(
 async def get_integration(
     integration_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get a specific integration."""
-    integration = integration_crud.get_integration_by_id(db, integration_id)
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
     if not integration or integration.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Integration not found")
     
@@ -182,10 +182,10 @@ async def sync_integration(
     integration_id: int,
     sync_request: SyncRequest = SyncRequest(),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Sync posts from a social media integration."""
-    integration = integration_crud.get_integration_by_id(db, integration_id)
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
     if not integration or integration.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Integration not found")
 
@@ -215,7 +215,7 @@ async def sync_integration(
         # Filter out posts that already exist
         new_posts = []
         for post_data in posts_data:
-            existing = social_post_crud.get_post_by_platform_id(
+            existing = await social_post_crud.get_post_by_platform_id(
                 db, integration.id, post_data["platform_post_id"]
             )
             if not existing:
@@ -223,22 +223,44 @@ async def sync_integration(
 
         # Bulk create new posts
         if new_posts:
-            created_posts = social_post_crud.bulk_create_posts(db, new_posts)
+            created_posts = await social_post_crud.bulk_create_posts(db, new_posts)
         else:
             created_posts = []
 
         # Update last sync time
-        integration_crud.update_last_sync(db, integration.id)
+        await integration_crud.update_last_sync(db, integration.id)
 
         # Calculate analytics
         if new_posts:
             analytics_data = await social_media_service.calculate_analytics(new_posts)
-            analytics_crud.create_analytics(db, integration.id, analytics_data)
+            await analytics_crud.create_analytics(db, integration.id, analytics_data)
+
+        # Automatically learn from new social media posts and update personas
+        learning_results = {}
+        if new_posts:
+            try:
+                # Add platform info to posts for learning
+                for post in new_posts:
+                    post["platform"] = integration.platform
+                
+                learning_results = await social_media_service.learn_from_social_media_posts(
+                    db=db,
+                    user_id=current_user.id,
+                    posts_data=new_posts,
+                    target_personas=None,  # Only update self persona by default
+                    update_self_persona=True
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to learn from social media posts: {e}")
+                learning_results = {"error": str(e)}
 
         return {
             "message": "Sync completed successfully",
             "new_posts_count": len(created_posts),
-            "total_posts_synced": len(posts_data)
+            "total_posts_synced": len(posts_data),
+            "learning_results": learning_results
         }
 
     except Exception as e:
@@ -251,14 +273,14 @@ async def get_integration_posts(
     limit: int = 50,
     offset: int = 0,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get posts for a specific integration."""
-    integration = integration_crud.get_integration_by_id(db, integration_id)
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
     if not integration or integration.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Integration not found")
 
-    posts = social_post_crud.get_posts_by_integration(
+    posts = await social_post_crud.get_posts_by_integration(
         db, integration_id, limit, offset
     )
     return posts
@@ -269,14 +291,14 @@ async def get_integration_analytics(
     integration_id: int,
     days: int = 30,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get analytics for a specific integration."""
-    integration = integration_crud.get_integration_by_id(db, integration_id)
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
     if not integration or integration.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Integration not found")
 
-    analytics = analytics_crud.get_analytics_by_integration(
+    analytics = await analytics_crud.get_analytics_by_integration(
         db, integration_id, days
     )
     return analytics
@@ -287,10 +309,10 @@ async def update_integration(
     integration_id: int,
     updates: Dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Update integration settings."""
-    integration = integration_crud.get_integration_by_id(db, integration_id)
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
     if not integration or integration.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Integration not found")
 
@@ -298,7 +320,7 @@ async def update_integration(
     allowed_updates = {"sync_frequency_hours", "is_active"}
     filtered_updates = {k: v for k, v in updates.items() if k in allowed_updates}
 
-    updated_integration = integration_crud.update_integration(
+    updated_integration = await integration_crud.update_integration(
         db, integration_id, filtered_updates
     )
     
@@ -312,14 +334,14 @@ async def update_integration(
 async def delete_integration(
     integration_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Delete an integration."""
-    integration = integration_crud.get_integration_by_id(db, integration_id)
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
     if not integration or integration.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Integration not found")
 
-    success = integration_crud.delete_integration(db, integration_id)
+    success = await integration_crud.delete_integration(db, integration_id)
     if not success:
         raise HTTPException(status_code=404, detail="Integration not found")
 
@@ -330,25 +352,100 @@ async def delete_integration(
 async def analyze_posts_sentiment(
     integration_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Analyze sentiment for posts in an integration."""
-    integration = integration_crud.get_integration_by_id(db, integration_id)
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
     if not integration or integration.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Integration not found")
 
     # Get posts without sentiment analysis
-    posts = social_post_crud.get_posts_by_integration(db, integration_id, limit=1000)
+    posts = await social_post_crud.get_posts_by_integration(db, integration_id, limit=1000)
     posts_without_sentiment = [post for post in posts if post.sentiment_score is None]
 
     analyzed_count = 0
     for post in posts_without_sentiment:
         if post.content:
             sentiment_score = await social_media_service.analyze_sentiment(post.content)
-            social_post_crud.update_post_sentiment(db, post.id, sentiment_score)
+            await social_post_crud.update_post_sentiment(db, post.id, sentiment_score)
             analyzed_count += 1
 
     return {
         "message": "Sentiment analysis completed",
         "posts_analyzed": analyzed_count
-    } 
+    }
+
+
+@router.post("/{integration_id}/learn-advanced")
+async def learn_from_social_media_advanced(
+    integration_id: int,
+    learning_config: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Advanced social media learning endpoint (backend-only, not exposed in frontend).
+    
+    This endpoint allows for more granular control over which personas are updated
+    and how the learning is applied.
+    
+    learning_config should contain:
+    - target_personas: List of persona IDs to update (optional)
+    - update_self_persona: Boolean to update self persona (default: True)
+    - include_analytics: Boolean to include analytics in learning (default: True)
+    - sentiment_weight: Float for sentiment analysis weight (default: 1.0)
+    """
+    integration = await integration_crud.get_integration_by_id(db, integration_id)
+    if not integration or integration.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    try:
+        # Get posts for this integration
+        posts = await social_post_crud.get_posts_by_integration(db, integration_id, limit=1000)
+        
+        if not posts:
+            return {
+                "message": "No posts found for learning",
+                "learning_results": {"updated_personas": [], "learning_count": 0}
+            }
+        
+        # Convert posts to dict format for learning service
+        posts_data = []
+        for post in posts:
+            post_dict = {
+                "platform_post_id": post.platform_post_id,
+                "content": post.content,
+                "hashtags": post.hashtags,
+                "mentions": post.mentions,
+                "likes_count": post.likes_count,
+                "comments_count": post.comments_count,
+                "shares_count": post.shares_count,
+                "engagement_score": post.engagement_score,
+                "sentiment_score": post.sentiment_score,
+                "posted_at": post.posted_at,
+                "platform": integration.platform
+            }
+            posts_data.append(post_dict)
+        
+        # Extract learning configuration
+        target_personas = learning_config.get("target_personas", None)
+        update_self_persona = learning_config.get("update_self_persona", True)
+        
+        # Perform learning
+        learning_results = await social_media_service.learn_from_social_media_posts(
+            db=db,
+            user_id=current_user.id,
+            posts_data=posts_data,
+            target_personas=target_personas,
+            update_self_persona=update_self_persona
+        )
+        
+        return {
+            "message": "Advanced learning completed",
+            "integration_id": integration_id,
+            "posts_processed": len(posts_data),
+            "learning_results": learning_results
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Advanced learning failed: {str(e)}") 

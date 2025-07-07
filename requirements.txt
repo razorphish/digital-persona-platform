@@ -56,3 +56,9 @@ httpx==0.25.2
 
 # Production
 gunicorn==21.2.0
+
+# Twitter Integration
+tweepy
+
+# Facebook Integration
+facebook-sdk
