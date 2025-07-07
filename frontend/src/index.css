@@ -2,46 +2,301 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @layer base {
   html {
     font-family: 'Inter', system-ui, sans-serif;
   }
   
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white;
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-800;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gradient-to-b from-purple-500 to-pink-500 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gradient-to-b from-purple-600 to-pink-600;
   }
 }
 
 @layer components {
+  /* Radiant Template Button Styles */
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+    @apply bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900;
   }
   
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
+    @apply bg-white/10 backdrop-blur-xl border border-white/20 hover:bg-white/20 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-slate-900;
   }
   
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2;
+    @apply bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900;
   }
-  
+
+  /* Radiant Template Input Styles */
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full px-4 py-3 border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 placeholder-white/50 bg-white/10 backdrop-blur-xl text-white;
   }
-  
+
+  /* Radiant Template Card Styles */
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+    @apply bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-300;
   }
-  
+
+  .card-glass {
+    @apply bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6 hover:bg-white/15 transition-all duration-300;
+  }
+
+  /* Radiant Template Chat Message Styles */
   .chat-message {
-    @apply p-4 rounded-lg mb-4 max-w-3xl;
+    @apply p-4 rounded-2xl mb-4 max-w-3xl shadow-md;
   }
   
   .chat-message.user {
-    @apply bg-primary-100 text-primary-900 ml-auto;
+    @apply bg-gradient-to-r from-purple-500 to-pink-500 text-white ml-auto;
   }
   
   .chat-message.assistant {
-    @apply bg-gray-100 text-gray-900;
+    @apply bg-white/10 backdrop-blur-xl text-white border border-white/20;
+  }
+
+  /* Radiant Template Navigation Styles */
+  .nav-item {
+    @apply flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200;
+  }
+
+  .nav-item.active {
+    @apply bg-white/20 text-white shadow-lg;
+  }
+
+  .nav-item:hover:not(.active) {
+    @apply bg-white/10 text-white transform translate-x-1;
+  }
+
+  /* Radiant Template Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent;
+  }
+
+  /* Radiant Template Animated Background */
+  .animated-bg {
+    background: linear-gradient(-45deg, #7c3aed, #ec4899, #8b5cf6, #f59e0b);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+  }
+
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Radiant Template Floating Animation */
+  .float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+    100% { transform: translateY(0px); }
+  }
+
+  /* Radiant Template Pulse Animation */
+  .pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Radiant Template Glow Effect */
+  .glow {
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+  }
+
+  .glow:hover {
+    box-shadow: 0 0 30px rgba(147, 51, 234, 0.5);
+  }
+
+  /* Radiant Template Sidebar */
+  .sidebar {
+    @apply bg-white/10 backdrop-blur-xl border-r border-white/20 shadow-xl;
+  }
+
+  /* Radiant Template Header */
+  .header {
+    @apply bg-white/10 backdrop-blur-xl border-b border-white/20 shadow-sm;
+  }
+
+  /* Radiant Template Glass Morphism */
+  .glass {
+    @apply bg-white/10 backdrop-blur-xl border border-white/20;
+  }
+
+  /* Radiant Template Hover Effects */
+  .hover-lift {
+    @apply transition-all duration-300 hover:transform hover:-translate-y-2 hover:shadow-2xl;
+  }
+
+  /* Radiant Template Loading Spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-white/20 border-t-purple-500;
+  }
+
+  /* Radiant Template Specific Styles */
+  .radiant-bg {
+    @apply bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900;
+  }
+
+  .radiant-card {
+    @apply bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-xl;
+  }
+
+  .radiant-button {
+    @apply bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200;
+  }
+
+  .radiant-text {
+    @apply text-white;
+  }
+
+  .radiant-text-secondary {
+    @apply text-white/70;
+  }
+
+  .radiant-text-muted {
+    @apply text-white/50;
+  }
+
+  /* Radiant Template Form Styles */
+  .radiant-input {
+    @apply w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200;
+  }
+
+  .radiant-label {
+    @apply block text-sm font-medium text-white/80 mb-2;
+  }
+
+  /* Radiant Template Navigation */
+  .radiant-nav {
+    @apply bg-white/10 backdrop-blur-xl border-b border-white/20;
+  }
+
+  .radiant-nav-item {
+    @apply text-white/70 hover:text-white transition-colors duration-200;
+  }
+
+  .radiant-nav-item.active {
+    @apply text-white;
+  }
+
+  /* Radiant Template Section Styles */
+  .radiant-section {
+    @apply py-20;
+  }
+
+  .radiant-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Radiant Template Hero Styles */
+  .radiant-hero {
+    @apply relative overflow-hidden;
+  }
+
+  .radiant-hero-content {
+    @apply text-center;
+  }
+
+  .radiant-hero-title {
+    @apply text-5xl md:text-7xl font-bold text-white mb-6 leading-tight;
+  }
+
+  .radiant-hero-subtitle {
+    @apply text-xl md:text-2xl text-white/80 mb-8 max-w-3xl mx-auto leading-relaxed;
+  }
+
+  /* Radiant Template Feature Card */
+  .radiant-feature-card {
+    @apply bg-white/10 backdrop-blur-xl rounded-2xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:-translate-y-2;
+  }
+
+  .radiant-feature-icon {
+    @apply w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mb-6;
+  }
+
+  .radiant-feature-title {
+    @apply text-xl font-semibold text-white mb-4;
+  }
+
+  .radiant-feature-description {
+    @apply text-white/70 leading-relaxed;
+  }
+
+  /* Radiant Template Testimonial Card */
+  .radiant-testimonial-card {
+    @apply bg-white/10 backdrop-blur-xl rounded-2xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300;
+  }
+
+  .radiant-testimonial-content {
+    @apply text-white/80 mb-6 leading-relaxed;
+  }
+
+  .radiant-testimonial-author {
+    @apply text-white font-semibold;
+  }
+
+  .radiant-testimonial-role {
+    @apply text-white/60 text-sm;
+  }
+
+  /* Radiant Template CTA Section */
+  .radiant-cta {
+    @apply py-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20;
+  }
+
+  .radiant-cta-content {
+    @apply max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8;
+  }
+
+  .radiant-cta-title {
+    @apply text-4xl md:text-5xl font-bold text-white mb-6;
+  }
+
+  .radiant-cta-subtitle {
+    @apply text-xl text-white/80 mb-8;
+  }
+
+  /* Radiant Template Footer */
+  .radiant-footer {
+    @apply bg-white/5 border-t border-white/10 py-12;
+  }
+
+  .radiant-footer-content {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .radiant-footer-title {
+    @apply text-white font-semibold mb-4;
+  }
+
+  .radiant-footer-link {
+    @apply text-white/60 hover:text-white transition-colors;
+  }
+
+  .radiant-footer-text {
+    @apply text-white/70;
   }
 } 
