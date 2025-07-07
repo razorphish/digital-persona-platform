@@ -148,10 +148,10 @@ class ChatIntegrationTest:
             print(f"❌ Authentication error: {e}")
             return False
     
-    def test_persona_creation(self):
-        """Test creating a test persona."""
-        print("\n🧪 Testing Persona Creation...")
-        print("=" * 35)
+    def test_self_persona_creation(self):
+        """Test getting or creating the self persona."""
+        print("\n🧪 Testing Self Persona Creation...")
+        print("=" * 40)
         
         if not self.access_token:
             print("❌ No access token available")
@@ -161,26 +161,23 @@ class ChatIntegrationTest:
             # Set authorization header
             self.session.headers.update({"Authorization": f"Bearer {self.access_token}"})
             
-            # Create a test persona
-            persona_data = {
-                "name": "Test AI Friend",
-                "description": "A friendly AI persona for testing chat functionality",
-                "relation_type": "friend"
-            }
-            
-            response = self.session.post(f"{BASE_URL}/personas", json=persona_data)
+            # Get or create the self persona
+            response = self.session.get(f"{BASE_URL}/personas/self")
             
             if response.status_code == 200:
                 data = response.json()
                 self.test_persona_id = data.get("id")
-                print(f"✅ Persona created successfully: {data.get('name')}")
+                print(f"✅ Self persona retrieved/created successfully: {data.get('name')}")
+                print(f"   Relation type: {data.get('relation_type')}")
+                print(f"   Persona ID: {self.test_persona_id}")
                 return True
             else:
-                print(f"❌ Persona creation failed: {response.status_code}")
+                print(f"❌ Self persona creation failed: {response.status_code}")
+                print(f"   Response: {response.text}")
                 return False
                 
         except Exception as e:
-            print(f"❌ Persona creation error: {e}")
+            print(f"❌ Self persona creation error: {e}")
             return False
     
     def test_conversation_creation(self):
@@ -297,7 +294,7 @@ class ChatIntegrationTest:
             ("Server Connection", self.test_server_connection),
             ("OpenAI Health", self.test_openai_health),
             ("Authentication", self.test_authentication),
-            ("Persona Creation", self.test_persona_creation),
+            ("Self Persona Creation", self.test_self_persona_creation),
             ("Conversation Creation", self.test_conversation_creation),
             ("Chat Message", self.test_chat_message),
             ("Conversation History", self.test_conversation_history)

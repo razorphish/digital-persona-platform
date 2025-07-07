@@ -95,10 +95,10 @@ const ChatPage: React.FC = () => {
   if (!conversation) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
+        <h2 className="text-xl font-semibold radiant-text mb-2">
           Conversation not found
         </h2>
-        <p className="text-gray-600">
+        <p className="radiant-text-secondary">
           The conversation you're looking for doesn't exist.
         </p>
       </div>
@@ -108,19 +108,19 @@ const ChatPage: React.FC = () => {
   return (
     <div className="flex flex-col h-[calc(100vh-200px)]">
       {/* Chat Header */}
-      <div className="bg-white border-b border-gray-200 p-4">
+      <div className="bg-white/10 backdrop-blur-xl border-b border-white/20 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">
+            <h1 className="text-lg font-semibold radiant-text">
               {conversation.title}
             </h1>
             {persona && (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm radiant-text-secondary">
                 Chatting with {persona.name} ({persona.relation_type})
               </p>
             )}
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm radiant-text-secondary">
             {new Date(conversation.updated_at).toLocaleDateString()}
           </div>
         </div>
@@ -130,13 +130,13 @@ const ChatPage: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
           <div className="text-center py-12">
-            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <Send className="h-8 w-8 text-gray-400" />
+            <div className="mx-auto w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
+              <Send className="h-8 w-8 text-white/60" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="text-lg font-medium radiant-text mb-2">
               Start a conversation
             </h3>
-            <p className="text-gray-600">
+            <p className="radiant-text-secondary">
               Send your first message to begin chatting with{" "}
               {persona?.name || "your persona"}.
             </p>
@@ -157,7 +157,7 @@ const ChatPage: React.FC = () => {
                 <div className="flex items-start space-x-2">
                   <div className="flex-1">
                     <p className="text-sm">{message.content}</p>
-                    <div className="flex items-center space-x-2 mt-2 text-xs text-gray-500">
+                    <div className="flex items-center space-x-2 mt-2 text-xs radiant-text-muted">
                       <span>
                         {new Date(message.created_at).toLocaleTimeString()}
                       </span>
@@ -178,7 +178,7 @@ const ChatPage: React.FC = () => {
       </div>
 
       {/* Message Input */}
-      <div className="bg-white border-t border-gray-200 p-4">
+      <div className="bg-white/10 backdrop-blur-xl border-t border-white/20 p-4">
         <form onSubmit={handleSendMessage} className="flex space-x-4">
           <input
             type="text"

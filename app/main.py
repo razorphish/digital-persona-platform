@@ -94,7 +94,7 @@ async def root():
         "version": "3.0.0",
         "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "fastapi_version": fastapi.__version__,
-        "pydantic_version": pydantic.VERSION,
+        "pydantic_version": getattr(pydantic, '__version__', getattr(pydantic, 'VERSION', 'unknown')),
         "platform": platform.system(),
         "features": {
             "jwt_authentication": "✅ Working",
@@ -181,7 +181,7 @@ async def test_components():
         
         results["tests"]["pydantic"] = {
             "status": "✅ working",
-            "version": pydantic.VERSION,
+            "version": getattr(pydantic, '__version__', getattr(pydantic, 'VERSION', 'unknown')),
             "validation": "passed"
         }
     except Exception as e:

@@ -175,11 +175,26 @@ def authenticated_user(api_client, test_user_credentials, auth_headers):
     })
     
     if response.status_code == 200:
-        token = response.json().get("access_token")
+        login_data = response.json()
+        token = login_data.get("access_token")
+        
+        # Get user info from the token or make a request to /auth/me
+        try:
+            user_response = api_client.get("/auth/me", headers=auth_headers(token))
+            if user_response.status_code == 200:
+                user_data = user_response.json()
+            else:
+                # Fallback: create minimal user data
+                user_data = {"id": 1, "email": test_user_credentials["email"]}
+        except Exception:
+            # Fallback: create minimal user data
+            user_data = {"id": 1, "email": test_user_credentials["email"]}
+        
         return {
             "token": token,
             "headers": auth_headers(token),
-            "credentials": test_user_credentials
+            "credentials": test_user_credentials,
+            "user": user_data
         }
     else:
         pytest.skip("Could not authenticate test user")

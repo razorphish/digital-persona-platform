@@ -64,9 +64,11 @@ const ImageAnalysisPanel: React.FC = () => {
 
   return (
     <div className="p-4 max-w-xl mx-auto">
-      <h2 className="text-xl font-bold mb-2">Image Analysis</h2>
+      <h2 className="text-xl font-bold radiant-text mb-2">Image Analysis</h2>
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">Select Persona</label>
+        <label className="block mb-1 font-semibold radiant-text">
+          Select Persona
+        </label>
         <select
           className="w-full border rounded p-2"
           value={selectedPersona ?? ""}
@@ -81,7 +83,9 @@ const ImageAnalysisPanel: React.FC = () => {
         </select>
       </div>
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">Select Image</label>
+        <label className="block mb-1 font-semibold radiant-text">
+          Select Image
+        </label>
         <select
           className="w-full border rounded p-2"
           value={selectedImage ?? ""}
@@ -108,13 +112,13 @@ const ImageAnalysisPanel: React.FC = () => {
       {/* Progress Indicator */}
       {loading && (
         <div className="mt-4">
-          <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+          <div className="flex items-center justify-between text-sm radiant-text-secondary mb-2">
             <span>{processingStep}</span>
             <span>{Math.round(progress)}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="w-full bg-white/20 rounded-full h-2">
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             ></div>
           </div>
@@ -124,8 +128,8 @@ const ImageAnalysisPanel: React.FC = () => {
       {error && <div className="text-red-600 mt-2">{error}</div>}
       {analysis && (
         <div className="mt-4">
-          <h3 className="font-semibold mb-1">Analysis Results:</h3>
-          <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
+          <h3 className="font-semibold radiant-text mb-1">Analysis Results:</h3>
+          <pre className="bg-white/10 p-2 rounded text-sm overflow-x-auto border border-white/20">
             {JSON.stringify(analysis.analysis, null, 2)}
           </pre>
         </div>

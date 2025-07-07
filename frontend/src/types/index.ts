@@ -33,12 +33,19 @@ export interface Persona {
   created_at: string;
   status: string;
   user_id: number;
-  // AI Capabilities
-  image_analysis_enabled?: boolean;
-  voice_synthesis_enabled?: boolean;
-  memory_enabled?: boolean;
-  learning_enabled?: boolean;
-  voice_settings?: string;
+  // Enhanced AI Capabilities
+  personality_traits?: Record<string, any>;
+  voice_settings?: Record<string, any>;
+  memory_enabled: boolean;
+  learning_enabled: boolean;
+  image_analysis_enabled: boolean;
+  voice_synthesis_enabled: boolean;
+  learned_preferences?: Record<string, any>;
+  conversation_patterns?: Record<string, any>;
+  emotional_responses?: Record<string, any>;
+  memory_context?: string;
+  last_interaction?: string;
+  interaction_count: number;
 }
 
 export interface CreatePersonaRequest {

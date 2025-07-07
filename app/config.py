@@ -3,7 +3,7 @@ Configuration management for Digital Persona Platform
 """
 import os
 from typing import List, Optional
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from pathlib import Path
 from pydantic import EmailStr
 

@@ -86,10 +86,8 @@ const HomePage: React.FC = () => {
               <Users className="h-6 w-6 text-purple-400" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-white/70">
-                Total Personas
-              </p>
-              <p className="text-2xl font-bold text-white">{personas.length}</p>
+              <p className="text-sm font-medium text-white/70">Persona</p>
+              <p className="text-2xl font-bold text-white">1</p>
             </div>
           </div>
         </div>
@@ -155,7 +153,7 @@ const HomePage: React.FC = () => {
               <div className="p-2 bg-purple-500/20 rounded-lg mr-3 group-hover:bg-purple-500/30 transition-all duration-200">
                 <Plus className="h-5 w-5 text-purple-400" />
               </div>
-              <span className="font-medium">Create Your Digital Self</span>
+              <span className="font-medium">View Persona</span>
             </Link>
             <Link
               to="/dashboard/conversations"
