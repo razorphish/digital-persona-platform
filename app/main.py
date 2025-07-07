@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 # Import routers
 from app.routers import auth_db, personas_db, media, chat, upload
-from app.routers import ai_capabilities
+from app.routers import ai_capabilities, integrations
 
 # Load environment variables
 load_dotenv()
@@ -78,6 +78,7 @@ app.include_router(media.router)
 app.include_router(chat.router)
 app.include_router(upload.router)
 app.include_router(ai_capabilities.router)
+app.include_router(integrations.router)
 
 app_start_time = time.time()
 

@@ -9,6 +9,7 @@ import {
   ChartBarIcon,
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
+  PuzzlePieceIcon,
 } from "@heroicons/react/24/outline";
 
 const navigation = [
@@ -18,6 +19,11 @@ const navigation = [
     name: "Conversations",
     href: "/dashboard/conversations",
     icon: ChatBubbleLeftRightIcon,
+  },
+  {
+    name: "Integrations",
+    href: "/dashboard/integrations",
+    icon: PuzzlePieceIcon,
   },
   { name: "Upload", href: "/dashboard/upload", icon: CloudArrowUpIcon },
   { name: "Stats", href: "/dashboard/stats", icon: ChartBarIcon },

@@ -210,54 +210,54 @@ if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your-openai-api-key-here"
                     PERSONA_ID=$(cat /tmp/self_persona_response.json | grep -o '"id":[0-9]*' | cut -d':' -f2 2>/dev/null || echo "")
                     
                     if [ -n "$PERSONA_ID" ]; then
-                                        # Test merged persona page functionality (AI summary and learning data)
-                print_status "info" "Testing merged persona page functionality..."
-                
-                # Test persona summary
-                SUMMARY_RESPONSE=$(curl -s -X GET "http://localhost:8000/personas/$PERSONA_ID/summary" \
-                    -H "Authorization: Bearer $TOKEN" \
-                    -w "%{http_code}" \
-                    -o /tmp/persona_summary_response.json 2>/dev/null || echo "000")
-                
-                if [ "$SUMMARY_RESPONSE" = "200" ]; then
-                    print_status "success" "AI summary functionality is working"
-                else
-                    print_status "warning" "AI summary test failed (HTTP $SUMMARY_RESPONSE)"
-                fi
-                
-                # Test adding learning data
-                LEARNING_RESPONSE=$(curl -s -X POST "http://localhost:8000/personas/$PERSONA_ID/learn" \
-                    -H "Content-Type: application/json" \
-                    -H "Authorization: Bearer $TOKEN" \
-                    -d '{
-                        "text": "I am a deployment test user who loves testing new features and ensuring quality."
-                    }' \
-                    -w "%{http_code}" \
-                    -o /tmp/persona_learning_response.json 2>/dev/null || echo "000")
-                
-                if [ "$LEARNING_RESPONSE" = "200" ]; then
-                    print_status "success" "Learning data functionality is working"
-                    
-                    # Test that the learning data is reflected in the persona
-                    UPDATED_PERSONA_RESPONSE=$(curl -s -X GET "http://localhost:8000/personas/$PERSONA_ID" \
-                        -H "Authorization: Bearer $TOKEN" \
-                        -w "%{http_code}" \
-                        -o /tmp/updated_persona_response.json 2>/dev/null || echo "000")
-                    
-                    if [ "$UPDATED_PERSONA_RESPONSE" = "200" ]; then
-                        # Check if learning data is in memory context
-                        LEARNING_DATA_PRESENT=$(cat /tmp/updated_persona_response.json 2>/dev/null | grep -o "deployment test user" | wc -l)
-                        if [ "$LEARNING_DATA_PRESENT" -gt 0 ]; then
-                            print_status "success" "Learning data integration is working"
+                        # Test merged persona page functionality (AI summary and learning data)
+                        print_status "info" "Testing merged persona page functionality..."
+                        
+                        # Test persona summary
+                        SUMMARY_RESPONSE=$(curl -s -X GET "http://localhost:8000/personas/$PERSONA_ID/summary" \
+                            -H "Authorization: Bearer $TOKEN" \
+                            -w "%{http_code}" \
+                            -o /tmp/persona_summary_response.json 2>/dev/null || echo "000")
+                        
+                        if [ "$SUMMARY_RESPONSE" = "200" ]; then
+                            print_status "success" "AI summary functionality is working"
                         else
-                            print_status "warning" "Learning data not found in persona memory context"
+                            print_status "warning" "AI summary test failed (HTTP $SUMMARY_RESPONSE)"
                         fi
-                    else
-                        print_status "warning" "Could not verify learning data integration (HTTP $UPDATED_PERSONA_RESPONSE)"
-                    fi
-                else
-                    print_status "warning" "Learning data test failed (HTTP $LEARNING_RESPONSE)"
-                fi
+                        
+                        # Test adding learning data
+                        LEARNING_RESPONSE=$(curl -s -X POST "http://localhost:8000/personas/$PERSONA_ID/learn" \
+                            -H "Content-Type: application/json" \
+                            -H "Authorization: Bearer $TOKEN" \
+                            -d '{
+                                "text": "I am a deployment test user who loves testing new features and ensuring quality."
+                            }' \
+                            -w "%{http_code}" \
+                            -o /tmp/persona_learning_response.json 2>/dev/null || echo "000")
+                        
+                        if [ "$LEARNING_RESPONSE" = "200" ]; then
+                            print_status "success" "Learning data functionality is working"
+                            
+                            # Test that the learning data is reflected in the persona
+                            UPDATED_PERSONA_RESPONSE=$(curl -s -X GET "http://localhost:8000/personas/$PERSONA_ID" \
+                                -H "Authorization: Bearer $TOKEN" \
+                                -w "%{http_code}" \
+                                -o /tmp/updated_persona_response.json 2>/dev/null || echo "000")
+                            
+                            if [ "$UPDATED_PERSONA_RESPONSE" = "200" ]; then
+                                # Check if learning data is in memory context
+                                LEARNING_DATA_PRESENT=$(cat /tmp/updated_persona_response.json 2>/dev/null | grep -o "deployment test user" | wc -l)
+                                if [ "$LEARNING_DATA_PRESENT" -gt 0 ]; then
+                                    print_status "success" "Learning data integration is working"
+                                else
+                                    print_status "warning" "Learning data not found in persona memory context"
+                                fi
+                            else
+                                print_status "warning" "Could not verify learning data integration (HTTP $UPDATED_PERSONA_RESPONSE)"
+                            fi
+                        else
+                            print_status "warning" "Learning data test failed (HTTP $LEARNING_RESPONSE)"
+                        fi
                         
                         # Test AI chat with self persona
                         CHAT_RESPONSE=$(curl -s -X POST "http://localhost:8000/chat/test" \
@@ -344,4 +344,30 @@ fi
 echo ""
 print_status "success" "🎉 Deployment completed successfully!"
 print_status "info" "Use 'docker-compose logs -f' to monitor logs"
-print_status "info" "Use 'docker-compose down' to stop services" 
+print_status "info" "Use 'docker-compose down' to stop services"
+
+# Install backend dependencies
+pip install -r requirements.txt
+pip install tweepy facebook-sdk
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
+
+# Run database migrations
+alembic upgrade head
+
+# Check for required environment variables
+REQUIRED_VARS=(TWITTER_API_KEY TWITTER_API_SECRET TWITTER_BEARER_TOKEN FACEBOOK_APP_ID FACEBOOK_APP_SECRET)
+for var in "${REQUIRED_VARS[@]}"; do
+  if [ -z "${!var}" ]; then
+    echo "Warning: $var is not set. Social media integrations may not work."
+  fi
+done
+
+# Start backend
+nohup ./start.sh &
+
+# Start frontend
+cd frontend && nohup npm run start &
+
+echo "Deployment complete. Backend and frontend are running." 

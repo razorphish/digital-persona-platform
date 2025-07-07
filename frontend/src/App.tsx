@@ -16,6 +16,7 @@ import ModernHomePage from "./components/dashboard/ModernHomePage";
 import SelfPersonaPage from "./components/personas/SelfPersonaPage";
 import ConversationsPage from "./components/conversations/ConversationsPage";
 import ModernChatPage from "./components/chat/ModernChatPage";
+import IntegrationsPage from "./components/integrations/IntegrationsPage";
 import UploadPage from "./components/upload/UploadPage";
 import StatsPage from "./components/stats/StatsPage";
 import SettingsPage from "./components/settings/SettingsPage";
@@ -96,6 +97,7 @@ const AppRoutes: React.FC = () => {
         <Route path="personas" element={<SelfPersonaPage />} />
         <Route path="conversations" element={<ConversationsPage />} />
         <Route path="conversations/:id" element={<ModernChatPage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="stats" element={<StatsPage />} />
         <Route path="settings" element={<SettingsPage />} />
