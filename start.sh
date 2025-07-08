@@ -8,6 +8,11 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}🚀 Starting Digital Persona Platform...${NC}"
+echo -e "${BLUE}📝 This script will:${NC}"
+echo -e "${BLUE}   1. Stop Docker frontend/backend containers${NC}"
+echo -e "${BLUE}   2. Start local development servers${NC}"
+echo -e "${BLUE}   3. Restart Docker containers when you exit${NC}"
+echo ""
 
 # Function to print colored output
 print_status() {
@@ -32,6 +37,49 @@ if [ ! -d "frontend" ]; then
     print_status "error" "Frontend directory not found"
     exit 1
 fi
+
+# Docker container management for local development
+print_status "info" "Managing Docker containers for local development..."
+
+# Check if Docker is running
+if ! docker info >/dev/null 2>&1; then
+    print_status "warning" "Docker is not running. Starting Docker..."
+    open -a Docker
+    sleep 10
+    if ! docker info >/dev/null 2>&1; then
+        print_status "error" "Docker failed to start. Please start Docker manually and try again."
+        exit 1
+    fi
+fi
+
+# Stop Docker frontend and backend containers if they're running
+if docker ps --format "table {{.Names}}" | grep -q "dpp-frontend"; then
+    print_status "info" "Stopping Docker frontend container..."
+    docker stop dpp-frontend >/dev/null 2>&1
+fi
+
+if docker ps --format "table {{.Names}}" | grep -q "dpp-backend"; then
+    print_status "info" "Stopping Docker backend container..."
+    docker stop dpp-backend >/dev/null 2>&1
+fi
+
+# Function to restart Docker containers on exit
+restart_docker_containers() {
+    print_status "info" "Restarting Docker containers..."
+    if docker ps -a --format "table {{.Names}}" | grep -q "dpp-frontend"; then
+        docker start dpp-frontend >/dev/null 2>&1
+        print_status "success" "Docker frontend container restarted"
+    fi
+    if docker ps -a --format "table {{.Names}}" | grep -q "dpp-backend"; then
+        docker start dpp-backend >/dev/null 2>&1
+        print_status "success" "Docker backend container restarted"
+    fi
+}
+
+# Set up trap to restart Docker containers on script exit
+trap restart_docker_containers EXIT
+
+print_status "success" "Docker containers stopped for local development"
 
 # Check virtual environment
 if [ ! -d "venv" ]; then
@@ -261,13 +309,16 @@ echo ""
 
 # Function to cleanup background processes
 cleanup() {
-    print_status "info" "Shutting down servers..."
+    print_status "info" "Shutting down local development servers..."
     if [ ! -z "$BACKEND_PID" ]; then
         kill $BACKEND_PID 2>/dev/null
+        print_status "success" "Backend server stopped"
     fi
     if [ ! -z "$FRONTEND_PID" ]; then
         kill $FRONTEND_PID 2>/dev/null
+        print_status "success" "Frontend server stopped"
     fi
+    # Docker containers will be restarted by the EXIT trap
     exit 0
 }
 

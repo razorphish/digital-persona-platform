@@ -7,9 +7,9 @@ services:
     container_name: dpp-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
-      - DATABASE_URL=postgresql://dpp_user:dpp_password@postgres:5432/digital_persona
+      - DATABASE_URL=postgresql+asyncpg://dpp_user:dpp_password@postgres:5432/digital_persona
       - REDIS_URL=redis://redis:6379
       - SECRET_KEY=${SECRET_KEY}
       - ALGORITHM=HS256
@@ -47,16 +47,16 @@ services:
     container_name: dpp-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "80:80"
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_API_URL=http://localhost:8001
       - NODE_ENV=production
     depends_on:
       - backend
     networks:
       - dpp-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -79,7 +79,7 @@ services:
     networks:
       - dpp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dpp_user -d digital_persona"]
+      test: [ "CMD-SHELL", "pg_isready -U dpp_user -d digital_persona" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -101,24 +101,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-
-  # Nginx Reverse Proxy
-  nginx:
-    image: nginx:alpine
-    container_name: dpp-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/ssl:/etc/nginx/ssl
-      - ./logs/nginx:/var/log/nginx
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - dpp-network
 
   # Prometheus Monitoring
   prometheus:
@@ -163,6 +145,7 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+
 
 networks:
   dpp-network:
