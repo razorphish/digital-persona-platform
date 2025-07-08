@@ -6,8 +6,24 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import sessionmaker
 from app.models.base import Base
 
-# Database URL for SQLite (async)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./digital_persona.db")
+# Database URL construction
+def get_database_url():
+    """Construct database URL from environment variables and secrets."""
+    # Check if DATABASE_URL is provided directly
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return database_url
+    
+    # Construct from components
+    db_password = os.getenv("DATABASE_PASSWORD")
+    if db_password:
+        # PostgreSQL with asyncpg
+        return f"postgresql+asyncpg://hibiji_admin:{db_password}@hibiji-dev01-db.cr6q082uklxj.us-west-1.rds.amazonaws.com:5432/hibiji_dev01"
+    
+    # Fallback to SQLite
+    return "sqlite+aiosqlite:///./digital_persona.db"
+
+DATABASE_URL = get_database_url()
 
 # Create async engine
 engine = create_async_engine(
