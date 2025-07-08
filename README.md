@@ -129,6 +129,111 @@ hibiji.com
 
 For detailed instructions, see [QUICK_START.md](QUICK_START.md).
 
+### 🛡️ Safe Deployment Approach
+
+If you encounter resource conflicts or want to ensure a clean deployment:
+
+#### **Option 1: Preview Changes (Recommended)**
+
+```bash
+# Navigate to Terraform directory
+cd terraform/environments/dev
+
+# Initialize Terraform
+terraform init \
+  -backend-config="bucket=hibiji-terraform-state" \
+  -backend-config="key=dev/terraform.tfstate" \
+  -backend-config="region=us-west-1"
+
+# Preview what will be destroyed
+terraform plan -destroy
+
+# Review the output carefully, then destroy if safe
+terraform destroy
+
+# If you encounter Secrets Manager conflicts, force delete them
+aws secretsmanager list-secrets --region us-west-1 --query 'SecretList[?contains(Name, `hibiji`)].Name' --output text | \
+  xargs -I {} aws secretsmanager delete-secret \
+  --secret-id {} \
+  --force-delete-without-recovery \
+  --region us-west-1
+
+# Return to root and deploy fresh
+cd ../../..
+./scripts/first-deployment.sh
+```
+
+#### **Option 2: Clean Slate (Use with Caution)**
+
+```bash
+# ⚠️ WARNING: This will delete ALL infrastructure and data
+cd terraform/environments/dev
+terraform destroy -auto-approve
+cd ../../..
+./scripts/first-deployment.sh
+```
+
+#### **Option 3: Manual Resource Cleanup**
+
+```bash
+# Check existing resources
+aws elbv2 describe-target-groups --region us-west-1
+aws ecs list-services --cluster hibiji-dev-cluster --region us-west-1
+aws rds describe-db-instances --region us-west-1
+
+# Remove specific conflicting resources
+aws elbv2 delete-target-group --target-group-arn <target-group-arn>
+```
+
+#### **Option 4: Force Delete Secrets (Secrets Manager Conflicts)**
+
+If you encounter "secret already scheduled for deletion" errors:
+
+```bash
+# List all secrets (including those scheduled for deletion)
+aws secretsmanager list-secrets --region us-west-1
+
+# Force delete specific secrets (removes 30-day recovery period)
+aws secretsmanager delete-secret \
+  --secret-id hibiji-dev01-secret-key \
+  --force-delete-without-recovery \
+  --region us-west-1
+
+aws secretsmanager delete-secret \
+  --secret-id hibiji-dev01-db-password \
+  --force-delete-without-recovery \
+  --region us-west-1
+
+# Or force delete all secrets with hibiji prefix
+aws secretsmanager list-secrets --region us-west-1 --query 'SecretList[?contains(Name, `hibiji`)].Name' --output text | \
+  xargs -I {} aws secretsmanager delete-secret \
+  --secret-id {} \
+  --force-delete-without-recovery \
+  --region us-west-1
+```
+
+### 🔍 **Resource Verification**
+
+After deployment, verify your resources:
+
+```bash
+# Check ECS services
+aws ecs describe-services \
+  --cluster hibiji-dev-cluster \
+  --services hibiji-dev-backend hibiji-dev-frontend \
+  --region us-west-1
+
+# Check ALB health
+aws elbv2 describe-load-balancers \
+  --names hibiji-dev-alb \
+  --region us-west-1
+
+# Check RDS status
+aws rds describe-db-instances \
+  --db-instance-identifier hibiji-dev-db \
+  --region us-west-1
+```
+
 ## 📊 Deployment Status
 
 ### ✅ Completed Infrastructure
@@ -184,31 +289,207 @@ For detailed instructions, see [QUICK_START.md](QUICK_START.md).
 
 ## 💻 Development
 
-### Local Development
+### Local Development Setup
 
-1. **Clone Repository**
+The platform can be run entirely locally for development. Choose from three setup options:
 
-   ```bash
-   git clone https://github.com/your-org/hibiji-platform.git
-   cd hibiji-platform
-   ```
+#### Option 1: Docker Compose (Recommended - Easiest)
 
-2. **Start Local Environment**
+```bash
+# Clone repository
+git clone https://github.com/your-org/hibiji-platform.git
+cd hibiji-platform
 
-   ```bash
-   docker-compose up -d
-   ```
+# Start all services locally
+docker-compose up -d
 
-3. **Run Migrations**
+# Access applications
+# Frontend: http://localhost
+# Backend: http://localhost:8001
+# API Docs: http://localhost:8001/docs
+# Health Check: http://localhost:8001/health
+# Grafana Dashboard: http://localhost:3001
+# Prometheus: http://localhost:9090
+```
 
-   ```bash
-   alembic upgrade head
-   ```
+#### Option 2: Automated Script (Recommended - Production-like)
 
-4. **Access Applications**
-   - Frontend: http://localhost:3000
-   - Backend: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+```bash
+# Clone repository
+git clone https://github.com/your-org/hibiji-platform.git
+cd hibiji-platform
+
+# Make script executable and run
+chmod +x start.sh
+./start.sh
+
+# The script will:
+# ✅ Check prerequisites (Python 3.12+, Node.js 16+)
+# ✅ Set up virtual environment
+# ✅ Install dependencies
+# ✅ Create .env file if missing
+# ✅ Start backend and frontend services
+```
+
+#### Option 3: Manual Setup (Advanced)
+
+```bash
+# Clone repository
+git clone https://github.com/your-org/hibiji-platform.git
+cd hibiji-platform
+
+# Backend setup
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Frontend setup
+cd frontend
+npm install
+cd ..
+
+# Database setup (optional - uses SQLite by default)
+docker run -d --name postgres -p 5432:5432 \
+  -e POSTGRES_DB=digital_persona \
+  -e POSTGRES_USER=dpp_user \
+  -e POSTGRES_PASSWORD=dpp_password \
+  postgres:15-alpine
+
+# Start services
+# Terminal 1: Backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Terminal 2: Frontend
+cd frontend && npm start
+```
+
+### Local Services
+
+When running locally, you get access to:
+
+#### Docker Compose (Option 1)
+
+| Service          | URL                          | Description                   |
+| ---------------- | ---------------------------- | ----------------------------- |
+| **Frontend**     | http://localhost             | React application (nginx)     |
+| **Backend API**  | http://localhost:8001        | FastAPI backend               |
+| **API Docs**     | http://localhost:8001/docs   | Interactive API documentation |
+| **Health Check** | http://localhost:8001/health | Service health status         |
+| **Grafana**      | http://localhost:3001        | Monitoring dashboard          |
+| **Prometheus**   | http://localhost:9090        | Metrics collection            |
+| **PostgreSQL**   | localhost:5432               | Database                      |
+| **Redis**        | localhost:6379               | Cache                         |
+
+#### Local Development (Option 2 & 3)
+
+| Service          | URL                          | Description                   |
+| ---------------- | ---------------------------- | ----------------------------- |
+| **Frontend**     | http://localhost:3000        | React application (dev mode)  |
+| **Backend API**  | http://localhost:8000        | FastAPI backend (with reload) |
+| **API Docs**     | http://localhost:8000/docs   | Interactive API documentation |
+| **Health Check** | http://localhost:8000/health | Service health status         |
+
+### Port Configuration
+
+The platform uses different ports for Docker production and local development to avoid conflicts:
+
+#### 🐳 Docker Production (docker-compose up -d)
+
+| Service          | Port | URL                          | Description                   |
+| ---------------- | ---- | ---------------------------- | ----------------------------- |
+| **Frontend**     | 80   | http://localhost             | React application (nginx)     |
+| **Backend API**  | 8001 | http://localhost:8001        | FastAPI backend               |
+| **API Docs**     | 8001 | http://localhost:8001/docs   | Interactive API documentation |
+| **Health Check** | 8001 | http://localhost:8001/health | Service health status         |
+| **Grafana**      | 3001 | http://localhost:3001        | Monitoring dashboard          |
+| **Prometheus**   | 9090 | http://localhost:9090        | Metrics collection            |
+| **PostgreSQL**   | 5432 | localhost:5432               | Database                      |
+| **Redis**        | 6379 | localhost:6379               | Cache                         |
+
+#### 💻 Local Development (./start.sh)
+
+| Service          | Port | URL                          | Description                   |
+| ---------------- | ---- | ---------------------------- | ----------------------------- |
+| **Frontend**     | 3000 | http://localhost:3000        | React application (dev mode)  |
+| **Backend API**  | 8000 | http://localhost:8000        | FastAPI backend (with reload) |
+| **API Docs**     | 8000 | http://localhost:8000/docs   | Interactive API documentation |
+| **Health Check** | 8000 | http://localhost:8000/health | Service health status         |
+
+#### 🔄 Automatic Container Management
+
+The `start.sh` script automatically manages Docker containers:
+
+1. **Stops Docker containers** when starting local development
+2. **Starts local servers** on ports 3000 (frontend) and 8000 (backend)
+3. **Restarts Docker containers** when you exit local development
+
+```bash
+# Start local development (stops Docker, starts local servers)
+./start.sh
+
+# When done developing, press Ctrl+C
+# Docker containers automatically restart
+```
+
+### Environment Configuration
+
+The platform automatically creates a `.env` file with local defaults:
+
+```bash
+# Database (SQLite for local development)
+DATABASE_URL=sqlite+aiosqlite:///./digital_persona.db
+
+# JWT Authentication
+SECRET_KEY=your-secret-key-here-change-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# OpenAI Integration (optional)
+OPENAI_API_KEY=your-openai-api-key-here
+
+# Redis Cache (optional)
+REDIS_URL=redis://localhost:6379
+
+# AWS S3 (optional - for file uploads)
+AWS_ACCESS_KEY_ID=your-aws-access-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+AWS_DEFAULT_REGION=us-west-1
+S3_BUCKET_NAME=your-bucket-name
+```
+
+### Database Migrations
+
+```bash
+# Run database migrations
+alembic upgrade head
+
+# Create new migration
+alembic revision --autogenerate -m "Description of changes"
+
+# Rollback migration
+alembic downgrade -1
+```
+
+### Development Workflow
+
+```bash
+# 1. Start local environment
+docker-compose up -d
+
+# 2. Run migrations
+alembic upgrade head
+
+# 3. Make code changes
+
+# 4. Test changes
+pytest tests/ -v
+
+# 5. Check frontend
+cd frontend && npm test
+
+# 6. Restart services if needed
+docker-compose restart backend frontend
+```
 
 ### Environment Variables
 
