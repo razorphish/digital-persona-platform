@@ -1,21 +1,12 @@
 # Multi-stage Dockerfile for Digital Persona Platform
-FROM python:3.11-slim as python-base
+FROM python:3.11-slim AS python-base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_VERSION=1.7.1 \
-    POETRY_HOME="/opt/poetry" \
-    POETRY_VENV_IN_PROJECT=1 \
-    POETRY_NO_INTERACTION=1 \
-    PYSETUP_PATH="/opt/pysetup" \
-    VENV_PATH="/opt/pysetup/.venv"
-
-# Add Poetry to PATH
-ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
+    PIP_DEFAULT_TIMEOUT=100
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -24,20 +15,17 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
-
 # Set working directory
 WORKDIR /app
 
-# Copy poetry files
-COPY pyproject.toml poetry.lock* ./
+# Copy requirements file
+COPY requirements.txt ./
 
 # Install Python dependencies
-RUN poetry install --only=main --no-root
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Production stage
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
@@ -49,14 +37,14 @@ RUN apt-get update && apt-get install -y \
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/opt/venv/bin:$PATH"
-
-# Copy virtual environment from build stage
-COPY --from=python-base /opt/pysetup/.venv /opt/venv
+    PYTHONDONTWRITEBYTECODE=1
 
 # Set working directory
 WORKDIR /app
+
+# Copy Python packages from build stage
+COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=python-base /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY --chown=appuser:appuser . .

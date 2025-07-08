@@ -121,12 +121,28 @@ deploy_infrastructure() {
 wait_for_services() {
     print_status "Waiting for services to be ready..."
     
-    # Wait for ECS services to be stable
-    aws ecs wait services-stable \
+    # Get actual service names from the cluster
+    SERVICES=$(aws ecs list-services \
         --cluster hibiji-dev-cluster \
-        --services hibiji-dev-backend hibiji-dev-frontend
+        --region us-west-1 \
+        --query 'serviceArns' \
+        --output text)
     
-    print_success "Services are stable"
+    if [ -n "$SERVICES" ]; then
+        # Extract service names from ARNs
+        SERVICE_NAMES=$(echo $SERVICES | sed 's/.*\///g')
+        print_status "Found services: $SERVICE_NAMES"
+        
+        # Wait for ECS services to be stable
+        aws ecs wait services-stable \
+            --cluster hibiji-dev-cluster \
+            --services $SERVICE_NAMES
+        
+        print_success "Services are stable"
+    else
+        print_error "No ECS services found"
+        exit 1
+    fi
 }
 
 # Test deployment
