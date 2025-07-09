@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Edit,
   Brain,
@@ -40,11 +40,7 @@ const SelfPersonaPage: React.FC = () => {
     description: "",
   });
 
-  useEffect(() => {
-    fetchPersonaData();
-  }, []);
-
-  const fetchPersonaData = async () => {
+  const fetchPersonaData = useCallback(async () => {
     try {
       const data = await apiService.getSelfPersona();
       setPersona(data);
@@ -58,7 +54,11 @@ const SelfPersonaPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchPersonaData();
+  }, [fetchPersonaData]);
 
   const fetchPersonaSummary = async (personaId: number) => {
     setSummaryLoading(true);
