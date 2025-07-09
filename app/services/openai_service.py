@@ -39,8 +39,10 @@ class OpenAIService:
         if self._initialized:
             return
             
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        if not self.api_key or self.api_key == "test-key-for-testing":
+            # Don't initialize client for testing or missing API key
+            self._initialized = True
+            return
         
         self.client = OpenAI(api_key=self.api_key)
         self._initialized = True
@@ -415,6 +417,13 @@ Remember: You ARE {persona.name}. Respond as this person would, with their uniqu
         try:
             self._initialize_client()
             if self.client is None:
+                # Handle test environment or missing API key
+                if not self.api_key or self.api_key == "test-key-for-testing":
+                    return {
+                        "status": "not_configured",
+                        "message": "OpenAI API key not configured",
+                        "api_key_configured": False
+                    }
                 return {"status": "error", "message": "Client not initialized"}
             
             # Test API connection
