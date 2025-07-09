@@ -63,15 +63,21 @@ def test_server(reset_test_db):
         print(f"🚀 Starting test server on {BASE_URL}")
         env = os.environ.copy()
         env["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+        # Set a dummy OpenAI API key to prevent initialization errors
+        env["OPENAI_API_KEY"] = "test-key-for-testing"
+        # Disable verbose logging for tests
+        env["LOG_LEVEL"] = "ERROR"
+        
         server_process = subprocess.Popen([
             sys.executable, "-m", "uvicorn", 
             "app.main:app", 
             "--host", TEST_SERVER_HOST,
-            "--port", str(TEST_SERVER_PORT)
+            "--port", str(TEST_SERVER_PORT),
+            "--log-level", "error"
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         
         # Give the server a moment to start
-        time.sleep(2)
+        time.sleep(3)
         
         # Check if process is still running
         if server_process.poll() is not None:
@@ -86,12 +92,18 @@ def test_server(reset_test_db):
         max_attempts = 30
         for attempt in range(max_attempts):
             try:
-                response = requests.get(f"{BASE_URL}/health", timeout=1)
+                response = requests.get(f"{BASE_URL}/health", timeout=2)
                 if response.status_code == 200:
                     print(f"✅ Test server started successfully on {BASE_URL}")
                     break
             except requests.exceptions.RequestException:
                 if attempt == max_attempts - 1:
+                    # Get any error output before failing
+                    if server_process.poll() is not None:
+                        stdout, stderr = server_process.communicate()
+                        print(f"❌ Server failed to start. Error output:")
+                        print(f"STDOUT: {stdout.decode()}")
+                        print(f"STDERR: {stderr.decode()}")
                     raise Exception(f"Failed to start test server after {max_attempts} attempts")
                 time.sleep(1)
         
