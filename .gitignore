@@ -124,4 +124,12 @@ aws-credentials-*.txt
 test_*.py
 test_*.png
 test_*.mp4
-test_*.txt 
+test_*.txt
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+tfplan
+tfplan.* 
