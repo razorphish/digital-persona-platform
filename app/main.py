@@ -77,8 +77,11 @@ app.include_router(personas_db.router)
 app.include_router(media.router)
 app.include_router(chat.router)
 app.include_router(upload.router)
-app.include_router(ai_capabilities.router)
-app.include_router(integrations.router)
+
+# Conditionally include AI routers based on configuration
+if settings.ai_capabilities_enabled:
+    app.include_router(ai_capabilities.router)
+    app.include_router(integrations.router)
 
 app_start_time = time.time()
 

@@ -67,6 +67,10 @@ def test_server(reset_test_db):
         env["OPENAI_API_KEY"] = "test-key-for-testing"
         # Disable verbose logging for tests
         env["LOG_LEVEL"] = "ERROR"
+        # Disable AI services for testing
+        env["ENABLE_AI_CAPABILITIES"] = "false"
+        env["ENABLE_MEMORY_SYSTEM"] = "false"
+        env["ENABLE_PERSONALITY_LEARNING"] = "false"
         
         server_process = subprocess.Popen([
             sys.executable, "-m", "uvicorn", 

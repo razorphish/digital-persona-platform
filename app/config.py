@@ -58,6 +58,22 @@ class Settings(BaseSettings):
     enable_personality_learning: bool = True
     learning_confidence_threshold: float = 0.7
     
+    # Test environment overrides
+    @property
+    def ai_capabilities_enabled(self) -> bool:
+        """Check if AI capabilities should be enabled."""
+        return os.getenv("ENABLE_AI_CAPABILITIES", "true").lower() != "false"
+    
+    @property
+    def memory_system_enabled(self) -> bool:
+        """Check if memory system should be enabled."""
+        return os.getenv("ENABLE_MEMORY_SYSTEM", "true").lower() != "false"
+    
+    @property
+    def personality_learning_enabled(self) -> bool:
+        """Check if personality learning should be enabled."""
+        return os.getenv("ENABLE_PERSONALITY_LEARNING", "true").lower() != "false"
+    
     # Application Configuration
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"  # Options: development, staging, production
