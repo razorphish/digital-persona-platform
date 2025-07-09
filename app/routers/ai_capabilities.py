@@ -11,7 +11,14 @@ from app.models.media_db import MediaFile as DBMediaFile
 from app.models.chat_db import ChatMessage as DBChatMessage
 from app.services.computer_vision import computer_vision_service
 from app.services.voice_synthesis import voice_synthesis_service
-from app.services.memory_service import memory_service
+# Conditional import for memory service (may fail if chromadb is not available)
+try:
+    from app.services.memory_service import memory_service
+    MEMORY_SERVICE_AVAILABLE = True
+except ImportError as e:
+    print(f"Memory service not available: {e}")
+    memory_service = None
+    MEMORY_SERVICE_AVAILABLE = False
 from app.services.personality_learning import personality_learning_service
 from app.services.openai_service import openai_service
 from app.services.auth_db import get_current_user
@@ -181,6 +188,13 @@ async def get_persona_memories(
                 detail="Persona not found"
             )
         
+        # Check if memory service is available
+        if not MEMORY_SERVICE_AVAILABLE or memory_service is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Memory service is not available"
+            )
+        
         # Get memories
         memories = await memory_service.retrieve_relevant_memories(
             db, persona, query or "", memory_types, limit
@@ -227,6 +241,13 @@ async def store_memory(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Persona not found"
+            )
+        
+        # Check if memory service is available
+        if not MEMORY_SERVICE_AVAILABLE or memory_service is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Memory service is not available"
             )
         
         # Store memory
@@ -373,8 +394,9 @@ async def learn_from_conversation(
             db, persona, messages
         )
         
-        # Store memories from conversation
-        await memory_service.learn_from_conversation(db, persona, messages)
+        # Store memories from conversation if memory service is available
+        if MEMORY_SERVICE_AVAILABLE and memory_service is not None:
+            await memory_service.learn_from_conversation(db, persona, messages)
         
         return {
             "success": True,
@@ -403,8 +425,8 @@ async def ai_health_check():
                 "engines": list(voice_synthesis_service.engines.keys())
             },
             "memory_service": {
-                "status": "available" if memory_service.embedding_model else "unavailable",
-                "vector_db": "available" if memory_service.chroma_client else "unavailable"
+                "status": "available" if (MEMORY_SERVICE_AVAILABLE and memory_service and memory_service.embedding_model) else "unavailable",
+                "vector_db": "available" if (MEMORY_SERVICE_AVAILABLE and memory_service and memory_service.chroma_client) else "unavailable"
             },
             "personality_learning": {
                 "status": "available"
