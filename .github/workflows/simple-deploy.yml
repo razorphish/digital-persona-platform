@@ -7,6 +7,10 @@ on:
     branches: [main, dev]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  security-events: write
+
 env:
   AWS_REGION: us-west-1
   DOMAIN: hibiji.com
@@ -103,7 +107,7 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
           sarif_file: "trivy-results.sarif"
 
