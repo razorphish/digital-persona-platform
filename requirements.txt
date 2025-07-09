@@ -50,4 +50,8 @@ pytest-cov==4.1.0
 httpx==0.25.2
 
 # Development and utilities
-python-dotenv==1.0.0 
+python-dotenv==1.0.0
+
+# Additional dependencies for testing and runtime
+click==8.1.7
+typing-extensions==4.8.0 
