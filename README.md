@@ -6,6 +6,7 @@ A scalable, cost-optimized digital persona platform built with FastAPI, React, a
 
 - [Overview](#overview)
 - [Architecture](#architecture)
+- [Branch-to-Environment Strategy](#-branch-to-environment-strategy)
 - [Quick Start](#quick-start)
 - [Deployment Status](#deployment-status)
 - [Infrastructure](#infrastructure)
@@ -77,6 +78,287 @@ hibiji.com
     ├── prod01.hibiji.com
     └── prod02.hibiji.com
 ```
+
+## 🌿 Branch-to-Environment Strategy
+
+### **Branch Mapping**
+
+Our CI/CD pipeline automatically deploys code based on Git branches. Each branch maps to a specific AWS environment:
+
+| Branch Name | Environment       | Terraform Directory               | Domain Pattern         | Purpose                                              |
+| ----------- | ----------------- | --------------------------------- | ---------------------- | ---------------------------------------------------- |
+| `main`      | Production        | `terraform/environments/main/`    | `main01.hibiji.com`    | **Production** - Live user traffic                   |
+| `prod`      | Production Alt    | `terraform/environments/prod/`    | `prod01.hibiji.com`    | **Production** - Alternative production environment  |
+| `staging`   | Staging           | `terraform/environments/staging/` | `staging01.hibiji.com` | **Pre-Production** - Final testing before production |
+| `qa`        | Quality Assurance | `terraform/environments/qa/`      | `qa01.hibiji.com`      | **Testing** - Integration and acceptance testing     |
+| `dev`       | Development       | `terraform/environments/dev/`     | `dev01.hibiji.com`     | **Development** - Feature development and testing    |
+
+### **Automatic Deployment Flow**
+
+```mermaid
+graph LR
+    A[Feature Branch] --> B[Pull Request]
+    B --> C[dev Branch]
+    C --> D[dev01.hibiji.com]
+    D --> E[qa Branch]
+    E --> F[qa01.hibiji.com]
+    F --> G[staging Branch]
+    G --> H[staging01.hibiji.com]
+    H --> I[main Branch]
+    I --> J[main01.hibiji.com]
+```
+
+### **Branch Protection Rules**
+
+| Branch    | Protection Level | Required Reviews | Status Checks  | Auto-Deploy |
+| --------- | ---------------- | ---------------- | -------------- | ----------- |
+| `main`    | **Strict**       | 2 approvals      | All tests pass | ✅ Yes      |
+| `prod`    | **Strict**       | 2 approvals      | All tests pass | ✅ Yes      |
+| `staging` | **Medium**       | 1 approval       | Backend tests  | ✅ Yes      |
+| `qa`      | **Medium**       | 1 approval       | Backend tests  | ✅ Yes      |
+| `dev`     | **Light**        | None             | Basic tests    | ✅ Yes      |
+
+### **Recommended Branching Strategy**
+
+#### **🌱 Git Flow with Environment Mapping**
+
+```bash
+# 1. Create feature branch from dev
+git checkout dev
+git pull origin dev
+git checkout -b feature/new-feature
+
+# 2. Develop and test locally
+# ... make changes ...
+git commit -m "feat: add new feature"
+
+# 3. Push and create PR to dev
+git push origin feature/new-feature
+# Create PR: feature/new-feature → dev
+
+# 4. After PR approval, merge to dev
+# Automatic deployment to dev01.hibiji.com
+
+# 5. Promote to qa (when ready for testing)
+git checkout qa
+git merge dev
+git push origin qa
+# Automatic deployment to qa01.hibiji.com
+
+# 6. Promote to staging (when ready for pre-production)
+git checkout staging
+git merge qa
+git push origin staging
+# Automatic deployment to staging01.hibiji.com
+
+# 7. Promote to production (when ready for release)
+git checkout main
+git merge staging
+git push origin main
+# Automatic deployment to main01.hibiji.com
+```
+
+#### **🚀 Release Strategy**
+
+**Option 1: Continuous Deployment (Recommended)**
+
+- Every merge to `main` automatically deploys to production
+- Use feature flags for gradual rollouts
+- Monitor metrics and rollback if needed
+
+**Option 2: Scheduled Releases**
+
+- Merge to `main` on release day
+- Deploy during maintenance windows
+- Coordinate with stakeholders
+
+**Option 3: Blue-Green Deployment**
+
+- Use `main` and `prod` branches for blue-green deployments
+- Zero-downtime deployments
+- Instant rollback capability
+
+### **Environment-Specific Configurations**
+
+#### **Resource Allocation by Environment**
+
+| Environment | CPU  | Memory | Database    | Auto-Scaling | Cost/Month |
+| ----------- | ---- | ------ | ----------- | ------------ | ---------- |
+| **main**    | 1024 | 2048MB | db.t3.small | ✅ Enabled   | ~$1000     |
+| **prod**    | 1024 | 2048MB | db.t3.small | ✅ Enabled   | ~$1000     |
+| **staging** | 512  | 1024MB | db.t3.micro | ✅ Enabled   | ~$200      |
+| **qa**      | 256  | 512MB  | db.t3.micro | ❌ Disabled  | ~$100      |
+| **dev**     | 256  | 512MB  | db.t3.micro | ❌ Disabled  | ~$50       |
+
+#### **Environment Variables**
+
+Each environment has its own configuration:
+
+```bash
+# Development
+ENVIRONMENT=development
+LOG_LEVEL=DEBUG
+DEBUG=true
+
+# QA
+ENVIRONMENT=qa
+LOG_LEVEL=INFO
+DEBUG=false
+
+# Staging
+ENVIRONMENT=staging
+LOG_LEVEL=INFO
+DEBUG=false
+
+# Production
+ENVIRONMENT=production
+LOG_LEVEL=WARNING
+DEBUG=false
+```
+
+### **Multi-Sub-Environment Support**
+
+For teams working on multiple features simultaneously, we support sub-environments:
+
+```bash
+# Create sub-environment for feature team
+git checkout dev
+git checkout -b feature/team-a
+git push origin feature/team-a
+
+# Deploy to sub-environment via GitHub Actions
+# Creates: dev02.hibiji.com, dev03.hibiji.com, etc.
+```
+
+#### **Sub-Environment Naming Convention**
+
+- `dev01.hibiji.com` - Main development environment
+- `dev02.hibiji.com` - Feature team A
+- `dev03.hibiji.com` - Feature team B
+- `qa01.hibiji.com` - Main QA environment
+- `qa02.hibiji.com` - QA team A
+- `staging01.hibiji.com` - Main staging environment
+
+### **Deployment Triggers**
+
+#### **Automatic Deployments**
+
+| Event    | Branch    | Environment    | Trigger      |
+| -------- | --------- | -------------- | ------------ |
+| **Push** | `main`    | Production     | ✅ Automatic |
+| **Push** | `prod`    | Production Alt | ✅ Automatic |
+| **Push** | `staging` | Staging        | ✅ Automatic |
+| **Push** | `qa`      | QA             | ✅ Automatic |
+| **Push** | `dev`     | Development    | ✅ Automatic |
+
+#### **Manual Deployments**
+
+```bash
+# Deploy specific environment via GitHub Actions
+# Go to: Actions → "Hibiji CI/CD Pipeline" → "Run workflow"
+# Select environment: dev01, qa01, staging01, prod01, prod02
+```
+
+### **Rollback Procedures**
+
+#### **Quick Rollback (Last 5 minutes)**
+
+```bash
+# Revert last commit
+git revert HEAD
+git push origin main
+# Automatic rollback deployment
+```
+
+#### **Rollback to Specific Version**
+
+```bash
+# Find the commit to rollback to
+git log --oneline -10
+
+# Create rollback branch
+git checkout -b rollback/v1.2.3
+git reset --hard <commit-hash>
+git push origin rollback/v1.2.3
+
+# Merge to main
+git checkout main
+git merge rollback/v1.2.3
+git push origin main
+```
+
+#### **Infrastructure Rollback**
+
+```bash
+# Rollback Terraform changes
+cd terraform/environments/main
+terraform plan -var="image_tag=<previous-tag>"
+terraform apply
+```
+
+### **Best Practices**
+
+#### **✅ Do's**
+
+- **Use feature branches** for all development work
+- **Test in dev first** before promoting to higher environments
+- **Use descriptive commit messages** with conventional commits
+- **Monitor deployments** and set up alerts
+- **Use feature flags** for gradual rollouts
+- **Keep environments in sync** with regular promotions
+
+#### **❌ Don'ts**
+
+- **Don't commit directly to main** (use PRs)
+- **Don't skip environments** in the promotion chain
+- **Don't deploy on Fridays** (unless critical)
+- **Don't ignore test failures** - fix them first
+- **Don't mix feature work** in the same branch
+
+#### **🔧 Branch Management Commands**
+
+```bash
+# Clean up merged feature branches
+git branch --merged | grep -v "\*" | grep -v "main" | grep -v "dev" | xargs -n 1 git branch -d
+
+# Update all branches
+git checkout main && git pull origin main
+git checkout dev && git pull origin dev
+git checkout qa && git pull origin qa
+git checkout staging && git pull origin staging
+
+# Check branch status
+git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads
+
+# Sync feature branch with latest dev
+git checkout feature/my-feature
+git rebase dev
+```
+
+### **Monitoring & Alerts**
+
+#### **Deployment Monitoring**
+
+- **GitHub Actions**: Monitor deployment status
+- **CloudWatch**: Application and infrastructure metrics
+- **Sentry**: Error tracking and performance monitoring
+- **PagerDuty**: Incident alerts and escalation
+
+#### **Health Checks**
+
+```bash
+# Check environment health
+curl -f https://main01.hibiji.com/health
+curl -f https://staging01.hibiji.com/health
+curl -f https://qa01.hibiji.com/health
+curl -f https://dev01.hibiji.com/health
+```
+
+#### **Cost Monitoring**
+
+- **AWS Cost Explorer**: Real-time cost tracking
+- **Budget Alerts**: Monthly and daily budget notifications
+- **Resource Optimization**: Automatic scaling recommendations
 
 ## 🚀 Quick Start
 
@@ -676,4 +958,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Last Updated**: December 2024  
 **Version**: 1.0.0  
 **Status**: Development Complete, Ready for Production Deployment
+
 # Trigger CI/CD

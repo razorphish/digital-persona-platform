@@ -3,22 +3,22 @@ terraform {
   
   backend "s3" {
     bucket = "hibiji-terraform-state"
-    key    = "dev/terraform.tfstate"
+    key    = "qa/terraform.tfstate"
     region = "us-west-1"
   }
 }
 
 # Variables for sub-environment
 variable "sub_environment" {
-  description = "Sub-environment name (e.g., dev01, dev02)"
+  description = "Sub-environment name (e.g., qa01, qa02)"
   type        = string
-  default     = "dev01"
+  default     = "qa01"
 }
 
 variable "environment" {
   description = "Main environment name"
   type        = string
-  default     = "dev"
+  default     = "qa"
 }
 
 variable "domain_name" {
@@ -202,6 +202,13 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
   egress {
     from_port   = 0
     to_port     = 0
@@ -226,8 +233,8 @@ resource "aws_security_group" "app" {
   }
   
   ingress {
-    from_port       = 80
-    to_port         = 80
+    from_port       = 3000
+    to_port         = 3000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
@@ -252,25 +259,20 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
   
-  enable_deletion_protection = false
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-alb"
-  })
+  tags = local.common_tags
 }
 
-# Random suffix for unique resource names
+# Random suffix for resource uniqueness
 resource "random_id" "suffix" {
   byte_length = 4
 }
 
-# ALB Target Groups
+# Target Groups
 resource "aws_lb_target_group" "backend" {
-  name        = "hibiji-bk-${random_id.suffix.hex}"
-  port        = 8000
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
+  name     = "hibiji-bk-${random_id.suffix.hex}"
+  port     = 8000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
   
   health_check {
     enabled             = true
@@ -284,21 +286,14 @@ resource "aws_lb_target_group" "backend" {
     unhealthy_threshold = 2
   }
   
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-backend-tg"
-  })
-  
-  lifecycle {
-    create_before_destroy = true
-  }
+  tags = local.common_tags
 }
 
 resource "aws_lb_target_group" "frontend" {
-  name        = "hibiji-fr-${random_id.suffix.hex}"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
+  name     = "hibiji-fr-${random_id.suffix.hex}"
+  port     = 3000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
   
   health_check {
     enabled             = true
@@ -312,13 +307,7 @@ resource "aws_lb_target_group" "frontend" {
     unhealthy_threshold = 2
   }
   
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-frontend-tg"
-  })
-  
-  lifecycle {
-    create_before_destroy = true
-  }
+  tags = local.common_tags
 }
 
 # ALB Listeners
@@ -342,11 +331,9 @@ resource "aws_lb_listener" "frontend" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.frontend.arn
   }
-  
-  depends_on = [aws_lb_target_group.frontend]
 }
 
-# ECS Cluster for sub-environment
+# ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "${local.resource_prefix}-cluster"
   
@@ -358,7 +345,7 @@ resource "aws_ecs_cluster" "main" {
   tags = local.common_tags
 }
 
-# IAM Roles for ECS
+# IAM Roles
 resource "aws_iam_role" "ecs_execution" {
   name = "${local.resource_prefix}-ecs-execution"
   
@@ -374,8 +361,6 @@ resource "aws_iam_role" "ecs_execution" {
       }
     ]
   })
-  
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_execution" {
@@ -398,14 +383,11 @@ resource "aws_iam_role" "ecs_task" {
       }
     ]
   })
-  
-  tags = local.common_tags
 }
 
-# Secrets for application
+# Secrets Manager
 resource "aws_secretsmanager_secret" "secret_key" {
-  name = "${local.resource_prefix}-secret-key-${random_id.suffix.hex}"
-  
+  name = "${local.resource_prefix}-secret-key"
   tags = local.common_tags
 }
 
@@ -415,8 +397,7 @@ resource "aws_secretsmanager_secret_version" "secret_key" {
 }
 
 resource "aws_secretsmanager_secret" "database_password" {
-  name = "${local.resource_prefix}-db-password-${random_id.suffix.hex}"
-  
+  name = "${local.resource_prefix}-db-password"
   tags = local.common_tags
 }
 
@@ -425,47 +406,36 @@ resource "aws_secretsmanager_secret_version" "database_password" {
   secret_string = "your-database-password-here"
 }
 
-# RDS Instance for sub-environment
+# RDS Database
 resource "aws_db_instance" "main" {
   identifier = "${local.resource_prefix}-db"
   
-  # Database engine
   engine         = "postgres"
   engine_version = data.aws_rds_engine_version.postgres.version
+  instance_class = "db.t3.micro"
   
-  # Sub-environment specific configurations
-  instance_class = local.main_env == "prod" ? "db.t3.small" : "db.t3.micro"
-  multi_az       = local.main_env == "prod"
-  
-  # Database name includes sub-environment
-  db_name = "hibiji_${replace(local.sub_env, "-", "_")}"
-  
-  # Database credentials
-  username = "hibiji_admin"
-  password = aws_secretsmanager_secret_version.database_password.secret_string
-  
-  # Network configuration
-  vpc_security_group_ids = [aws_security_group.app.id]
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  
-  # Storage
   allocated_storage     = 20
+  max_allocated_storage = 100
   storage_type          = "gp2"
   storage_encrypted     = true
   
-  # Backup
+  db_name  = "hibiji"
+  username = "hibiji"
+  password = aws_secretsmanager_secret_version.database_password.secret_string
+  
+  vpc_security_group_ids = [aws_security_group.app.id]
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  
   backup_retention_period = 7
   backup_window          = "03:00-04:00"
   maintenance_window     = "sun:04:00-sun:05:00"
   
-  # Deletion protection
-  deletion_protection = false
   skip_final_snapshot = true
+  deletion_protection = false
   
   tags = local.common_tags
 }
 
-# DB Subnet Group
 resource "aws_db_subnet_group" "main" {
   name       = "${local.resource_prefix}-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
@@ -473,12 +443,11 @@ resource "aws_db_subnet_group" "main" {
   tags = local.common_tags
 }
 
-# Data sources
+# Data Sources
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
-# Get available PostgreSQL versions
 data "aws_rds_engine_version" "postgres" {
   engine = "postgres"
 }
@@ -487,48 +456,34 @@ data "aws_rds_engine_version" "postgres" {
 module "ecs" {
   source = "../../modules/ecs"
   
-  environment                = local.main_env
-  sub_environment           = local.sub_env
-  ecr_repository_url        = var.ecr_repository_url
-  frontend_ecr_repository_url = var.frontend_ecr_repository_url
-  image_tag                 = var.image_tag
-  frontend_image_tag        = var.frontend_image_tag
+  cluster_name = aws_ecs_cluster.main.name
+  vpc_id       = aws_vpc.main.id
   
-  # Resource sizing based on environment
-  backend_cpu    = local.main_env == "prod" ? 1024 : 256
-  backend_memory = local.main_env == "prod" ? 2048 : 512
-  frontend_cpu   = local.main_env == "prod" ? 512 : 256
-  frontend_memory = local.main_env == "prod" ? 1024 : 512
+  backend_image = "${var.ecr_repository_url}:${var.image_tag}"
+  frontend_image = "${var.frontend_ecr_repository_url}:${var.frontend_image_tag}"
   
-  backend_desired_count  = local.main_env == "prod" ? 2 : 1
-  frontend_desired_count = local.main_env == "prod" ? 2 : 1
-  
-  backend_min_capacity = local.main_env == "prod" ? 2 : 1
-  backend_max_capacity = local.main_env == "prod" ? 10 : 3
-  
-  # Network configuration
-  private_subnet_ids      = aws_subnet.private[*].id
-  app_security_group_id   = aws_security_group.app.id
   backend_target_group_arn = aws_lb_target_group.backend.arn
   frontend_target_group_arn = aws_lb_target_group.frontend.arn
   
-  # Application configuration
-  database_url = "postgresql://hibiji_admin:${aws_secretsmanager_secret_version.database_password.secret_string}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}"
-  redis_url    = "redis://localhost:6379"  # Will be updated when Redis is added
-  api_url      = "http://${aws_lb.main.dns_name}"
+  subnets = aws_subnet.private[*].id
   
-  # IAM roles
-  ecs_execution_role_arn = aws_iam_role.ecs_execution.arn
-  ecs_task_role_arn     = aws_iam_role.ecs_task.arn
+  security_groups = [aws_security_group.app.id]
   
-  # Secrets
-  secret_key_arn       = aws_secretsmanager_secret.secret_key.arn
-  database_password_arn = aws_secretsmanager_secret.database_password.arn
+  execution_role_arn = aws_iam_role.ecs_execution.arn
+  task_role_arn      = aws_iam_role.ecs_task.arn
   
-  depends_on = [aws_lb_listener.backend, aws_lb_listener.frontend]
+  secret_key_secret_arn = aws_secretsmanager_secret.secret_key.arn
+  db_password_secret_arn = aws_secretsmanager_secret.database_password.arn
+  
+  database_url = "postgresql://${aws_db_instance.main.username}:${aws_db_instance.main.password}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}"
+  
+  environment = local.main_env
+  sub_environment = local.sub_env
+  
+  common_tags = local.common_tags
 }
 
-# Route 53 record for sub-environment
+# Route53 Records
 resource "aws_route53_record" "sub_env" {
   zone_id = aws_route53_zone.main.zone_id
   name    = local.domain_name
@@ -541,30 +496,26 @@ resource "aws_route53_record" "sub_env" {
   }
 }
 
-# Route 53 Zone (placeholder - you'll need to create this or use existing zone)
+# Route53 Zone
 resource "aws_route53_zone" "main" {
   name = var.domain_name
   
   tags = local.common_tags
 }
 
-# ACM Certificate (placeholder - you'll need to validate this)
+# ACM Certificate
 resource "aws_acm_certificate" "main" {
-  domain_name       = var.domain_name
+  domain_name       = local.domain_name
   validation_method = "DNS"
-  
-  subject_alternative_names = [
-    "*.${var.domain_name}"
-  ]
-  
-  tags = local.common_tags
   
   lifecycle {
     create_before_destroy = true
   }
+  
+  tags = local.common_tags
 }
 
-# CloudFront distribution for sub-environment
+# CloudFront Distribution
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -588,15 +539,13 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id = "ALB"
     
     forwarded_values {
-      query_string = true
-      headers      = ["*"]
-      
+      query_string = false
       cookies {
-        forward = "all"
+        forward = "none"
       }
     }
     
-    viewer_protocol_policy = "allow-all"
+    viewer_protocol_policy = "redirect-to-https"
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
@@ -608,11 +557,32 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
   
-  price_class = "PriceClass_100"
-  
   viewer_certificate {
     cloudfront_default_certificate = true
   }
   
+  aliases = [local.domain_name]
+  
   tags = local.common_tags
+}
+
+# Outputs
+output "alb_dns_name" {
+  description = "DNS name of the load balancer"
+  value       = aws_lb.main.dns_name
+}
+
+output "alb_name" {
+  description = "Name of the load balancer"
+  value       = aws_lb.main.name
+}
+
+output "cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = aws_ecs_cluster.main.name
+}
+
+output "domain_name" {
+  description = "Domain name for the environment"
+  value       = local.domain_name
 } 
