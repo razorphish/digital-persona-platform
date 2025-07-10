@@ -209,13 +209,13 @@ def test_server(reset_test_db):
             try:
                 # Try graceful termination first
                 server_process.terminate()
-                server_process.wait(timeout=5)
+                server_process.wait(timeout=3)
                 print("✅ Test server stopped gracefully")
             except subprocess.TimeoutExpired:
                 print("⚠️ Graceful shutdown timed out, forcing kill...")
                 try:
                     server_process.kill()
-                    server_process.wait(timeout=5)
+                    server_process.wait(timeout=3)
                     print("✅ Test server killed")
                 except subprocess.TimeoutExpired:
                     print("⚠️ Could not kill server process, continuing...")
@@ -227,6 +227,22 @@ def test_server(reset_test_db):
                     server_process.wait(timeout=2)
                 except:
                     pass
+            
+            # Force cleanup of any remaining processes on the test port
+            try:
+                import psutil
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if proc.info['cmdline'] and any('uvicorn' in cmd for cmd in proc.info['cmdline']):
+                            if str(TEST_SERVER_PORT) in ' '.join(proc.info['cmdline']):
+                                print(f"🔄 Force killing uvicorn process {proc.info['pid']}")
+                                proc.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except ImportError:
+                print("⚠️ psutil not available, skipping process cleanup")
+            except Exception as e:
+                print(f"⚠️ Process cleanup error: {e}")
 
 @pytest.fixture
 def api_client(test_server):

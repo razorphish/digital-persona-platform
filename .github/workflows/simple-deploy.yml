@@ -58,17 +58,8 @@ jobs:
       - name: Run backend tests
         timeout-minutes: 10
         run: |
-          # Set test environment variables
-          export ENVIRONMENT=test
-          export LOG_LEVEL=ERROR
-          export ENABLE_AI_CAPABILITIES=false
-          export ENABLE_MEMORY_SYSTEM=false
-          export ENABLE_PERSONALITY_LEARNING=false
-          export ENABLE_METRICS=false
-
-          # Run tests with verbose output and show all output
-          # Add timeout to prevent hanging
-          timeout 300 pytest tests/ -v -s --cov=app --cov-report=xml --tb=short || echo "Tests completed with warnings"
+          # Run tests with timeout protection
+          python run-tests-with-timeout.py || echo "Tests completed with warnings"
 
   # Frontend Build Test
   frontend-build:
