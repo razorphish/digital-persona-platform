@@ -50,8 +50,8 @@ jobs:
           MAIN_ENV=$(echo $SUB_ENV | sed 's/[0-9]*$//')
           echo "Deploying to $SUB_ENV (parent: $MAIN_ENV)"
           cd terraform/environments/$MAIN_ENV
-          terraform workspace select $SUB_ENV || terraform workspace new $SUB_ENV
           terraform init
+          terraform workspace select $SUB_ENV || terraform workspace new $SUB_ENV
           terraform plan -out=tfplan -var="sub_environment=$SUB_ENV"
           terraform apply -auto-approve tfplan
 
