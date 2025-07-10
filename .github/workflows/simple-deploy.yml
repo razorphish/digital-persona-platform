@@ -44,7 +44,16 @@ jobs:
 
       - name: Run backend tests
         run: |
-          pytest tests/ -v --cov=app --cov-report=xml || echo "Tests completed with warnings"
+          # Set test environment variables
+          export ENVIRONMENT=test
+          export LOG_LEVEL=ERROR
+          export ENABLE_AI_CAPABILITIES=false
+          export ENABLE_MEMORY_SYSTEM=false
+          export ENABLE_PERSONALITY_LEARNING=false
+          export ENABLE_METRICS=false
+
+          # Run tests with verbose output
+          pytest tests/ -v --cov=app --cov-report=xml --tb=short || echo "Tests completed with warnings"
 
   # Frontend Build Test
   frontend-build:
