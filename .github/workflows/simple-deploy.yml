@@ -188,6 +188,12 @@ jobs:
           docker build -t ${{ steps.login-ecr.outputs.registry }}/hibiji-frontend:${{ github.sha }} ./frontend
           docker push ${{ steps.login-ecr.outputs.registry }}/hibiji-frontend:${{ github.sha }}
 
+      - name: Install Terraform
+        if: steps.check-aws.outputs.aws_available == 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
       - name: Deploy with Terraform
         if: steps.check-aws.outputs.aws_available == 'true'
         working-directory: ./terraform/environments/dev
