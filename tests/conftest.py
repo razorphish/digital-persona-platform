@@ -85,6 +85,22 @@ def test_server(reset_test_db):
     server_process = None
     
     try:
+        # Test imports before starting server
+        print("🔍 Testing imports...")
+        try:
+            import app.main
+            print("✅ app.main imported successfully")
+        except Exception as e:
+            print(f"❌ Failed to import app.main: {e}")
+            raise Exception(f"Import error: {e}")
+        
+        try:
+            import app.database
+            print("✅ app.database imported successfully")
+        except Exception as e:
+            print(f"❌ Failed to import app.database: {e}")
+            raise Exception(f"Import error: {e}")
+        
         # Initialize database schema before starting server
         print("🔧 Initializing database schema...")
         try:
@@ -117,6 +133,23 @@ def test_server(reset_test_db):
         # Disable metrics for tests
         env["ENABLE_METRICS"] = "false"
         
+        # Test uvicorn command first
+        print("🔍 Testing uvicorn command...")
+        try:
+            test_cmd = [
+                sys.executable, "-c", 
+                "import uvicorn; print('✅ uvicorn available')"
+            ]
+            result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print("✅ uvicorn is available")
+            else:
+                print(f"❌ uvicorn test failed: {result.stderr}")
+                raise Exception("uvicorn not available")
+        except Exception as e:
+            print(f"❌ uvicorn test error: {e}")
+            raise Exception(f"uvicorn test failed: {e}")
+        
         server_process = subprocess.Popen([
             sys.executable, "-m", "uvicorn", 
             "app.main:app", 
@@ -135,9 +168,16 @@ def test_server(reset_test_db):
             print(f"❌ Server process failed to start:")
             print(f"STDOUT: {stdout.decode()}")
             print(f"STDERR: {stderr.decode()}")
+            print(f"Return code: {server_process.returncode}")
             sys.stdout.flush()  # Force flush to see output in CI
             sys.stderr.flush()  # Force flush to see output in CI
-            raise Exception("Server process failed to start")
+            
+            # Additional debugging info
+            print(f"Python executable: {sys.executable}")
+            print(f"Working directory: {os.getcwd()}")
+            print(f"Environment variables: {dict(env)}")
+            
+            raise Exception(f"Server process failed to start with return code {server_process.returncode}")
         
         # Wait for server to start
         max_attempts = 30
