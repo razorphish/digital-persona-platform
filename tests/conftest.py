@@ -40,7 +40,33 @@ def reset_test_db():
         import sqlite3
         with sqlite3.connect(TEST_DB_PATH) as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)")
-        print(f"✅ Empty test database created at {TEST_DB_PATH}")
+            # Create basic tables that the app expects
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    full_name VARCHAR(255),
+                    hashed_password VARCHAR(255) NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS personas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    personality_data TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            """)
+        print(f"✅ Test database created with basic schema at {TEST_DB_PATH}")
     
     # Set environment variable so the app uses test.db
     os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
@@ -59,6 +85,19 @@ def test_server(reset_test_db):
     server_process = None
     
     try:
+        # Initialize database schema before starting server
+        print("🔧 Initializing database schema...")
+        try:
+            import asyncio
+            from app.database import create_tables
+            
+            # Run database initialization
+            asyncio.run(create_tables())
+            print("✅ Database schema initialized")
+        except Exception as e:
+            print(f"⚠️ Database initialization warning: {e}")
+            # Continue anyway, the app might handle this
+        
         # Start the server with DATABASE_URL env set
         print(f"🚀 Starting test server on {BASE_URL}")
         env = os.environ.copy()
@@ -71,6 +110,12 @@ def test_server(reset_test_db):
         env["ENABLE_AI_CAPABILITIES"] = "false"
         env["ENABLE_MEMORY_SYSTEM"] = "false"
         env["ENABLE_PERSONALITY_LEARNING"] = "false"
+        # Set test environment
+        env["ENVIRONMENT"] = "test"
+        # Set a test secret key
+        env["SECRET_KEY"] = "test-secret-key-for-testing-only"
+        # Disable metrics for tests
+        env["ENABLE_METRICS"] = "false"
         
         server_process = subprocess.Popen([
             sys.executable, "-m", "uvicorn", 
@@ -90,6 +135,8 @@ def test_server(reset_test_db):
             print(f"❌ Server process failed to start:")
             print(f"STDOUT: {stdout.decode()}")
             print(f"STDERR: {stderr.decode()}")
+            sys.stdout.flush()  # Force flush to see output in CI
+            sys.stderr.flush()  # Force flush to see output in CI
             raise Exception("Server process failed to start")
         
         # Wait for server to start
@@ -108,6 +155,8 @@ def test_server(reset_test_db):
                         print(f"❌ Server failed to start. Error output:")
                         print(f"STDOUT: {stdout.decode()}")
                         print(f"STDERR: {stderr.decode()}")
+                        sys.stdout.flush()  # Force flush to see output in CI
+                        sys.stderr.flush()  # Force flush to see output in CI
                     raise Exception(f"Failed to start test server after {max_attempts} attempts")
                 time.sleep(1)
         
