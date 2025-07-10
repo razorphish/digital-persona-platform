@@ -59,9 +59,11 @@ jobs:
           BACKEND_ECR_URL="$ECR_REGISTRY/hibiji-backend"
           FRONTEND_ECR_URL="$ECR_REGISTRY/hibiji-frontend"
 
+          # Use the main environment directory (workspace approach is problematic)
           cd terraform/environments/$MAIN_ENV
           terraform init
-          terraform workspace select $SUB_ENV || terraform workspace new $SUB_ENV
+
+          # Use the default workspace but override the sub_environment variable
           terraform plan -out=tfplan \
             -var="sub_environment=$SUB_ENV" \
             -var="ecr_repository_url=$BACKEND_ECR_URL" \
