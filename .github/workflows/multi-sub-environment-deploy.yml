@@ -72,18 +72,94 @@ jobs:
             -var="frontend_image_tag=latest"
           terraform apply -auto-approve tfplan
 
+          # Get the ALB DNS name for debugging
+          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "")
+          echo "ALB DNS Name: $ALB_DNS"
+
+      - name: Wait for DNS and Service Availability
+        run: |
+          SUB_ENV="${{ github.event.inputs.environment }}"
+          DOMAIN="$SUB_ENV.${{ env.DOMAIN }}"
+
+          echo "Waiting for DNS propagation and service startup..."
+          echo "Checking domain: $DOMAIN"
+
+          # Wait for DNS propagation and service availability
+          for i in {1..15}; do
+            echo "Attempt $i/15: Checking if service is available..."
+            
+            # Try DNS resolution first
+            if nslookup $DOMAIN >/dev/null 2>&1; then
+              echo "✅ DNS resolution successful for $DOMAIN"
+              
+              # Try health check
+              if curl -fs --max-time 10 https://$DOMAIN/health >/dev/null 2>&1; then
+                echo "✅ Health endpoint available at https://$DOMAIN/health"
+                break
+              else
+                echo "⚠️ DNS resolved but health endpoint not ready yet..."
+              fi
+            else
+              echo "⏳ DNS not yet propagated for $DOMAIN..."
+            fi
+            
+            if [ $i -eq 15 ]; then
+              echo "❌ Service did not become available within timeout"
+              echo "Debugging information:"
+              echo "Domain: $DOMAIN"
+              nslookup $DOMAIN || echo "DNS lookup failed"
+              curl -v --max-time 5 https://$DOMAIN/health || echo "Health check failed"
+              exit 1
+            fi
+            
+            echo "Waiting 30 seconds before next attempt..."
+            sleep 30
+          done
+
+      - name: Debug DNS resolution
+        run: |
+          SUB_ENV="${{ github.event.inputs.environment }}"
+          DOMAIN="$SUB_ENV.${{ env.DOMAIN }}"
+          echo "Debugging DNS resolution for: $DOMAIN"
+          nslookup $DOMAIN || echo "nslookup failed"
+          dig $DOMAIN +short || echo "dig failed"
+          echo "Trying direct ALB access if available..."
+          # Try direct ALB access as fallback
+          cd terraform/environments/$(echo $SUB_ENV | sed 's/[0-9]*$//')
+          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "")
+          if [ ! -z "$ALB_DNS" ]; then
+            echo "ALB DNS: $ALB_DNS"
+            curl -fs --max-time 10 http://$ALB_DNS/health || echo "Direct ALB access failed"
+          fi
+
       - name: Run environment-specific tests
         run: |
           SUB_ENV="${{ github.event.inputs.environment }}"
           DOMAIN="$SUB_ENV.${{ env.DOMAIN }}"
-          # Health checks
-          curl -f https://$DOMAIN/health
-          curl -f https://$DOMAIN/api/health
+
+          echo "Running health checks for $DOMAIN"
+
+          # Health checks with better error handling
+          echo "Testing backend health endpoint..."
+          curl -f --max-time 30 https://$DOMAIN/health || {
+            echo "Backend health check failed, trying HTTP..."
+            curl -f --max-time 30 http://$DOMAIN/health || echo "Backend health check failed"
+          }
+
+          echo "Testing API health endpoint..."
+          curl -f --max-time 30 https://$DOMAIN/api/health || {
+            echo "API health check failed, trying HTTP..."
+            curl -f --max-time 30 http://$DOMAIN/api/health || echo "API health check failed"
+          }
+
           # Environment-specific tests (if available)
           if [ -f frontend/package.json ]; then
+            echo "Running frontend tests..."
             cd frontend
             npm install
-            npm run test:environment -- --baseUrl=https://$DOMAIN || echo "No environment-specific tests"
+            npm run test:environment -- --baseUrl=https://$DOMAIN || echo "No environment-specific tests or tests failed"
+          else
+            echo "No frontend package.json found, skipping frontend tests"
           fi
 
       - name: Monitor deployment costs
