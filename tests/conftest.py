@@ -206,13 +206,27 @@ def test_server(reset_test_db):
         # Stop the server
         if server_process:
             print("🛑 Stopping test server...")
-            server_process.terminate()
             try:
-                server_process.wait(timeout=10)
+                # Try graceful termination first
+                server_process.terminate()
+                server_process.wait(timeout=5)
+                print("✅ Test server stopped gracefully")
             except subprocess.TimeoutExpired:
-                server_process.kill()
-                server_process.wait()
-            print("✅ Test server stopped")
+                print("⚠️ Graceful shutdown timed out, forcing kill...")
+                try:
+                    server_process.kill()
+                    server_process.wait(timeout=5)
+                    print("✅ Test server killed")
+                except subprocess.TimeoutExpired:
+                    print("⚠️ Could not kill server process, continuing...")
+            except Exception as e:
+                print(f"⚠️ Error stopping server: {e}")
+                # Try to kill anyway
+                try:
+                    server_process.kill()
+                    server_process.wait(timeout=2)
+                except:
+                    pass
 
 @pytest.fixture
 def api_client(test_server):

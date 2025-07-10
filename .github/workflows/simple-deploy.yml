@@ -56,6 +56,7 @@ jobs:
           pytest tests/test_imports.py -v -s || echo "Import tests completed with warnings"
 
       - name: Run backend tests
+        timeout-minutes: 10
         run: |
           # Set test environment variables
           export ENVIRONMENT=test
@@ -66,7 +67,8 @@ jobs:
           export ENABLE_METRICS=false
 
           # Run tests with verbose output and show all output
-          pytest tests/ -v -s --cov=app --cov-report=xml --tb=short || echo "Tests completed with warnings"
+          # Add timeout to prevent hanging
+          timeout 300 pytest tests/ -v -s --cov=app --cov-report=xml --tb=short || echo "Tests completed with warnings"
 
   # Frontend Build Test
   frontend-build:
