@@ -191,6 +191,18 @@ jobs:
         if: steps.check-aws.outputs.aws_available == 'true'
         working-directory: ./terraform/environments/dev
         run: |
+          # Construct ECR repository URLs
+          BACKEND_ECR_URL="${{ steps.login-ecr.outputs.registry }}/hibiji-backend"
+          FRONTEND_ECR_URL="${{ steps.login-ecr.outputs.registry }}/hibiji-frontend"
+
+          echo "Backend ECR URL: $BACKEND_ECR_URL"
+          echo "Frontend ECR URL: $FRONTEND_ECR_URL"
+
           terraform init
-          terraform plan -var="image_tag=${{ github.sha }}" -var="frontend_image_tag=${{ github.sha }}" -out=tfplan
+          terraform plan \
+            -var="ecr_repository_url=$BACKEND_ECR_URL" \
+            -var="frontend_ecr_repository_url=$FRONTEND_ECR_URL" \
+            -var="image_tag=${{ github.sha }}" \
+            -var="frontend_image_tag=${{ github.sha }}" \
+            -out=tfplan
           terraform apply -auto-approve tfplan
