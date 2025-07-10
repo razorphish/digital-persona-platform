@@ -44,15 +44,30 @@ jobs:
         with:
           terraform_version: "1.5.0"
 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Deploy to sub-environment
         run: |
           SUB_ENV="${{ github.event.inputs.environment }}"
           MAIN_ENV=$(echo $SUB_ENV | sed 's/[0-9]*$//')
           echo "Deploying to $SUB_ENV (parent: $MAIN_ENV)"
+
+          # Construct ECR repository URLs
+          ECR_REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          BACKEND_ECR_URL="$ECR_REGISTRY/hibiji-backend"
+          FRONTEND_ECR_URL="$ECR_REGISTRY/hibiji-frontend"
+
           cd terraform/environments/$MAIN_ENV
           terraform init
           terraform workspace select $SUB_ENV || terraform workspace new $SUB_ENV
-          terraform plan -out=tfplan -var="sub_environment=$SUB_ENV"
+          terraform plan -out=tfplan \
+            -var="sub_environment=$SUB_ENV" \
+            -var="ecr_repository_url=$BACKEND_ECR_URL" \
+            -var="frontend_ecr_repository_url=$FRONTEND_ECR_URL" \
+            -var="image_tag=latest" \
+            -var="frontend_image_tag=latest"
           terraform apply -auto-approve tfplan
 
       - name: Run environment-specific tests
