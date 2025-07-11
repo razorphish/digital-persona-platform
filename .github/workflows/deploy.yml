@@ -75,7 +75,7 @@ jobs:
           echo "✅ Environment validation passed"
 
       - name: Check Terraform plan exists
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-plan-${{ github.event.inputs.environment || 'prod' }}
           path: /tmp/terraform-plan
@@ -159,7 +159,7 @@ jobs:
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Download Terraform Plan
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: terraform/environments/

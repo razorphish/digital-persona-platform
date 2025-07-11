@@ -1,0 +1,425 @@
+name: Cost Monitor
+
+on:
+  schedule:
+    # Run daily at 9 AM UTC
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to check costs for"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - dev
+          - qa
+          - staging
+          - hotfix
+          - prod
+      detailed_report:
+        description: "Generate detailed cost report"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-west-1
+
+jobs:
+  # Cost Analysis
+  cost-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      budget_alerts: ${{ steps.budgets.outputs.budget_alerts }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-1
+
+      - name: Install AWS Cost Explorer CLI
+        run: |
+          pip install aws-cost-explorer-cli
+          pip install boto3
+
+      - name: Get current month costs
+        id: costs
+        run: |
+          # Get current month costs by service
+          echo "📊 Analyzing AWS costs for current month..."
+
+          # Get total cost for current month
+          TOTAL_COST=$(aws ce get-cost-and-usage \
+            --time-period Start=$(date -d "$(date +%Y-%m-01)" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --query 'ResultsByTime[0].Total.BlendedCost.Amount' \
+            --output text)
+
+          echo "total_cost=$TOTAL_COST" >> $GITHUB_OUTPUT
+
+          # Get costs by service
+          aws ce get-cost-and-usage \
+            --time-period Start=$(date -d "$(date +%Y-%m-01)" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --query 'ResultsByTime[0].Groups[?Metrics.BlendedCost.Amount>`0`]' \
+            --output table > service_costs.txt
+
+          echo "Service costs saved to service_costs.txt"
+
+          # Get costs by environment tag
+          aws ce get-cost-and-usage \
+            --time-period Start=$(date -d "$(date +%Y-%m-01)" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=TAG,Key=Environment \
+            --query 'ResultsByTime[0].Groups[?Metrics.BlendedCost.Amount>`0`]' \
+            --output table > environment_costs.txt
+
+          echo "Environment costs saved to environment_costs.txt"
+
+      - name: Check budget status
+        id: budgets
+        run: |
+          echo "💰 Checking budget status..."
+
+          # Get budget information
+          aws budgets describe-budgets \
+            --account-id $(aws sts get-caller-identity --query Account --output text) \
+            --query 'Budgets[?contains(BudgetName, `hibiji`)].{Name:BudgetName,Amount:BudgetLimit.Amount,Spent:CalculatedSpend.ActualSpend.Amount}' \
+            --output table > budget_status.txt
+
+          echo "Budget status saved to budget_status.txt"
+
+          # Check for budget alerts
+          BUDGET_ALERTS=$(aws budgets describe-budget-notifications-for-account \
+            --account-id $(aws sts get-caller-identity --query Account --output text) \
+            --query 'Notifications[?contains(BudgetName, `hibiji`) && ActualThreshold>0]' \
+            --output text)
+
+          if [ ! -z "$BUDGET_ALERTS" ]; then
+            echo "🚨 Budget alerts detected!"
+            echo "budget_alerts=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No budget alerts"
+            echo "budget_alerts=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate cost optimization recommendations
+        id: recommendations
+        run: |
+          echo "🔍 Generating cost optimization recommendations..."
+
+          # Check for unused resources
+          echo "## Cost Optimization Recommendations" > cost_recommendations.md
+          echo "" >> cost_recommendations.md
+
+          # Check for unused EBS volumes
+          UNUSED_EBS=$(aws ec2 describe-volumes \
+            --filters "Name=status,Values=available" \
+            --query 'Volumes[?Tags[?Key==`Project` && Value==`hibiji`]]' \
+            --output text)
+
+          if [ ! -z "$UNUSED_EBS" ]; then
+            echo "### 🗑️ Unused EBS Volumes" >> cost_recommendations.md
+            echo "Consider deleting unused EBS volumes to reduce costs." >> cost_recommendations.md
+            echo "" >> cost_recommendations.md
+          fi
+
+          # Check for unused ECS services
+          ECS_SERVICES=$(aws ecs list-services --cluster hibiji-dev-cluster --output text)
+          for service in $ECS_SERVICES; do
+            SERVICE_STATUS=$(aws ecs describe-services \
+              --cluster hibiji-dev-cluster \
+              --services $service \
+              --query 'services[0].status' \
+              --output text)
+            
+            if [ "$SERVICE_STATUS" = "INACTIVE" ]; then
+              echo "### 🗑️ Inactive ECS Service: $service" >> cost_recommendations.md
+              echo "Consider deleting inactive ECS services." >> cost_recommendations.md
+              echo "" >> cost_recommendations.md
+            fi
+          done
+
+          # Check for unused RDS instances
+          RDS_INSTANCES=$(aws rds describe-db-instances \
+            --query 'DBInstances[?contains(DBInstanceIdentifier, `hibiji`) && DBInstanceStatus==`stopped`]' \
+            --output text)
+
+          if [ ! -z "$RDS_INSTANCES" ]; then
+            echo "### 🗑️ Stopped RDS Instances" >> cost_recommendations.md
+            echo "Consider deleting stopped RDS instances to reduce costs." >> cost_recommendations.md
+            echo "" >> cost_recommendations.md
+          fi
+
+          # Check for unused ALBs
+          ALBS=$(aws elbv2 describe-load-balancers \
+            --query 'LoadBalancers[?contains(LoadBalancerName, `hibiji`) && State.Code==`active`]' \
+            --output text)
+
+          if [ ! -z "$ALBS" ]; then
+            echo "### 💡 ALB Optimization" >> cost_recommendations.md
+            echo "Consider using Application Load Balancer deletion protection only for production." >> cost_recommendations.md
+            echo "" >> cost_recommendations.md
+          fi
+
+          # Add general recommendations
+          echo "### 💡 General Recommendations" >> cost_recommendations.md
+          echo "- Review and adjust instance sizes based on actual usage" >> cost_recommendations.md
+          echo "- Consider using Spot instances for non-production workloads" >> cost_recommendations.md
+          echo "- Implement auto-scaling policies to optimize resource usage" >> cost_recommendations.md
+          echo "- Review and clean up unused S3 objects" >> cost_recommendations.md
+          echo "- Consider using AWS Savings Plans for predictable workloads" >> cost_recommendations.md
+
+      - name: Create cost report
+        run: |
+          echo "📋 Creating comprehensive cost report..."
+
+          # Determine budget alert status
+          if [ "${{ steps.budgets.outputs.budget_alerts }}" = "true" ]; then
+            BUDGET_ALERT_TEXT="⚠️ Budget alerts detected! Check AWS Console for details."
+          else
+            BUDGET_ALERT_TEXT="✅ No budget alerts"
+          fi
+
+          cat > cost_report.md << EOF
+          # AWS Cost Report - $(date +%Y-%m-%d)
+
+          ## 📊 Current Month Costs
+
+          **Total Cost**: \$${{ steps.costs.outputs.total_cost }}
+
+          ### Service Breakdown
+          \`\`\`
+          $(cat service_costs.txt)
+          \`\`\`
+
+          ### Environment Breakdown
+          \`\`\`
+          $(cat environment_costs.txt)
+          \`\`\`
+
+          ## 💰 Budget Status
+
+          \`\`\`
+          $(cat budget_status.txt)
+          \`\`\`
+
+          ## 🚨 Budget Alerts
+
+          $BUDGET_ALERT_TEXT
+
+          ## 🔍 Cost Optimization Recommendations
+
+          $(cat cost_recommendations.md)
+
+          ## 📈 Cost Trends
+
+          - **Previous Month**: [Add comparison when available]
+          - **Budget vs Actual**: [Add percentage when available]
+          - **Forecast**: [Add forecast when available]
+
+          ---
+
+          *Report generated on $(date) by GitHub Actions*
+          EOF
+
+      - name: Upload cost report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cost-report-$(date +%Y-%m-%d)
+          path: |
+            cost_report.md
+            service_costs.txt
+            environment_costs.txt
+            budget_status.txt
+            cost_recommendations.md
+
+  # Cost Alert Check
+  cost-alerts:
+    runs-on: ubuntu-latest
+    needs: [cost-analysis]
+    if: needs.cost-analysis.outputs.budget_alerts == 'true'
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-1
+
+      - name: Send cost alert notification
+        run: |
+          echo "🚨 COST ALERT: Budget threshold exceeded!"
+          echo "Environment: ${{ github.event.inputs.environment || 'all' }}"
+          echo "Date: $(date)"
+          echo "Check the cost report artifact for detailed information."
+
+          # You can add Slack/Discord/Email notifications here
+          # Example for Slack:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🚨 AWS Cost Alert: Budget threshold exceeded!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Weekly Cost Summary (runs on Sundays)
+  weekly-summary:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 9 * * 0'
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-1
+
+      - name: Generate weekly cost summary
+        run: |
+          echo "📊 Generating weekly cost summary..."
+
+          # Get last 7 days costs
+          aws ce get-cost-and-usage \
+            --time-period Start=$(date -d "7 days ago" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+            --granularity DAILY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --query 'ResultsByTime[].{Date:TimePeriod.Start,Cost:Total.BlendedCost.Amount}' \
+            --output table > weekly_summary.txt
+
+          # Create weekly report
+          cat > weekly_cost_summary.md << EOF
+          # Weekly Cost Summary - Week of $(date -d "7 days ago" +%Y-%m-%d)
+
+          ## 📈 Daily Cost Breakdown
+
+          \`\`\`
+          $(cat weekly_summary.txt)
+          \`\`\`
+
+          ## 💡 Weekly Insights
+
+          - **Total Weekly Cost**: [Calculate from data]
+          - **Average Daily Cost**: [Calculate from data]
+          - **Highest Cost Day**: [Identify from data]
+          - **Cost Trend**: [Compare with previous week]
+
+          ## 🎯 Recommendations
+
+          - Review any cost spikes
+          - Check for unusual usage patterns
+          - Consider implementing cost controls
+          - Plan for next week's resource needs
+
+          ---
+
+          *Weekly summary generated on $(date)*
+          EOF
+
+      - name: Upload weekly summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-summary-$(date +%Y-%m-%d)
+          path: |
+            weekly_cost_summary.md
+            weekly_summary.txt
+
+  # Monthly Cost Report (runs on 1st of month)
+  monthly-report:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 9 1 * *'
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-1
+
+      - name: Generate monthly cost report
+        run: |
+          echo "📊 Generating monthly cost report..."
+
+          # Get last month's costs
+          LAST_MONTH=$(date -d "last month" +%Y-%m)
+          aws ce get-cost-and-usage \
+            --time-period Start=$(date -d "last month" +%Y-%m-01),End=$(date +%Y-%m-01) \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --query 'ResultsByTime[0].Groups[?Metrics.BlendedCost.Amount>`0`]' \
+            --output table > monthly_costs.txt
+
+          # Get cost trends
+          aws ce get-cost-and-usage \
+            --time-period Start=$(date -d "2 months ago" +%Y-%m-01),End=$(date +%Y-%m-01) \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --query 'ResultsByTime[].{Month:TimePeriod.Start,Cost:Total.BlendedCost.Amount}' \
+            --output table > cost_trends.txt
+
+          # Create monthly report
+          cat > monthly_cost_report.md << EOF
+          # Monthly Cost Report - $LAST_MONTH
+
+          ## 📊 Monthly Overview
+
+          \`\`\`
+          $(cat monthly_costs.txt)
+          \`\`\`
+
+          ## 📈 Cost Trends
+
+          \`\`\`
+          $(cat cost_trends.txt)
+          \`\`\`
+
+          ## 🎯 Monthly Insights
+
+          - **Total Monthly Cost**: [Calculate from data]
+          - **Cost vs Budget**: [Compare with budget]
+          - **Cost Growth**: [Compare with previous month]
+          - **Top Cost Drivers**: [Identify from data]
+
+          ## 💡 Monthly Recommendations
+
+          - Review resource utilization
+          - Optimize instance sizes
+          - Consider reserved instances
+          - Plan for next month's budget
+
+          ---
+
+          *Monthly report generated on $(date)*
+          EOF
+
+      - name: Upload monthly report
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-report-$LAST_MONTH
+          path: |
+            monthly_cost_report.md
+            monthly_costs.txt
+            cost_trends.txt
