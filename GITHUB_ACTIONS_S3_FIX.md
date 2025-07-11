@@ -2,21 +2,34 @@
 
 ## Problem
 
-The GitHub Actions workflow was failing with the following error:
+The GitHub Actions workflow was failing with multiple IAM permission issues:
+
+1. **S3 Permission Error:**
 
 ```
 The failure occurred because the GitHub Actions job is not authorized to perform s3:GetObject on arn:aws:s3:::hibiji-terraform-state/main/terraform.tfstate. This is an AWS IAM permission issue.
 ```
 
+2. **IAM GetUser Permission Error:**
+
+```
+An error occurred (AccessDenied) when calling the GetUser operation: User: arn:aws:sts::570827307849:assumed-role/GitHubActionsRole/GitHubActions is not authorized to perform: iam:GetUser on resource: user GitHubActions because no identity-based policy allows the iam:Get
+```
+
 ## Root Cause
 
-The `TerraformPolicy` attached to the `GitHubActionsRole` was missing S3 permissions required for Terraform to access the state file stored in S3.
+The `TerraformPolicy` attached to the `GitHubActionsRole` was missing several permissions:
+
+1. **S3 permissions** required for Terraform to access the state file stored in S3
+2. **IAM GetUser permission** required for the security scan job to verify user identity
 
 ## Solution Applied
 
 ### 1. Updated TerraformPolicy
 
-Added a new statement to `terraform/iam-policies/terraform-policy.json`:
+Added new permissions to `terraform/iam-policies/terraform-policy.json`:
+
+**S3 Access Statement:**
 
 ```json
 {
@@ -33,6 +46,12 @@ Added a new statement to `terraform/iam-policies/terraform-policy.json`:
     "arn:aws:s3:::hibiji-terraform-state/*"
   ]
 }
+```
+
+**IAM GetUser Permission (added to existing TerraformIAMAccess statement):**
+
+```json
+"iam:GetUser"
 ```
 
 ### 2. Created Update Script
@@ -61,6 +80,7 @@ The fix was verified by:
 1. Successfully updating the TerraformPolicy in AWS
 2. Testing S3 bucket access (`s3:ListBucket`)
 3. Testing S3 object retrieval (`s3:GetObject`)
+4. Testing IAM user access (`iam:GetUser`)
 
 ## Result
 
@@ -69,6 +89,8 @@ The GitHub Actions workflow should now be able to:
 - Access the Terraform state file: `s3://hibiji-terraform-state/main/terraform.tfstate`
 - Perform `terraform init`, `plan`, and `apply` operations
 - Deploy infrastructure successfully without permission errors
+- Run security scans with IAM user verification
+- Execute all AWS CLI commands in the security-scan job
 
 ## Next Steps
 

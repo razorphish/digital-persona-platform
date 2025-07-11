@@ -151,6 +151,7 @@ cat > /tmp/updated-policy.json << 'EOF'
         "iam:CreateRole",
         "iam:DeleteRole",
         "iam:GetRole",
+        "iam:GetUser",
         "iam:PutRolePolicy",
         "iam:DeleteRolePolicy",
         "iam:AttachRolePolicy",
