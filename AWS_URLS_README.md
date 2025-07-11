@@ -288,3 +288,74 @@ aws elbv2 describe-target-health --target-group-arn {target-group-arn} --region 
 **Last Updated**: July 2025  
 **Terraform Version**: 1.8.5  
 **AWS Region**: us-west-1
+
+---
+
+Your test scripts are present and executable, but the error `zsh: no such file or directory: ./run_all_tests.sh` usually means one of the following:
+
+1. **You are not in the correct directory.**  
+   Make sure you are in `/Users/david/Documents/SC/github/dpp/digital-persona-platform/terraform/environments/main` when running the script.
+
+2. **Line endings issue (rare on macOS, but possible if file was created on Windows).**  
+   If the script has Windows line endings (`\r\n`), zsh/bash may not recognize it as a valid script.
+
+3. **Shell hash cache issue.**  
+   If you just created the file, your shell might not see it until you run `rehash` or open a new terminal.
+
+---
+
+## **How to Fix**
+
+### 1. **Ensure you are in the correct directory:**
+
+```sh
+<code_block_to_apply_changes_from>
+cd /Users/david/Documents/SC/github/dpp/digital-persona-platform/terraform/environments/main
+ls -la run_all_tests.sh
+```
+
+You should see the script listed.
+
+### 2. **Try running with bash explicitly:**
+
+```sh
+bash run_all_tests.sh
+```
+
+### 3. **Check for Windows line endings and fix:**
+
+```sh
+file run_all_tests.sh
+# If it says "CRLF", fix with:
+dos2unix run_all_tests.sh
+```
+
+If you don't have `dos2unix`, you can use:
+
+```sh
+sed -i '' 's/\r$//' run_all_tests.sh
+```
+
+### 4. **If still not working, try:**
+
+```sh
+chmod +x run_all_tests.sh
+./run_all_tests.sh
+```
+
+---
+
+**Summary:**
+
+- Make sure you are in the right directory.
+- Try running with `bash run_all_tests.sh`.
+- Fix line endings if needed.
+- Ensure the script is executable.
+
+Let me know if you still get the error after these steps, and if so, paste the output of:
+
+```sh
+ls -la run_all_tests.sh
+file run_all_tests.sh
+head -5 run_all_tests.sh
+```

@@ -33,6 +33,10 @@ resource "aws_cloudwatch_log_group" "app" {
     Environment = var.environment
     Project     = "hibiji"
   }
+  
+  lifecycle {
+    ignore_changes = [name]
+  }
 }
 
 resource "aws_cloudwatch_log_group" "frontend" {
@@ -43,6 +47,10 @@ resource "aws_cloudwatch_log_group" "frontend" {
     Name        = "hibiji-${var.environment}-frontend-logs"
     Environment = var.environment
     Project     = "hibiji"
+  }
+  
+  lifecycle {
+    ignore_changes = [name]
   }
 }
 
