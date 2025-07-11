@@ -2,9 +2,9 @@ name: Continuous Integration (Optimized)
 
 on:
   push:
-    branches: [main, "dev*", "qa*", "staging*", "hotfix*"]
+    branches: [main, dev, qa, staging, prod]
   pull_request:
-    branches: [main, "dev*", "qa*", "staging*", "hotfix*"]
+    branches: [main, dev, qa, staging, prod]
 
 permissions:
   security-events: write

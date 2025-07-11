@@ -2,7 +2,7 @@ name: Deploy (Optimized)
 
 on:
   push:
-    branches: ["dev*", "qa*", "staging*", "hotfix*"]
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -95,7 +95,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [validate]
-    if: github.ref == 'refs/heads/dev*' || github.ref == 'refs/heads/qa*' || github.ref == 'refs/heads/staging*' || github.ref == 'refs/heads/hotfix*' || github.event.inputs.force_deploy == 'true'
+    if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -164,7 +164,7 @@ jobs:
       - name: Download Terraform Plan
         uses: actions/download-artifact@v3
         with:
-          name: terraform-plan-${{ steps.env.outputs.environment }}
+          name: terraform-plan-${{ github.event.inputs.environment || 'prod' }}
           path: terraform/environments/
 
       - name: Setup Terraform
@@ -175,40 +175,12 @@ jobs:
       - name: Determine Environment
         id: env
         run: |
-          # Determine environment based on branch or manual input
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            ENVIRONMENT="prod"
-          elif [[ "${{ github.ref }}" =~ refs/heads/dev[0-9]+ ]]; then
-            # Extract dev environment from branch name (e.g., dev01 -> dev01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/qa[0-9]+ ]]; then
-            # Extract qa environment from branch name (e.g., qa01 -> qa01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/staging[0-9]+ ]]; then
-            # Extract staging environment from branch name (e.g., staging01 -> staging01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/hotfix[0-9]+ ]]; then
-            # Extract hotfix environment from branch name (e.g., hotfix01 -> hotfix01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
-            ENVIRONMENT="dev"
-          elif [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
-            ENVIRONMENT="qa"
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
-            ENVIRONMENT="staging"
-          else
-            ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
-          fi
-
+          ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
           MAIN_ENV=$(echo $ENVIRONMENT | sed 's/[0-9]*$//')
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
           echo "is_sub_env=$([[ "$ENVIRONMENT" =~ [0-9]+$ ]] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
-
-          echo "Deploying to environment: $ENVIRONMENT"
-          echo "Main environment: $MAIN_ENV"
-          echo "Is sub-environment: ${{ steps.env.outputs.is_sub_env }}"
 
       - name: Terraform Apply
         id: terraform
@@ -259,7 +231,7 @@ jobs:
   health-check:
     runs-on: ubuntu-latest
     needs: [deploy]
-    if: github.ref == 'refs/heads/dev*' || github.ref == 'refs/heads/qa*' || github.ref == 'refs/heads/staging*' || github.ref == 'refs/heads/hotfix*' || github.event.inputs.force_deploy == 'true'
+    if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -274,25 +246,7 @@ jobs:
       - name: Health check
         run: |
           # Determine the domain based on environment
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            ENVIRONMENT="prod"
-          elif [[ "${{ github.ref }}" =~ refs/heads/dev[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/qa[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/staging[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/hotfix[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
-            ENVIRONMENT="dev"
-          elif [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
-            ENVIRONMENT="qa"
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
-            ENVIRONMENT="staging"
-          else
-            ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
-          fi
+          ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
 
           if [[ "$ENVIRONMENT" =~ [0-9]+$ ]]; then
             # Sub-environment: dev22 -> dev22.hibiji.com, hotfix01 -> hotfix01.hibiji.com

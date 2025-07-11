@@ -21,9 +21,11 @@ on:
           - staging01
           - staging02
           - staging03
+          - hotfix
+          - hotfix01
+          - hotfix02
+          - hotfix03
           - prod
-          - prod01
-          - prod02
       reason:
         description: "Reason for emergency deployment"
         required: true
