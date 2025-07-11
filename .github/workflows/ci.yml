@@ -239,6 +239,9 @@ jobs:
 
           cd terraform/environments/$MAIN_ENV
 
+          # Initialize Terraform first
+          terraform init
+
           # Create/select workspace for planning
           if terraform workspace list | grep -q "$SUB_ENV"; then
             echo "Workspace $SUB_ENV exists, selecting it"
@@ -251,7 +254,8 @@ jobs:
       - name: Terraform Init
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
-          terraform init
+          # Terraform init is already done in the previous step
+          echo "Terraform already initialized"
 
       - name: Terraform Plan
         run: |
@@ -260,6 +264,11 @@ jobs:
           # Get ECR registry URL for variables
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+
+          echo "Using ECR registry: $ECR_REGISTRY"
+          echo "Planning for environment: ${{ steps.env.outputs.environment }}"
+          echo "Main environment: ${{ steps.env.outputs.main_env }}"
+          echo "Is sub-environment: ${{ steps.env.outputs.is_sub_env }}"
 
           # Plan with sub-environment variable if it's a sub-environment
           if [[ "${{ steps.env.outputs.is_sub_env }}" == "true" ]]; then
@@ -278,6 +287,15 @@ jobs:
               -var="image_tag=latest" \
               -var="frontend_image_tag=latest"
           fi
+
+          # Verify the plan file was created
+          if [ ! -f "tfplan" ]; then
+            echo "❌ Terraform plan file was not created"
+            exit 1
+          fi
+
+          echo "✅ Terraform plan created successfully"
+          ls -la tfplan
 
       - name: Upload Terraform Plan
         uses: actions/upload-artifact@v4
