@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-west-2
+  AWS_REGION: us-west-1
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "18"
 
@@ -185,7 +185,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-west-1
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3

@@ -44,11 +44,8 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-west-2
+  AWS_REGION: us-west-1
   DOMAIN: hibiji.com
-  ECS_CLUSTER: dpp-cluster
-  BACKEND_SERVICE: dpp-backend-service
-  FRONTEND_SERVICE: dpp-frontend-service
 
 # Prevent multiple deployments to the same environment
 concurrency:
@@ -105,7 +102,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-west-1
 
       - name: Get ECR Registry URL
         id: ecr
@@ -229,31 +226,65 @@ jobs:
             terraform apply -auto-approve tfplan
           fi
 
+      - name: Extract Environment Variables
+        id: env_vars
+        run: |
+          # Determine environment based on branch or manual input
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENVIRONMENT="prod"
+          elif [[ "${{ github.ref }}" =~ refs/heads/dev[0-9]+ ]]; then
+            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed "s/^refs/heads///")
+          elif [[ "${{ github.ref }}" =~ refs/heads/qa[0-9]+ ]]; then
+            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed "s/^refs/heads///")
+          elif [[ "${{ github.ref }}" =~ refs/heads/staging[0-9]+ ]]; then
+            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed "s/^refs/heads///")
+          elif [[ "${{ github.ref }}" =~ refs/heads/hotfix[0-9]+ ]]; then
+            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed "s/^refs/heads///")
+          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+            ENVIRONMENT="dev"
+          elif [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
+            ENVIRONMENT="qa"
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            ENVIRONMENT="staging"
+          else
+            ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
+          fi
+
+          # Extract main environment (remove numbers)
+          MAIN_ENV=$(echo $ENVIRONMENT | sed "s/[0-9]*$//")
+
+          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+          echo "MAIN_ENV=$MAIN_ENV" >> $GITHUB_ENV
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
+
+          echo "Deploying to environment: $ENVIRONMENT"
+          echo "Main environment: $MAIN_ENV"
       - name: Update ECS services
         run: |
           # Update backend service
           aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.BACKEND_SERVICE }} \
+            --cluster hibiji-${{ env.ENVIRONMENT }}-cluster \
+            --service hibiji-${{ env.ENVIRONMENT }}-backend \
             --force-new-deployment
 
           # Update frontend service
           aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.FRONTEND_SERVICE }} \
+            --cluster hibiji-${{ env.ENVIRONMENT }}-cluster \
+            --service hibiji-${{ env.ENVIRONMENT }}-frontend \
             --force-new-deployment
 
       - name: Wait for deployment
         run: |
           # Wait for backend service to stabilize
           aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.BACKEND_SERVICE }}
+            --cluster hibiji-${{ env.ENVIRONMENT }}-cluster \
+            --services hibiji-${{ env.ENVIRONMENT }}-backend
 
           # Wait for frontend service to stabilize
           aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.FRONTEND_SERVICE }}
+            --cluster hibiji-${{ env.ENVIRONMENT }}-cluster \
+            --services hibiji-${{ env.ENVIRONMENT }}-frontend
 
   # Health Check
   health-check:
@@ -269,7 +300,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-west-1
 
       - name: Health check
         run: |
@@ -346,7 +377,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-west-1
 
       - name: Rollback ECS services
         run: |
@@ -354,13 +385,13 @@ jobs:
 
           # Rollback to previous version
           aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.BACKEND_SERVICE }} \
+            --cluster hibiji-${{ env.ENVIRONMENT }}-cluster \
+            --service hibiji-${{ env.ENVIRONMENT }}-backend \
             --force-new-deployment
 
           aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.FRONTEND_SERVICE }} \
+            --cluster hibiji-${{ env.ENVIRONMENT }}-cluster \
+            --service hibiji-${{ env.ENVIRONMENT }}-frontend \
             --force-new-deployment
 
           echo "✅ Rollback initiated"

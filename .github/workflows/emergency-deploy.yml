@@ -36,7 +36,7 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-west-2
+  AWS_REGION: us-west-1
   DOMAIN: hibiji.com
 
 jobs:
@@ -58,7 +58,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-west-1
 
       - name: Get ECR Registry URL
         run: |
@@ -144,20 +144,20 @@ jobs:
       - name: Update ECS services
         run: |
           aws ecs update-service \
-            --cluster dpp-cluster \
-            --service dpp-backend-service \
+            --cluster hibiji-${ENVIRONMENT}-cluster \
+            --service hibiji-${ENVIRONMENT}-backend \
             --force-new-deployment
 
           aws ecs update-service \
-            --cluster dpp-cluster \
-            --service dpp-frontend-service \
+            --cluster hibiji-${ENVIRONMENT}-cluster \
+            --service hibiji-${ENVIRONMENT}-frontend \
             --force-new-deployment
 
       - name: Wait for deployment
         run: |
           aws ecs wait services-stable \
-            --cluster dpp-cluster \
-            --services dpp-backend-service dpp-frontend-service
+            --cluster hibiji-${ENVIRONMENT}-cluster \
+            --services hibiji-${ENVIRONMENT}-backend hibiji-${ENVIRONMENT}-frontend
 
       - name: Emergency deployment complete
         run: |
