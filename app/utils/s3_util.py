@@ -16,9 +16,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# S3 Configuration
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+# S3 Configuration - Using IAM roles instead of access keys
 AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "digital-persona-platform")
 AWS_REGION = os.getenv("AWS_REGION", "us-west-1")
 AWS_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")  # For localstack testing
@@ -149,8 +147,6 @@ class S3Service:
         async with session.client(
             "s3",
             region_name=self.region,
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             endpoint_url=AWS_ENDPOINT_URL
         ) as s3:
             await s3.upload_fileobj(
@@ -174,8 +170,6 @@ class S3Service:
         async with self.session.client(
             "s3",
             region_name=self.region,
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             endpoint_url=AWS_ENDPOINT_URL
         ) as s3:
             # Initiate multipart upload
@@ -246,8 +240,6 @@ class S3Service:
             async with self.session.client(
                 "s3",
                 region_name=self.region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
                 endpoint_url=AWS_ENDPOINT_URL
             ) as s3:
                 await s3.delete_object(Bucket=self.bucket, Key=s3_key)
@@ -263,8 +255,6 @@ class S3Service:
             async with self.session.client(
                 "s3",
                 region_name=self.region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
                 endpoint_url=AWS_ENDPOINT_URL
             ) as s3:
                 url = await s3.generate_presigned_url(
@@ -287,8 +277,6 @@ class S3Service:
             async with self.session.client(
                 "s3",
                 region_name=self.region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
                 endpoint_url=AWS_ENDPOINT_URL
             ) as s3:
                 url = await s3.generate_presigned_url(
@@ -328,8 +316,6 @@ class S3Service:
             async with self.session.client(
                 "s3",
                 region_name=self.region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
                 endpoint_url=AWS_ENDPOINT_URL
             ) as s3:
                 response = await s3.list_objects_v2(
@@ -358,8 +344,6 @@ class S3Service:
             async with self.session.client(
                 "s3",
                 region_name=self.region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
                 endpoint_url=AWS_ENDPOINT_URL
             ) as s3:
                 response = await s3.head_object(Bucket=self.bucket, Key=s3_key)
@@ -384,8 +368,6 @@ class S3Service:
             async with self.session.client(
                 "s3",
                 region_name=self.region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
                 endpoint_url=AWS_ENDPOINT_URL
             ) as s3:
                 await s3.copy_object(

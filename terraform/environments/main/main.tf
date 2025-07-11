@@ -360,6 +360,7 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Updated ECS Task Role to use our new application policy
 resource "aws_iam_role" "ecs_task" {
   name = "${local.resource_prefix}-ecs-task"
 
@@ -375,6 +376,12 @@ resource "aws_iam_role" "ecs_task" {
       }
     ]
   })
+}
+
+# Attach our new application policy to the ECS task role
+resource "aws_iam_role_policy_attachment" "ecs_task_application" {
+  role       = aws_iam_role.ecs_task.name
+  policy_arn = "arn:aws:iam::570827307849:policy/EC2ApplicationPolicy"
 }
 
 # Secrets Manager
