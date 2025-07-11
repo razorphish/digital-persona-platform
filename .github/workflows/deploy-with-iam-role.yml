@@ -28,6 +28,14 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Get ECR Registry URL
+        run: |
+          # Get the ECR registry URL dynamically
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          echo "ECR_REGISTRY=$ECR_REGISTRY" >> $GITHUB_ENV
+          echo "Using ECR registry: $ECR_REGISTRY"
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -44,6 +52,10 @@ jobs:
           terraform plan -out=tfplan
         env:
           TF_VAR_environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+          TF_VAR_ecr_repository_url: ${{ env.ECR_REGISTRY }}/dpp-backend
+          TF_VAR_frontend_ecr_repository_url: ${{ env.ECR_REGISTRY }}/dpp-frontend
+          TF_VAR_image_tag: ${{ github.sha }}
+          TF_VAR_frontend_image_tag: ${{ github.sha }}
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -52,24 +64,28 @@ jobs:
           terraform apply -auto-approve tfplan
         env:
           TF_VAR_environment: prod
+          TF_VAR_ecr_repository_url: ${{ env.ECR_REGISTRY }}/dpp-backend
+          TF_VAR_frontend_ecr_repository_url: ${{ env.ECR_REGISTRY }}/dpp-frontend
+          TF_VAR_image_tag: ${{ github.sha }}
+          TF_VAR_frontend_image_tag: ${{ github.sha }}
 
       - name: Build and push Docker images
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           # Build backend image
           docker build -t dpp-backend:${{ github.sha }} .
-          docker tag dpp-backend:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}/dpp-backend:${{ github.sha }}
-          docker tag dpp-backend:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}/dpp-backend:latest
-          docker push ${{ secrets.ECR_REGISTRY }}/dpp-backend:${{ github.sha }}
-          docker push ${{ secrets.ECR_REGISTRY }}/dpp-backend:latest
+          docker tag dpp-backend:${{ github.sha }} ${{ env.ECR_REGISTRY }}/dpp-backend:${{ github.sha }}
+          docker tag dpp-backend:${{ github.sha }} ${{ env.ECR_REGISTRY }}/dpp-backend:latest
+          docker push ${{ env.ECR_REGISTRY }}/dpp-backend:${{ github.sha }}
+          docker push ${{ env.ECR_REGISTRY }}/dpp-backend:latest
 
           # Build frontend image
           cd frontend
           docker build -t dpp-frontend:${{ github.sha }} .
-          docker tag dpp-frontend:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}/dpp-frontend:${{ github.sha }}
-          docker tag dpp-frontend:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}/dpp-frontend:latest
-          docker push ${{ secrets.ECR_REGISTRY }}/dpp-frontend:${{ github.sha }}
-          docker push ${{ secrets.ECR_REGISTRY }}/dpp-frontend:latest
+          docker tag dpp-frontend:${{ github.sha }} ${{ env.ECR_REGISTRY }}/dpp-frontend:${{ github.sha }}
+          docker tag dpp-frontend:${{ github.sha }} ${{ env.ECR_REGISTRY }}/dpp-frontend:latest
+          docker push ${{ env.ECR_REGISTRY }}/dpp-frontend:${{ github.sha }}
+          docker push ${{ env.ECR_REGISTRY }}/dpp-frontend:latest
 
       - name: Update ECS services
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
