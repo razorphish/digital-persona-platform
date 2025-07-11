@@ -230,6 +230,25 @@ jobs:
           echo "Main environment: $MAIN_ENV"
           echo "Is sub-environment: ${{ steps.env.outputs.is_sub_env }}"
 
+      - name: Set up Terraform workspace for planning
+        run: |
+          MAIN_ENV="${{ steps.env.outputs.main_env }}"
+          SUB_ENV="${{ steps.env.outputs.environment }}"
+
+          echo "Setting up workspace for planning: $SUB_ENV"
+          echo "Main environment: $MAIN_ENV"
+
+          cd terraform/environments/$MAIN_ENV
+
+          # Create/select workspace for planning
+          if terraform workspace list | grep -q "$SUB_ENV"; then
+            echo "Workspace $SUB_ENV exists, selecting it"
+            terraform workspace select "$SUB_ENV"
+          else
+            echo "Creating new workspace for planning: $SUB_ENV"
+            terraform workspace new "$SUB_ENV"
+          fi
+
       - name: Terraform Init
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
