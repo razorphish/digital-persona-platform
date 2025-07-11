@@ -172,10 +172,9 @@ jobs:
             safety-report.json
             frontend/npm-audit.json
 
-  # Terraform Plan (runs after tests complete)
+  # Terraform Plan (runs independently to ensure it always generates the plan)
   terraform-plan:
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests, security-scan]
     timeout-minutes: 20
     steps:
       - name: Checkout code
