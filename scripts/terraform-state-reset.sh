@@ -31,6 +31,14 @@ echo -e "${YELLOW}Region: ${REGION}${NC}"
 # Navigate to Terraform directory
 cd terraform/environments/main
 
+# Verify we're in the right directory
+if [ ! -f "main.tf" ]; then
+    echo -e "${RED}❌ Error: main.tf not found. Please run this script from the project root.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Found Terraform configuration in $(pwd)${NC}"
+
 echo -e "\n${YELLOW}Step 1: Backing up current state...${NC}"
 if [ -f "terraform.tfstate" ]; then
     cp terraform.tfstate terraform.tfstate.backup.$(date +%Y%m%d_%H%M%S)

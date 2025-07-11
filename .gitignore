@@ -69,6 +69,7 @@ yarn-error.log*
 # Frontend build
 frontend/build/
 frontend/dist/
+frontend/coverage/
 
 # Testing
 .coverage
@@ -133,3 +134,15 @@ test_*.txt
 .terraform.lock.hcl
 tfplan
 tfplan.* .env
+
+# Template assets (not used in production)
+frontend/tailwind-plus-radiant/
+
+# Manual test files
+manual_test.py
+run_tests.py
+run-tests-with-timeout.py
+test-server-startup.py
+
+# Development scripts (keep in scripts/ directory)
+# test-*.sh files in root should be moved to scripts/
