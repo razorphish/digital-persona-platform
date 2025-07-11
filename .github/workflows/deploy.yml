@@ -1,0 +1,221 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        default: "prod"
+        type: choice
+        options:
+          - dev
+          - dev01
+          - dev02
+          - dev03
+          - qa
+          - qa01
+          - qa02
+          - qa03
+          - staging
+          - staging01
+          - staging02
+          - staging03
+          - prod
+          - prod01
+          - prod02
+      force_deploy:
+        description: "Force deployment even if tests fail"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+  DOMAIN: hibiji.com
+
+jobs:
+  # Build and Deploy
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.force_deploy == 'true' || true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get ECR Registry URL
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          echo "ECR_REGISTRY=$ECR_REGISTRY" >> $GITHUB_ENV
+          echo "Using ECR registry: $ECR_REGISTRY"
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push backend image
+        id: backend-build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: dpp-backend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Build, tag, and push frontend image
+        id: frontend-build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: dpp-frontend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd frontend
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v3
+        with:
+          name: terraform-plan
+          path: terraform/environments/main/
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Terraform Apply
+        run: |
+          # Determine environment and sub-environment
+          ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
+          MAIN_ENV=$(echo $ENVIRONMENT | sed 's/[0-9]*$//')
+          SUB_ENV="$ENVIRONMENT"
+
+          echo "Deploying to environment: $ENVIRONMENT"
+          echo "Main environment: $MAIN_ENV"
+          echo "Sub environment: $SUB_ENV"
+
+          # Use main environment directory
+          cd terraform/environments/$MAIN_ENV
+
+          # Apply with sub-environment variable if it's a sub-environment
+          if [[ "$ENVIRONMENT" =~ [0-9]+$ ]]; then
+            echo "Deploying to sub-environment: $SUB_ENV"
+            terraform apply -auto-approve tfplan \
+              -var="sub_environment=$SUB_ENV" \
+              -var="ecr_repository_url=${{ steps.backend-build.outputs.image }}" \
+              -var="frontend_ecr_repository_url=${{ steps.frontend-build.outputs.image }}" \
+              -var="image_tag=${{ github.sha }}" \
+              -var="frontend_image_tag=${{ github.sha }}"
+          else
+            echo "Deploying to main environment: $ENVIRONMENT"
+            terraform apply -auto-approve tfplan
+          fi
+        env:
+          TF_VAR_environment: ${{ github.event.inputs.environment || 'prod' }}
+          TF_VAR_ecr_repository_url: ${{ steps.backend-build.outputs.image }}
+          TF_VAR_frontend_ecr_repository_url: ${{ steps.frontend-build.outputs.image }}
+          TF_VAR_image_tag: ${{ github.sha }}
+          TF_VAR_frontend_image_tag: ${{ github.sha }}
+
+      - name: Update ECS services
+        run: |
+          # Update backend service
+          aws ecs update-service \
+            --cluster dpp-cluster \
+            --service dpp-backend-service \
+            --force-new-deployment
+
+          # Update frontend service
+          aws ecs update-service \
+            --cluster dpp-cluster \
+            --service dpp-frontend-service \
+            --force-new-deployment
+
+      - name: Wait for deployment
+        run: |
+          # Wait for backend service to stabilize
+          aws ecs wait services-stable \
+            --cluster dpp-cluster \
+            --services dpp-backend-service
+
+          # Wait for frontend service to stabilize
+          aws ecs wait services-stable \
+            --cluster dpp-cluster \
+            --services dpp-frontend-service
+
+  # Health Check
+  health-check:
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: github.event.inputs.force_deploy == 'true' || true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Health check
+        run: |
+          # Determine the domain based on environment
+          ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
+
+          if [[ "$ENVIRONMENT" =~ [0-9]+$ ]]; then
+            # Sub-environment: dev22 -> dev22.hibiji.com
+            DOMAIN="$ENVIRONMENT.${{ env.DOMAIN }}"
+          else
+            # Main environment: dev -> dev.hibiji.com or prod -> hibiji.com
+            if [[ "$ENVIRONMENT" == "prod" ]]; then
+              DOMAIN="${{ env.DOMAIN }}"
+            else
+              DOMAIN="$ENVIRONMENT.${{ env.DOMAIN }}"
+            fi
+          fi
+
+          echo "Performing health checks for: $DOMAIN"
+
+          # Wait for DNS propagation and service availability
+          echo "Waiting for service to become available..."
+          for i in {1..10}; do
+            echo "Attempt $i/10: Checking if service is available..."
+            
+            if curl -fs --max-time 10 https://$DOMAIN/health >/dev/null 2>&1; then
+              echo "✅ Health endpoint available at https://$DOMAIN/health"
+              break
+            else
+              echo "⏳ Service not ready yet..."
+              if [ $i -eq 10 ]; then
+                echo "❌ Service did not become available within timeout"
+                exit 1
+              fi
+              sleep 30
+            fi
+          done
+
+          # Additional health checks
+          echo "Testing API health endpoint..."
+          curl -f --max-time 30 https://$DOMAIN/api/health || echo "API health check failed"
+
+          echo "✅ Health checks completed for $DOMAIN"
