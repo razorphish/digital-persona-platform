@@ -257,13 +257,26 @@ jobs:
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
 
+          # Get ECR registry URL for variables
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+
           # Plan with sub-environment variable if it's a sub-environment
           if [[ "${{ steps.env.outputs.is_sub_env }}" == "true" ]]; then
             echo "Planning for sub-environment: ${{ steps.env.outputs.environment }}"
-            terraform plan -out=tfplan -var="sub_environment=${{ steps.env.outputs.environment }}"
+            terraform plan -out=tfplan \
+              -var="sub_environment=${{ steps.env.outputs.environment }}" \
+              -var="ecr_repository_url=${ECR_REGISTRY}/dpp-backend" \
+              -var="frontend_ecr_repository_url=${ECR_REGISTRY}/dpp-frontend" \
+              -var="image_tag=latest" \
+              -var="frontend_image_tag=latest"
           else
             echo "Planning for main environment: ${{ steps.env.outputs.environment }}"
-            terraform plan -out=tfplan
+            terraform plan -out=tfplan \
+              -var="ecr_repository_url=${ECR_REGISTRY}/dpp-backend" \
+              -var="frontend_ecr_repository_url=${ECR_REGISTRY}/dpp-frontend" \
+              -var="image_tag=latest" \
+              -var="frontend_image_tag=latest"
           fi
 
       - name: Upload Terraform Plan
