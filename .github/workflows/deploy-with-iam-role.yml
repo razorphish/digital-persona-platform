@@ -167,6 +167,6 @@ jobs:
 
       - name: Check IAM permissions
         run: |
-          # Verify current user permissions
+          # Verify current identity (works for both users and roles)
           aws sts get-caller-identity
-          aws iam get-user
+          echo "✅ IAM permissions check completed successfully"

@@ -13,7 +13,7 @@ The failure occurred because the GitHub Actions job is not authorized to perform
 2. **IAM GetUser Permission Error:**
 
 ```
-An error occurred (AccessDenied) when calling the GetUser operation: User: arn:aws:sts::570827307849:assumed-role/GitHubActionsRole/GitHubActions is not authorized to perform: iam:GetUser on resource: user GitHubActions because no identity-based policy allows the iam:Get
+An error occurred (ValidationError) when calling the GetUser operation: Must specify userName when calling with non-User credentials
 ```
 
 ## Root Cause
@@ -21,7 +21,7 @@ An error occurred (AccessDenied) when calling the GetUser operation: User: arn:a
 The `TerraformPolicy` attached to the `GitHubActionsRole` was missing several permissions:
 
 1. **S3 permissions** required for Terraform to access the state file stored in S3
-2. **IAM GetUser permission** required for the security scan job to verify user identity
+2. **IAM GetUser permission** issue resolved by removing the command (not needed for assumed roles)
 
 ## Solution Applied
 
@@ -48,11 +48,8 @@ Added new permissions to `terraform/iam-policies/terraform-policy.json`:
 }
 ```
 
-**IAM GetUser Permission (added to existing TerraformIAMAccess statement):**
-
-```json
-"iam:GetUser"
-```
+**IAM GetUser Permission Issue:**
+The `aws iam get-user` command was removed from the workflow since it doesn't work with assumed roles. Instead, we use `aws sts get-caller-identity` which works for both users and roles.
 
 ### 2. Created Update Script
 
@@ -80,7 +77,7 @@ The fix was verified by:
 1. Successfully updating the TerraformPolicy in AWS
 2. Testing S3 bucket access (`s3:ListBucket`)
 3. Testing S3 object retrieval (`s3:GetObject`)
-4. Testing IAM user access (`iam:GetUser`)
+4. Testing IAM identity verification (`aws sts get-caller-identity`)
 
 ## Result
 
@@ -89,7 +86,7 @@ The GitHub Actions workflow should now be able to:
 - Access the Terraform state file: `s3://hibiji-terraform-state/main/terraform.tfstate`
 - Perform `terraform init`, `plan`, and `apply` operations
 - Deploy infrastructure successfully without permission errors
-- Run security scans with IAM user verification
+- Run security scans with IAM identity verification
 - Execute all AWS CLI commands in the security-scan job
 
 ## Next Steps
