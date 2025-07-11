@@ -22,8 +22,6 @@ on:
           - staging02
           - staging03
           - prod
-          - prod01
-          - prod02
       reason:
         description: "Reason for emergency deployment"
         required: true

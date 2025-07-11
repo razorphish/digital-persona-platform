@@ -188,7 +188,7 @@ rm .github/workflows/debug-workflow.yml
 - **dev22, dev23, etc.**: Sub-development environments (dev22.hibiji.com)
 - **qa01, qa02, etc.**: Sub-QA environments (qa01.hibiji.com)
 - **staging01, staging02, etc.**: Sub-staging environments (staging01.hibiji.com)
-- **prod01, prod02, etc.**: Sub-production environments (prod01.hibiji.com)
+- **prod**: Production environment (hibiji.com) - deployed from main branch
 - **feature branches**: CI only
 
 ### Environment Variables
@@ -212,7 +212,7 @@ The new workflows support sub-environments with automatic domain mapping:
 - `dev22` branch → `dev22.hibiji.com`
 - `qa01` branch → `qa01.hibiji.com`
 - `staging03` branch → `staging03.hibiji.com`
-- `prod02` branch → `prod02.hibiji.com`
+- `main` branch → `hibiji.com` (production)
 
 ## Monitoring and Observability
 

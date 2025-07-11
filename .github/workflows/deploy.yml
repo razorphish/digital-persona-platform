@@ -22,8 +22,6 @@ on:
           - staging02
           - staging03
           - prod
-          - prod01
-          - prod02
       force_deploy:
         description: "Force deployment even if tests fail"
         required: false

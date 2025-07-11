@@ -139,8 +139,7 @@ jobs:
             ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
           elif [[ "${{ github.ref }}" =~ refs/heads/staging[0-9]+ ]]; then
             ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/prod[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
+          # Note: prod sub-environments removed since main branch handles production
           else
             ENVIRONMENT="dev"
           fi
