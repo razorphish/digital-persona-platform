@@ -132,4 +132,4 @@ test_*.txt
 *.tfstate.*
 .terraform.lock.hcl
 tfplan
-tfplan.* 
+tfplan.* .env
