@@ -235,14 +235,14 @@ jobs:
           # Determine environment based on branch
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             ENVIRONMENT="prod"
-          elif [[ "${{ github.ref }}" =~ refs/heads/dev[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/qa[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/staging[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/hotfix[0-9]+ ]]; then
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
+          elif [[ "${{ github.ref_name }}" =~ ^dev[0-9]+$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
+          elif [[ "${{ github.ref_name }}" =~ ^qa[0-9]+$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
+          elif [[ "${{ github.ref_name }}" =~ ^staging[0-9]+$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
+          elif [[ "${{ github.ref_name }}" =~ ^hotfix[0-9]+$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
           else
             ENVIRONMENT="dev"
           fi
