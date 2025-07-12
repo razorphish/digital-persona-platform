@@ -266,16 +266,30 @@ jobs:
           echo "Testing AWS credentials..."
           aws sts get-caller-identity
 
+          # Check if directory exists
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+
+          # Check if Terraform files exist
+          echo "Terraform files:"
+          ls -la *.tf 2>/dev/null || echo "No .tf files found"
+
           # Initialize Terraform
+          echo "Initializing Terraform..."
           terraform init
 
-          # List current directory
-          echo "Current directory contents:"
+          # List current directory after init
+          echo "Directory contents after init:"
           ls -la
 
       - name: Terraform Plan
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
+
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
 
           # Get ECR registry URL for variables
           echo "Getting AWS account ID..."
@@ -318,12 +332,16 @@ jobs:
             echo "✅ Terraform plan completed successfully (changes detected)"
           else
             echo "❌ Terraform plan failed with exit code $PLAN_EXIT_CODE"
+            echo "Current directory contents:"
+            ls -la
             exit 1
           fi
 
           # Verify the plan file was created
           if [ ! -f "tfplan" ]; then
             echo "❌ Terraform plan file was not created"
+            echo "Current directory contents:"
+            ls -la
             exit 1
           fi
 
@@ -335,6 +353,28 @@ jobs:
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+
+      - name: Verify Artifact Upload
+        run: |
+          echo "Verifying artifact upload..."
+          echo "Environment: ${{ steps.env.outputs.environment }}"
+          echo "Main environment: ${{ steps.env.outputs.main_env }}"
+          echo "Expected artifact name: terraform-plan-${{ steps.env.outputs.environment }}"
+          echo "Expected path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
+
+          # Check if the file exists before upload
+          if [ -f "terraform/environments/${{ steps.env.outputs.main_env }}/tfplan" ]; then
+            echo "✅ Terraform plan file exists before upload"
+            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+          else
+            echo "❌ Terraform plan file does not exist before upload"
+            echo "Current directory: $(pwd)"
+            echo "Directory contents:"
+            ls -la
+            echo "terraform/environments/${{ steps.env.outputs.main_env }}/ contents:"
+            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/ 2>/dev/null || echo "Directory not found"
+            exit 1
+          fi
 
   # Quality Gate (runs after all jobs)
   quality-gate:
