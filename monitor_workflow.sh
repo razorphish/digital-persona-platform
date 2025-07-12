@@ -1,73 +1,97 @@
 #!/bin/bash
 
 # GitHub Workflow Monitor Script
-# Monitors the progress of the most recent workflow run
+# Monitors the progress of workflow runs with enhanced features
 
 REPO="razorphish/digital-persona-platform"
 INTERVAL=30  # Check every 30 seconds
 
-echo "🔍 Monitoring GitHub workflow for repository: $REPO"
+echo "🔍 GitHub Workflow Monitor"
+echo "Repository: $REPO"
 echo "⏱️  Checking every $INTERVAL seconds..."
 echo "Press Ctrl+C to stop monitoring"
+echo ""
+
+# Show available workflows first
+echo "📋 Available Workflows:"
+./check_workflow.sh --list
+echo ""
+
+# Ask user which workflow to monitor
+echo "Choose monitoring option:"
+echo "1. Monitor most recent run (default)"
+echo "2. Monitor specific workflow"
+echo "3. Monitor all recent runs"
+echo ""
+read -p "Enter your choice (1-3) [1]: " monitor_choice
+
+case "${monitor_choice:-1}" in
+    1)
+        echo "🔄 Monitoring most recent workflow run..."
+        WORKFLOW_NAME=""
+        ;;
+    2)
+        echo ""
+        ./check_workflow.sh --list
+        echo ""
+        read -p "Enter workflow name to monitor: " WORKFLOW_NAME
+        if [ -z "$WORKFLOW_NAME" ]; then
+            echo "❌ No workflow name provided, monitoring most recent run"
+            WORKFLOW_NAME=""
+        else
+            echo "🔄 Monitoring workflow: $WORKFLOW_NAME"
+        fi
+        ;;
+    3)
+        echo "🔄 Monitoring all recent workflow runs..."
+        WORKFLOW_NAME="--all"
+        ;;
+    *)
+        echo "🔄 Monitoring most recent workflow run..."
+        WORKFLOW_NAME=""
+        ;;
+esac
+
+echo ""
+echo "Starting monitoring... (Press Ctrl+C to stop)"
 echo ""
 
 while true; do
     echo "=== $(date '+%Y-%m-%d %H:%M:%S') ==="
     
-    # Get the most recent workflow run
-    RUN_INFO=$(gh run list --json databaseId,status,conclusion,name,createdAt,updatedAt,url --limit 1 2>/dev/null)
-    
-    if [ $? -eq 0 ] && [ -n "$RUN_INFO" ]; then
-        # Extract information using jq if available, otherwise use grep
-        if command -v jq &> /dev/null; then
-            RUN_ID=$(echo "$RUN_INFO" | jq -r '.[0].databaseId // "N/A"')
-            STATUS=$(echo "$RUN_INFO" | jq -r '.[0].status // "N/A"')
-            CONCLUSION=$(echo "$RUN_INFO" | jq -r '.[0].conclusion // "N/A"')
-            NAME=$(echo "$RUN_INFO" | jq -r '.[0].name // "N/A"')
-            CREATED=$(echo "$RUN_INFO" | jq -r '.[0].createdAt // "N/A"')
-            URL=$(echo "$RUN_INFO" | jq -r '.[0].url // "N/A"')
-        else
-            # Fallback to grep if jq is not available
-            RUN_ID=$(echo "$RUN_INFO" | grep -o '"databaseId":[0-9]*' | cut -d':' -f2 || echo "N/A")
-            STATUS=$(echo "$RUN_INFO" | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "N/A")
-            CONCLUSION=$(echo "$RUN_INFO" | grep -o '"conclusion":"[^"]*"' | cut -d'"' -f4 || echo "N/A")
-            NAME=$(echo "$RUN_INFO" | grep -o '"name":"[^"]*"' | cut -d'"' -f4 || echo "N/A")
-            CREATED=$(echo "$RUN_INFO" | grep -o '"createdAt":"[^"]*"' | cut -d'"' -f4 || echo "N/A")
-            URL=$(echo "$RUN_INFO" | grep -o '"url":"[^"]*"' | cut -d'"' -f4 || echo "N/A")
-        fi
-        
-        echo "📋 Workflow: $NAME"
-        echo "🆔 Run ID: $RUN_ID"
-        echo "📊 Status: $STATUS"
-        echo "✅ Conclusion: $CONCLUSION"
-        echo "🕐 Created: $CREATED"
-        echo "🔗 URL: $URL"
-        
-        # Check if workflow is completed
-        if [ "$STATUS" = "completed" ]; then
-            if [ "$CONCLUSION" = "success" ]; then
-                echo "🎉 Workflow completed successfully!"
-                break
-            elif [ "$CONCLUSION" = "failure" ]; then
-                echo "❌ Workflow failed!"
-                break
-            elif [ "$CONCLUSION" = "cancelled" ]; then
-                echo "🚫 Workflow was cancelled!"
-                break
-            fi
-        fi
-        
-        # Get detailed job status if workflow is in progress
-        if [ "$STATUS" = "in_progress" ]; then
-            echo ""
-            echo "📈 Job Status:"
-            gh run view $RUN_ID --json jobs 2>/dev/null | jq -r '.jobs[] | "  \(.name): \(.status) (\(.conclusion // "running"))"' 2>/dev/null || echo "  Unable to get job details"
-        fi
-        
+    if [ "$WORKFLOW_NAME" = "--all" ]; then
+        # Monitor all recent runs
+        ./check_workflow.sh --all
+    elif [ -n "$WORKFLOW_NAME" ]; then
+        # Monitor specific workflow
+        ./check_workflow.sh "$WORKFLOW_NAME"
     else
-        echo "❌ Unable to fetch workflow information"
-        echo "   Make sure you're authenticated: gh auth login"
-        echo "   Or check the repository URL: https://github.com/$REPO/actions"
+        # Monitor most recent run
+        ./check_workflow.sh
+    fi
+    
+    # Check if any workflow is completed
+    if [ "$WORKFLOW_NAME" = "--all" ]; then
+        # For all runs, check if the most recent one is completed
+        RECENT_STATUS=$(./check_workflow.sh 2>/dev/null | grep "Status:" | head -1)
+        if echo "$RECENT_STATUS" | grep -q "COMPLETED\|FAILED\|CANCELLED"; then
+            echo ""
+            echo "🏁 A workflow has completed. Stopping monitoring."
+            break
+        fi
+    else
+        # For specific workflow or most recent, check completion
+        if [ -n "$WORKFLOW_NAME" ]; then
+            STATUS=$(./check_workflow.sh "$WORKFLOW_NAME" 2>/dev/null | grep "Status:" | head -1)
+        else
+            STATUS=$(./check_workflow.sh 2>/dev/null | grep "Status:" | head -1)
+        fi
+        
+        if echo "$STATUS" | grep -q "COMPLETED\|FAILED\|CANCELLED"; then
+            echo ""
+            echo "🏁 Workflow completed. Stopping monitoring."
+            break
+        fi
     fi
     
     echo ""
