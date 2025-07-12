@@ -94,11 +94,25 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
+        if: always() && github.event_name != 'pull_request'
         with:
           file: ./coverage.xml
           flags: backend
           name: backend-coverage
           fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage-reports
+          path: |
+            coverage.xml
+            .coverage
+          retention-days: 30
 
   # Frontend Tests (runs in parallel with backend tests)
   frontend-tests:
@@ -128,11 +142,24 @@ jobs:
 
       - name: Upload frontend coverage
         uses: codecov/codecov-action@v3
+        if: always() && github.event_name != 'pull_request'
         with:
           file: ./frontend/coverage/lcov.info
           flags: frontend
           name: frontend-coverage
           fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload frontend coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage-reports
+          path: |
+            frontend/coverage/
+          retention-days: 30
 
   # Dependency Scanning (runs in parallel)
   dependency-scan:
