@@ -122,11 +122,33 @@ jobs:
 
       - name: Check Terraform plan exists
         uses: actions/download-artifact@v4
+        if: github.event_name == 'workflow_run'
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: /tmp/terraform-plan
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Find latest CI run for manual trigger
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          # Find the most recent successful CI run
+          LATEST_CI_RUN=$(gh run list --workflow="Continuous Integration (Optimized)" --json databaseId,conclusion --limit 10 | jq -r '.[] | select(.conclusion == "success") | .databaseId' | head -1)
+          if [ -z "$LATEST_CI_RUN" ]; then
+            echo "❌ No successful CI run found. Run CI first."
+            exit 1
+          fi
+          echo "CI_RUN_ID=$LATEST_CI_RUN" >> $GITHUB_ENV
+          echo "Using CI run ID: $LATEST_CI_RUN"
+
+      - name: Download Terraform plan from latest CI run
+        uses: actions/download-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: terraform-plan-${{ steps.env.outputs.environment }}
+          path: /tmp/terraform-plan
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.CI_RUN_ID }}
 
       - name: Verify Terraform plan
         run: |
@@ -251,11 +273,21 @@ jobs:
 
       - name: Download Terraform Plan
         uses: actions/download-artifact@v4
+        if: github.event_name == 'workflow_run'
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: terraform/environments/${{ steps.env.outputs.main_env }}/
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Download Terraform Plan from latest CI run
+        uses: actions/download-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: terraform-plan-${{ steps.env.outputs.environment }}
+          path: terraform/environments/${{ steps.env.outputs.main_env }}/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.CI_RUN_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
