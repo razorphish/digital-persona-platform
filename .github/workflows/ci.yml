@@ -247,7 +247,18 @@ jobs:
             ENVIRONMENT="dev"
           fi
 
-          MAIN_ENV=$(echo $ENVIRONMENT | sed 's/[0-9]*$//')
+          # For sub-environments, use the base environment (dev01 -> dev, qa01 -> qa, etc.)
+          if [[ "$ENVIRONMENT" =~ ^dev[0-9]+$ ]]; then
+            MAIN_ENV="dev"
+          elif [[ "$ENVIRONMENT" =~ ^qa[0-9]+$ ]]; then
+            MAIN_ENV="qa"
+          elif [[ "$ENVIRONMENT" =~ ^staging[0-9]+$ ]]; then
+            MAIN_ENV="staging"
+          elif [[ "$ENVIRONMENT" =~ ^hotfix[0-9]+$ ]]; then
+            MAIN_ENV="hotfix"
+          else
+            MAIN_ENV="$ENVIRONMENT"
+          fi
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
