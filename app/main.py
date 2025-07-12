@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 
 # Import routers
 from app.routers import auth_db, personas_db, media, chat, upload
-from app.routers import ai_capabilities, integrations
 
 # Load environment variables
 load_dotenv()
@@ -80,6 +79,7 @@ app.include_router(upload.router)
 
 # Conditionally include AI routers based on configuration
 if settings.ai_capabilities_enabled:
+    from app.routers import ai_capabilities, integrations
     app.include_router(ai_capabilities.router)
     app.include_router(integrations.router)
 

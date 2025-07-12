@@ -28,7 +28,7 @@ DATABASE_URL = get_database_url()
 # Create async engine
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,  # Set to False in production
+    echo=os.getenv("ENVIRONMENT", "development") != "test",  # Disable echo in test mode
     future=True,
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 )

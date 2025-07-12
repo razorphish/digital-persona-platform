@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.utils.auth import get_current_user_from_token as get_current_user
+from app.services.auth_db import get_current_active_user as get_current_user
 from app.models.user_db import User
 from app.crud.integration import integration_crud, social_post_crud, analytics_crud
 from app.services.social_media_service import social_media_service

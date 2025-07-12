@@ -5,7 +5,7 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from app.models.user_db import User as DBUser
 from app.models.persona_db import Persona as DBPersona
 from app.models.chat_db import Conversation as DBConversation, ChatMessage as DBChatMessage
@@ -24,7 +24,7 @@ class ConversationCreate(BaseModel):
     title: str
     persona_id: int
     
-    @validator('title')
+    @field_validator('title')
     def validate_title(cls, v):
         if not v or not v.strip():
             raise ValueError('Title cannot be empty')
@@ -42,7 +42,7 @@ class ConversationResponse(BaseModel):
 class MessageCreate(BaseModel):
     content: str
     
-    @validator('content')
+    @field_validator('content')
     def validate_content(cls, v):
         if not v or not v.strip():
             raise ValueError('Message content cannot be empty')

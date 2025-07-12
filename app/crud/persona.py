@@ -35,6 +35,7 @@ async def get_or_create_self_persona(db: AsyncSession, user_id: int) -> Persona:
             # Keep the first one, delete the rest
             for persona in existing_personas[1:]:
                 await db.delete(persona)
+            await db.flush()
             await db.commit()
         
         return existing_personas[0]
@@ -59,6 +60,7 @@ async def get_or_create_self_persona(db: AsyncSession, user_id: int) -> Persona:
     )
     
     db.add(default_persona)
+    await db.flush()
     await db.commit()
     await db.refresh(default_persona)
     return default_persona
@@ -74,8 +76,9 @@ async def create_persona(db: AsyncSession, name: str, description: Optional[str]
     )
     
     db.add(db_persona)
-    await db.commit()
+    await db.flush()
     await db.refresh(db_persona)
+    await db.commit()
     return db_persona
 
 async def update_persona(db: AsyncSession, persona: Persona, **kwargs) -> Persona:
@@ -84,8 +87,9 @@ async def update_persona(db: AsyncSession, persona: Persona, **kwargs) -> Person
         if hasattr(persona, field):
             setattr(persona, field, value)
     
-    await db.commit()
+    await db.flush()
     await db.refresh(persona)
+    await db.commit()
     return persona
 
 async def delete_persona(db: AsyncSession, persona_id: int, user_id: int) -> bool:
@@ -93,7 +97,7 @@ async def delete_persona(db: AsyncSession, persona_id: int, user_id: int) -> boo
     persona = await get_persona_by_id(db, persona_id, user_id)
     if persona:
         await db.delete(persona)
-        await db.commit()
+        await db.flush()
         return True
     return False
 
@@ -105,8 +109,9 @@ async def update_persona_learning(db: AsyncSession, persona: Persona, memory_con
     persona.interaction_count = interaction_count
     persona.last_interaction = datetime.utcnow()
     
-    await db.commit()
+    await db.flush()
     await db.refresh(persona)
+    await db.commit()
     return persona
 
 async def generate_persona_summary(db: AsyncSession, persona: Persona) -> str:
@@ -133,7 +138,7 @@ async def generate_persona_summary(db: AsyncSession, persona: Persona) -> str:
         summary_parts.append(f"Learning context: {context_preview}")
     
     # Personality traits (if available)
-    if persona.personality_traits and len(persona.personality_traits) > 0:
+    if persona.personality_traits and isinstance(persona.personality_traits, dict) and len(persona.personality_traits) > 0:
         traits_summary = ", ".join([f"{k.replace('_', ' ')}: {v}" for k, v in persona.personality_traits.items()])
         summary_parts.append(f"Personality traits: {traits_summary}")
     

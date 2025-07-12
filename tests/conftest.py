@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
 
 # Test configuration
 TEST_SERVER_HOST = "127.0.0.1"
-TEST_SERVER_PORT = 8001  # Use different port to avoid conflicts
+TEST_SERVER_PORT = 8002  # Use different port to avoid conflicts
 BASE_URL = f"http://{TEST_SERVER_HOST}:{TEST_SERVER_PORT}"
 TEST_DB_PATH = Path(__file__).parent.parent / "test.db"
 INIT_DB_SQL = Path(__file__).parent.parent / "init-db.sql"
@@ -51,19 +51,6 @@ def reset_test_db():
                     is_active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS personas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    name VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    personality_data TEXT,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             """)
         print(f"✅ Test database created with basic schema at {TEST_DB_PATH}")

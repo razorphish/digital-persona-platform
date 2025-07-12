@@ -1,0 +1,389 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "AWS Cost Monitoring Dashboard",
+    "tags": ["cost", "monitoring", "aws"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Monthly Cost Trend",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd",
+            "legendFormat": "Monthly Cost"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "yAxes": [
+          {
+            "label": "Cost (USD)",
+            "unit": "currencyUSD"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Daily Cost Breakdown",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd",
+            "legendFormat": "Daily Cost"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "yAxes": [
+          {
+            "label": "Cost (USD)",
+            "unit": "currencyUSD"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Cost by Service",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd",
+            "legendFormat": "{{service}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "options": {
+          "pieType": "pie",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Cost by Environment",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd",
+            "legendFormat": "{{environment}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "options": {
+          "pieType": "pie",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Budget vs Actual",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd",
+            "legendFormat": "Current Month"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 50},
+                {"color": "red", "value": 100}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Budget Utilization %",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "(aws_billing_estimated_charges_usd / aws_budget_amount_usd) * 100",
+            "legendFormat": "Utilization"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 80},
+                {"color": "red", "value": 100}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Cost Anomaly Score",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "aws_cost_anomaly_score",
+            "legendFormat": "Anomaly Score"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 0.5},
+                {"color": "red", "value": 0.8}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Forecasted Cost",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "aws_billing_forecasted_charges_usd",
+            "legendFormat": "Forecast"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "EC2 Cost Trend",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd{service=\"AmazonEC2\"}",
+            "legendFormat": "EC2 Cost"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "yAxes": [
+          {
+            "label": "Cost (USD)",
+            "unit": "currencyUSD"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "RDS Cost Trend",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd{service=\"AmazonRDS\"}",
+            "legendFormat": "RDS Cost"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+        "yAxes": [
+          {
+            "label": "Cost (USD)",
+            "unit": "currencyUSD"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "S3 Cost Trend",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd{service=\"AmazonS3\"}",
+            "legendFormat": "S3 Cost"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+        "yAxes": [
+          {
+            "label": "Cost (USD)",
+            "unit": "currencyUSD"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Load Balancer Cost Trend",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "aws_billing_estimated_charges_usd{service=\"AWSElasticLoadBalancing\"}",
+            "legendFormat": "ALB Cost"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+        "yAxes": [
+          {
+            "label": "Cost (USD)",
+            "unit": "currencyUSD"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Cost Optimization Recommendations",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "aws_cost_optimization_recommendations",
+            "legendFormat": "{{recommendation}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 36},
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "job": true,
+                "instance": true
+              },
+              "indexByName": {},
+              "renameByName": {
+                "recommendation": "Recommendation",
+                "potential_savings": "Potential Savings",
+                "service": "Service",
+                "priority": "Priority"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "title": "Budget Alerts",
+        "type": "alertlist",
+        "targets": [
+          {
+            "expr": "aws_budget_alert",
+            "legendFormat": "{{budget_name}}"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 44},
+        "options": {
+          "showOptions": true,
+          "sortOrder": 1,
+          "stateFilter": ["alerting", "pending"]
+        }
+      },
+      {
+        "id": 15,
+        "title": "Cost Efficiency Metrics",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "aws_cost_efficiency_score",
+            "legendFormat": "Efficiency Score"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 44},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 60},
+                {"color": "green", "value": 80}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 16,
+        "title": "Resource Utilization",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "aws_resource_utilization_average",
+            "legendFormat": "Avg Utilization"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 44},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 40},
+                {"color": "green", "value": 70}
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "refresh": "5m",
+    "annotations": {
+      "list": [
+        {
+          "name": "Budget Thresholds",
+          "datasource": "Prometheus",
+          "expr": "aws_budget_threshold",
+          "iconColor": "red",
+          "enable": true
+        },
+        {
+          "name": "Cost Anomalies",
+          "datasource": "Prometheus",
+          "expr": "aws_cost_anomaly",
+          "iconColor": "orange",
+          "enable": true
+        }
+      ]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "environment",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(aws_billing_estimated_charges_usd, environment)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": true
+        },
+        {
+          "name": "service",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(aws_billing_estimated_charges_usd, service)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    }
+  }
+} 

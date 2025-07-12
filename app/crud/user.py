@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user_db import User
 from app.models.user import UserCreate
-from app.services.auth import get_password_hash
+from app.utils.auth import get_password_hash
 
 async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
     """Get user by email."""

@@ -4,9 +4,9 @@ Protected personas router with authentication
 import time
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from app.models.user import UserInDB
-from app.services.auth import get_current_active_user
+from app.services.auth_db import get_current_active_user
 
 router = APIRouter(prefix="/personas", tags=["personas"])
 
@@ -16,13 +16,13 @@ class PersonaCreate(BaseModel):
     description: Optional[str] = None
     relation_type: str
     
-    @validator('name')
+    @field_validator('name')
     def validate_name(cls, v):
         if not v or not v.strip():
             raise ValueError('Name cannot be empty')
         return v.strip()
     
-    @validator('relation_type')
+    @field_validator('relation_type')
     def validate_relation_type(cls, v):
         valid = ['parent', 'spouse', 'child', 'sibling', 'friend', 'colleague', 'other']
         if v.lower() not in valid:
