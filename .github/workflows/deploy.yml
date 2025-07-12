@@ -132,14 +132,19 @@ jobs:
       - name: Find latest CI run for manual trigger
         if: github.event_name == 'workflow_dispatch'
         run: |
-          # Find the most recent successful CI run
-          LATEST_CI_RUN=$(gh run list --workflow="Continuous Integration (Optimized)" --json databaseId,conclusion --limit 10 | jq -r '.[] | select(.conclusion == "success") | .databaseId' | head -1)
+          # Find the most recent successful CI run from the same branch
+          CURRENT_BRANCH="${{ github.ref_name }}"
+          echo "Looking for CI runs from branch: $CURRENT_BRANCH"
+
+          # Get CI runs and filter by branch and success status
+          LATEST_CI_RUN=$(gh run list --workflow="Continuous Integration (Optimized)" --json databaseId,conclusion,headBranch --limit 20 | jq -r ".[] | select(.conclusion == \"success\" and .headBranch == \"$CURRENT_BRANCH\") | .databaseId" | head -1)
+
           if [ -z "$LATEST_CI_RUN" ]; then
-            echo "❌ No successful CI run found. Run CI first."
+            echo "❌ No successful CI run found for branch $CURRENT_BRANCH. Run CI first."
             exit 1
           fi
           echo "CI_RUN_ID=$LATEST_CI_RUN" >> $GITHUB_ENV
-          echo "Using CI run ID: $LATEST_CI_RUN"
+          echo "Using CI run ID: $LATEST_CI_RUN from branch $CURRENT_BRANCH"
 
       - name: Download Terraform plan from latest CI run
         uses: actions/download-artifact@v4
@@ -152,11 +157,18 @@ jobs:
 
       - name: Verify Terraform plan
         run: |
+          echo "Checking for Terraform plan in /tmp/terraform-plan/"
+          ls -la /tmp/terraform-plan/ || echo "Directory does not exist"
+
           if [ ! -f "/tmp/terraform-plan/tfplan" ]; then
             echo "❌ Terraform plan not found. Run CI first."
+            echo "Expected file: /tmp/terraform-plan/tfplan"
+            echo "Current directory contents:"
+            ls -la /tmp/ || echo "No /tmp directory"
             exit 1
           fi
           echo "✅ Terraform plan found"
+          ls -la /tmp/terraform-plan/tfplan
 
   # Build and Deploy
   deploy:
