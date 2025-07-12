@@ -1,7 +1,10 @@
 name: Deploy (Optimized)
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Continuous Integration (Optimized)"]
+    types:
+      - completed
     branches: ["dev*", "qa*", "staging*", "hotfix*"]
   workflow_dispatch:
     inputs:
@@ -64,26 +67,31 @@ jobs:
       - name: Determine Environment
         id: env
         run: |
-          # Determine environment based on branch or manual input
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          # Determine environment based on workflow_run context or manual input
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # Get the branch from the triggering workflow
+            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          else
+            # Manual dispatch
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+
+          # Determine environment based on branch
+          if [[ "$BRANCH_NAME" == "main" ]]; then
             ENVIRONMENT="prod"
-          elif [[ "${{ github.ref }}" =~ refs/heads/dev[0-9]+ ]]; then
-            # Extract dev environment from branch name (e.g., dev01 -> dev01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/qa[0-9]+ ]]; then
-            # Extract qa environment from branch name (e.g., qa01 -> qa01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/staging[0-9]+ ]]; then
-            # Extract staging environment from branch name (e.g., staging01 -> staging01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/hotfix[0-9]+ ]]; then
-            # Extract hotfix environment from branch name (e.g., hotfix01 -> hotfix01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+          elif [[ "$BRANCH_NAME" =~ ^dev[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^qa[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^staging[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^hotfix[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" == "dev" ]]; then
             ENVIRONMENT="dev"
-          elif [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
+          elif [[ "$BRANCH_NAME" == "qa" ]]; then
             ENVIRONMENT="qa"
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+          elif [[ "$BRANCH_NAME" == "staging" ]]; then
             ENVIRONMENT="staging"
           else
             ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
@@ -117,6 +125,8 @@ jobs:
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: /tmp/terraform-plan
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Verify Terraform plan
         run: |
@@ -139,26 +149,31 @@ jobs:
       - name: Determine Environment
         id: env
         run: |
-          # Determine environment based on branch or manual input
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          # Determine environment based on workflow_run context or manual input
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # Get the branch from the triggering workflow
+            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          else
+            # Manual dispatch
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+
+          # Determine environment based on branch
+          if [[ "$BRANCH_NAME" == "main" ]]; then
             ENVIRONMENT="prod"
-          elif [[ "${{ github.ref }}" =~ refs/heads/dev[0-9]+ ]]; then
-            # Extract dev environment from branch name (e.g., dev01 -> dev01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/qa[0-9]+ ]]; then
-            # Extract qa environment from branch name (e.g., qa01 -> qa01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/staging[0-9]+ ]]; then
-            # Extract staging environment from branch name (e.g., staging01 -> staging01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" =~ refs/heads/hotfix[0-9]+ ]]; then
-            # Extract hotfix environment from branch name (e.g., hotfix01 -> hotfix01)
-            ENVIRONMENT=$(echo "${{ github.ref_name }}" | sed 's/^refs\/heads\///')
-          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+          elif [[ "$BRANCH_NAME" =~ ^dev[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^qa[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^staging[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^hotfix[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" == "dev" ]]; then
             ENVIRONMENT="dev"
-          elif [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
+          elif [[ "$BRANCH_NAME" == "qa" ]]; then
             ENVIRONMENT="qa"
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+          elif [[ "$BRANCH_NAME" == "staging" ]]; then
             ENVIRONMENT="staging"
           else
             ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
@@ -239,6 +254,8 @@ jobs:
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: terraform/environments/${{ steps.env.outputs.main_env }}/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
