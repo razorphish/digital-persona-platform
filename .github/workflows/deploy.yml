@@ -319,6 +319,7 @@ jobs:
           path: terraform/environments/${{ steps.env.outputs.main_env }}/
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: true
 
       - name: Download Terraform Plan from latest CI run
         uses: actions/download-artifact@v4
@@ -331,7 +332,7 @@ jobs:
         continue-on-error: true
 
       - name: Use placeholder Terraform plan if download fails
-        if: github.event_name == 'workflow_dispatch' && failure()
+        if: failure()
         run: |
           echo "Artifact download failed, using placeholder tfplan file"
           echo "Environment: ${{ steps.env.outputs.environment }}"
@@ -349,6 +350,19 @@ jobs:
             echo "Created placeholder tfplan file"
             ls -la terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
           fi
+
+      - name: Verify Terraform plan exists
+        run: |
+          PLAN_PATH="terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
+          if [ ! -f "$PLAN_PATH" ]; then
+            echo "❌ Terraform plan not found at $PLAN_PATH"
+            echo "Current directory: $(pwd)"
+            echo "Directory contents:"
+            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/ 2>/dev/null || echo "Directory not found"
+            exit 1
+          fi
+          echo "✅ Terraform plan found at $PLAN_PATH"
+          ls -la "$PLAN_PATH"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -368,8 +382,15 @@ jobs:
 
           # 1. Create/select workspace
           cd terraform/environments/$MAIN_ENV
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+
           echo "Checking for existing workspace: $SUB_ENV"
-          if terraform workspace list | grep -q "$SUB_ENV"; then
+          WORKSPACE_EXISTS=$(terraform workspace list | grep -q "$SUB_ENV" && echo "true" || echo "false")
+          echo "Workspace exists: $WORKSPACE_EXISTS"
+
+          if [ "$WORKSPACE_EXISTS" = "true" ]; then
             echo "Workspace $SUB_ENV exists, selecting it"
             terraform workspace select "$SUB_ENV"
           else
@@ -400,10 +421,23 @@ jobs:
           # 3. Verify workspace is selected
           CURRENT_WORKSPACE=$(terraform workspace show)
           echo "Current workspace: $CURRENT_WORKSPACE"
+          echo "Expected workspace: $SUB_ENV"
+
           if [ "$CURRENT_WORKSPACE" != "$SUB_ENV" ]; then
             echo "❌ Error: Expected workspace $SUB_ENV, but current workspace is $CURRENT_WORKSPACE"
-            exit 1
+            echo "Available workspaces:"
+            terraform workspace list
+            echo "Attempting to select workspace again..."
+            terraform workspace select "$SUB_ENV"
+            CURRENT_WORKSPACE=$(terraform workspace show)
+            echo "Workspace after retry: $CURRENT_WORKSPACE"
+            if [ "$CURRENT_WORKSPACE" != "$SUB_ENV" ]; then
+              echo "❌ Still in wrong workspace, exiting"
+              exit 1
+            fi
           fi
+
+          echo "✅ Successfully selected workspace: $CURRENT_WORKSPACE"
 
       - name: Terraform Apply
         id: terraform
