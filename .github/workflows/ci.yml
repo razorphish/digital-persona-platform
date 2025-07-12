@@ -233,13 +233,24 @@ jobs:
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
           echo "Initializing Terraform in terraform/environments/${{ steps.env.outputs.main_env }}"
+
+          # Test AWS credentials
+          echo "Testing AWS credentials..."
+          aws sts get-caller-identity
+
+          # Initialize Terraform
           terraform init
+
+          # List current directory
+          echo "Current directory contents:"
+          ls -la
 
       - name: Terraform Plan
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
 
           # Get ECR registry URL for variables
+          echo "Getting AWS account ID..."
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
 
@@ -256,14 +267,30 @@ jobs:
               -var="ecr_repository_url=${ECR_REGISTRY}/dpp-backend" \
               -var="frontend_ecr_repository_url=${ECR_REGISTRY}/dpp-frontend" \
               -var="image_tag=latest" \
-              -var="frontend_image_tag=latest"
+              -var="frontend_image_tag=latest" \
+              -detailed-exitcode
           else
             echo "Planning for main environment: ${{ steps.env.outputs.environment }}"
             terraform plan -out=tfplan \
               -var="ecr_repository_url=${ECR_REGISTRY}/dpp-backend" \
               -var="frontend_ecr_repository_url=${ECR_REGISTRY}/dpp-frontend" \
               -var="image_tag=latest" \
-              -var="frontend_image_tag=latest"
+              -var="frontend_image_tag=latest" \
+              -detailed-exitcode
+          fi
+
+          # Check exit code
+          PLAN_EXIT_CODE=$?
+          echo "Terraform plan exit code: $PLAN_EXIT_CODE"
+
+          # Exit code 0 = success, 1 = error, 2 = changes detected
+          if [ $PLAN_EXIT_CODE -eq 0 ]; then
+            echo "✅ Terraform plan completed successfully (no changes)"
+          elif [ $PLAN_EXIT_CODE -eq 2 ]; then
+            echo "✅ Terraform plan completed successfully (changes detected)"
+          else
+            echo "❌ Terraform plan failed with exit code $PLAN_EXIT_CODE"
+            exit 1
           fi
 
           # Verify the plan file was created
