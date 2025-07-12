@@ -38,8 +38,7 @@ class IntegrationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class SocialPostResponse(BaseModel):
@@ -58,8 +57,7 @@ class SocialPostResponse(BaseModel):
     posted_at: datetime
     platform_metadata: Dict[str, Any]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class AnalyticsResponse(BaseModel):
@@ -75,8 +73,7 @@ class AnalyticsResponse(BaseModel):
     sentiment_distribution: Optional[Dict[str, int]]
     peak_activity_hours: Optional[Dict[str, Any]]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class SyncRequest(BaseModel):

@@ -142,10 +142,11 @@ class Settings(BaseSettings):
         chroma_path.mkdir(parents=True, exist_ok=True)
         return chroma_path
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True
+    }
 
 
 # Create global settings instance

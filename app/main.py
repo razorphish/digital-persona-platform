@@ -13,6 +13,7 @@ import sys
 import time
 import platform
 from pathlib import Path
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 # Import routers
@@ -24,9 +25,18 @@ load_dotenv()
 # Import configuration and database utilities
 from app.config import settings, validate_environment
 from app.services.openai_service import openai_service
+from app.database import create_tables
 
 # Create uploads directory
 Path("uploads").mkdir(exist_ok=True)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await create_tables()
+    yield
+    # Shutdown
+    pass
 
 # FastAPI application
 app = FastAPI(
@@ -50,7 +60,8 @@ app = FastAPI(
     """,
     version="3.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 # CORS middleware

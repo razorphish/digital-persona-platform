@@ -54,9 +54,12 @@ async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print("Registration error:", e)
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Registration failed"
+            detail=f"Registration failed: {e}"
         )
 
 
