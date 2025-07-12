@@ -382,17 +382,26 @@ jobs:
           echo "Main environment: $MAIN_ENV"
           echo "Tfvars file: $TFVARS_FILE"
 
-          # 1. Create/select workspace
+          # 1. Navigate to Terraform directory and initialize
           cd terraform/environments/$MAIN_ENV
           echo "Current directory: $(pwd)"
           echo "Directory contents:"
           ls -la
 
-          echo "Checking for existing workspace: $SUB_ENV"
-          WORKSPACE_EXISTS=$(terraform workspace list | grep -q "$SUB_ENV" && echo "true" || echo "false")
-          echo "Workspace exists: $WORKSPACE_EXISTS"
+          # Initialize Terraform first
+          echo "Initializing Terraform..."
+          terraform init -input=false
 
-          if [ "$WORKSPACE_EXISTS" = "true" ]; then
+          # 2. Improved workspace handling
+          echo "Checking for existing workspace: $SUB_ENV"
+          echo "Available workspaces:"
+          terraform workspace list
+
+          # Check if workspace exists using improved logic
+          terraform workspace list | grep -E "^\s*\*?\s*$SUB_ENV\s*$" > /dev/null
+          WORKSPACE_EXISTS=$?
+
+          if [ "$WORKSPACE_EXISTS" -eq 0 ]; then
             echo "Workspace $SUB_ENV exists, selecting it"
             terraform workspace select "$SUB_ENV"
           else
@@ -400,7 +409,7 @@ jobs:
             terraform workspace new "$SUB_ENV"
           fi
 
-          # 2. Generate tfvars file if missing
+          # 3. Generate tfvars file if missing
           if [ ! -f "$TFVARS_FILE" ]; then
             echo "Generating $TFVARS_FILE from template"
             sed \
@@ -420,7 +429,7 @@ jobs:
             echo "Tfvars file $TFVARS_FILE already exists"
           fi
 
-          # 3. Verify workspace is selected
+          # 4. Verify workspace is selected with improved error handling
           CURRENT_WORKSPACE=$(terraform workspace show)
           echo "Current workspace: $CURRENT_WORKSPACE"
           echo "Expected workspace: $SUB_ENV"
