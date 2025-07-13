@@ -125,7 +125,7 @@ jobs:
         if: github.event_name == 'workflow_run'
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
-          path: /tmp/terraform-plan
+          path: terraform/environments/${{ steps.env.outputs.main_env }}/
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
 
@@ -160,18 +160,18 @@ jobs:
 
       - name: Verify Terraform plan
         run: |
-          echo "Checking for Terraform plan in /tmp/terraform-plan/"
-          ls -la /tmp/terraform-plan/ || echo "Directory does not exist"
+          echo "Checking for Terraform plan in terraform/environments/${{ steps.env.outputs.main_env }}/"
+          ls -la terraform/environments/${{ steps.env.outputs.main_env }}/ || echo "Directory does not exist"
 
-          if [ ! -f "/tmp/terraform-plan/tfplan" ]; then
+          if [ ! -f "terraform/environments/${{ steps.env.outputs.main_env }}/tfplan" ]; then
             echo "❌ Terraform plan not found. Run CI first."
-            echo "Expected file: /tmp/terraform-plan/tfplan"
+            echo "Expected file: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
             echo "Current directory contents:"
-            ls -la /tmp/ || echo "No /tmp directory"
+            ls -la || echo "No current directory"
             exit 1
           fi
           echo "✅ Terraform plan found"
-          ls -la /tmp/terraform-plan/tfplan
+          ls -la terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
 
   # Build and Deploy
   deploy:
