@@ -324,7 +324,7 @@ jobs:
               -var="frontend_ecr_repository_url=${ECR_REGISTRY}/dpp-frontend" \
               -var="image_tag=latest" \
               -var="frontend_image_tag=latest" \
-              -detailed-exitcode
+              -detailed-exitcode 2>&1 | tee terraform-plan.log
           else
             echo "Planning for main environment: ${{ steps.env.outputs.environment }}"
             terraform plan -out=tfplan \
@@ -332,7 +332,7 @@ jobs:
               -var="frontend_ecr_repository_url=${ECR_REGISTRY}/dpp-frontend" \
               -var="image_tag=latest" \
               -var="frontend_image_tag=latest" \
-              -detailed-exitcode
+              -detailed-exitcode 2>&1 | tee terraform-plan.log
           fi
 
           # Check exit code
@@ -415,6 +415,13 @@ jobs:
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+
+      - name: Upload Terraform Plan Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terraform-plan-log-${{ steps.env.outputs.environment }}
+          path: terraform/environments/${{ steps.env.outputs.main_env }}/terraform-plan.log
 
   # Quality Gate (runs after all jobs)
   quality-gate:
