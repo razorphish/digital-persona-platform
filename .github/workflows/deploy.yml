@@ -448,19 +448,10 @@ jobs:
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
 
-          # Apply with sub-environment variable if it's a sub-environment
-          if [[ "${{ steps.env.outputs.is_sub_env }}" == "true" ]]; then
-            echo "Deploying to sub-environment: ${{ steps.env.outputs.environment }}"
-            terraform apply -auto-approve tfplan \
-              -var="sub_environment=${{ steps.env.outputs.environment }}" \
-              -var="ecr_repository_url=${{ steps.login-ecr.outputs.registry }}/dpp-backend:${{ github.sha }}" \
-              -var="frontend_ecr_repository_url=${{ steps.login-ecr.outputs.registry }}/dpp-frontend:${{ github.sha }}" \
-              -var="image_tag=${{ github.sha }}" \
-              -var="frontend_image_tag=${{ github.sha }}"
-          else
-            echo "Deploying to main environment: ${{ steps.env.outputs.environment }}"
-            terraform apply -auto-approve tfplan
-          fi
+          # Apply the plan file (variables are already included in the plan)
+          echo "Deploying to environment: ${{ steps.env.outputs.environment }}"
+          echo "Using plan file: tfplan"
+          terraform apply -auto-approve tfplan
 
       - name: Extract Environment Variables
         id: env_vars
