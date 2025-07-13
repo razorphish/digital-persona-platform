@@ -151,9 +151,10 @@ jobs:
       - name: Download Terraform plan from latest CI run
         uses: actions/download-artifact@v4
         if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
-          path: /tmp/terraform-plan
+          path: terraform/environments/${{ steps.env.outputs.main_env }}/
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ env.CI_RUN_ID }}
 
@@ -324,21 +325,21 @@ jobs:
       - name: Download Terraform Plan from latest CI run
         uses: actions/download-artifact@v4
         if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: terraform/environments/${{ steps.env.outputs.main_env }}/
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ env.CI_RUN_ID }}
-                continue-on-error: true
 
       - name: Verify Terraform plan exists
         run: |
           echo "Verifying Terraform plan exists..."
           echo "Environment: ${{ steps.env.outputs.environment }}"
           echo "Main environment: ${{ steps.env.outputs.main_env }}"
-          
+
           PLAN_PATH="terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
-          
+
           if [ ! -f "$PLAN_PATH" ]; then
             echo "❌ Terraform plan not found at $PLAN_PATH"
             echo "Current directory: $(pwd)"
@@ -350,7 +351,7 @@ jobs:
             echo "Please run the CI workflow and ensure it completes successfully before deploying."
             exit 1
           fi
-          
+
           echo "✅ Terraform plan found from download"
           ls -la "$PLAN_PATH"
           echo "File size: $(wc -c < "$PLAN_PATH") bytes"
