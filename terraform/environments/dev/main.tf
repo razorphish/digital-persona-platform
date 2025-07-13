@@ -74,7 +74,7 @@ locals {
 
 # VPC for sub-environment
 resource "aws_vpc" "main" {
-  cidr_block = "10.${index(["dev", "qa", "staging", "prod", "main"], local.main_env)}.${index(["01", "02", "03"], replace(local.sub_env, "/^[a-z]+/", ""))}.0/24"
+  cidr_block = "10.0.0.0/16"
   
   enable_dns_hostnames = true
   enable_dns_support   = true

@@ -367,6 +367,13 @@ jobs:
             echo "File type: $(file tfplan)"
             echo "First 100 bytes:"
             head -c 100 tfplan | hexdump -C
+            echo ""
+            echo "❌ Terraform plan verification failed. This could be due to:"
+            echo "1. Terraform configuration errors"
+            echo "2. Provider or backend issues"
+            echo "3. Variable validation errors"
+            echo ""
+            echo "Please check the Terraform plan output above for specific errors."
             exit 1
           fi
 
