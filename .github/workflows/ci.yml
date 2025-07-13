@@ -349,7 +349,7 @@ jobs:
             exit 1
           fi
 
-          # Verify the plan file was created
+          # Verify the plan file was created and is valid
           if [ ! -f "tfplan" ]; then
             echo "❌ Terraform plan file was not created"
             echo "Current directory contents:"
@@ -357,8 +357,21 @@ jobs:
             exit 1
           fi
 
-          echo "✅ Terraform plan created successfully"
+          # Verify the plan file is a valid Terraform plan
+          echo "Verifying plan file integrity..."
+          if ! terraform show tfplan > /dev/null 2>&1; then
+            echo "❌ Terraform plan file is corrupted or invalid"
+            echo "File size: $(wc -c < tfplan) bytes"
+            echo "File type: $(file tfplan)"
+            echo "First 100 bytes:"
+            head -c 100 tfplan | hexdump -C
+            exit 1
+          fi
+
+          echo "✅ Terraform plan created successfully and verified"
           ls -la tfplan
+          echo "File size: $(wc -c < tfplan) bytes"
+          echo "File type: $(file tfplan)"
 
       - name: Verify Artifact Upload
         run: |

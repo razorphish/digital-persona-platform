@@ -162,9 +162,11 @@ jobs:
           echo "Checking for Terraform plan in terraform/environments/${{ steps.env.outputs.main_env }}/"
           ls -la terraform/environments/${{ steps.env.outputs.main_env }}/ || echo "Directory does not exist"
 
-          if [ ! -f "terraform/environments/${{ steps.env.outputs.main_env }}/tfplan" ]; then
+          PLAN_PATH="terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
+
+          if [ ! -f "$PLAN_PATH" ]; then
             echo "❌ Terraform plan not found. Run CI first."
-            echo "Expected file: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
+            echo "Expected file: $PLAN_PATH"
             echo "Current directory contents:"
             ls -la || echo "No current directory"
             echo ""
@@ -172,11 +174,35 @@ jobs:
             echo "Environment: ${{ steps.env.outputs.environment }}"
             echo "Main environment: ${{ steps.env.outputs.main_env }}"
             echo "Expected artifact name: terraform-plan-${{ steps.env.outputs.environment }}"
-            echo "Expected path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
+            echo "Expected path: $PLAN_PATH"
             exit 1
           fi
+
           echo "✅ Terraform plan found"
-          ls -la terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+          ls -la "$PLAN_PATH"
+          echo "File size: $(wc -c < "$PLAN_PATH") bytes"
+          echo "File type: $(file "$PLAN_PATH")"
+
+          # Verify the plan file is a valid Terraform plan
+          echo "Verifying plan file integrity..."
+          cd terraform/environments/${{ steps.env.outputs.main_env }}
+          if ! terraform show tfplan > /dev/null 2>&1; then
+            echo "❌ Terraform plan file is corrupted or invalid"
+            echo "File size: $(wc -c < tfplan) bytes"
+            echo "File type: $(file tfplan)"
+            echo "First 100 bytes:"
+            head -c 100 tfplan | hexdump -C
+            echo ""
+            echo "❌ The plan file appears to be corrupted. This could be due to:"
+            echo "1. Artifact upload/download corruption"
+            echo "2. CI workflow creating an invalid plan file"
+            echo "3. File encoding issues during transfer"
+            echo ""
+            echo "Please re-run the CI workflow to generate a fresh plan file."
+            exit 1
+          fi
+
+          echo "✅ Terraform plan file is valid and ready for deployment"
 
   # Build and Deploy
   deploy:
@@ -436,6 +462,21 @@ jobs:
           # Apply the plan file (variables are already included in the plan)
           echo "Deploying to environment: ${{ steps.env.outputs.environment }}"
           echo "Using plan file: tfplan"
+
+          # Final verification before apply
+          echo "Final verification of plan file..."
+          if [ ! -f "tfplan" ]; then
+            echo "❌ Plan file not found in current directory"
+            ls -la
+            exit 1
+          fi
+
+          echo "Plan file details:"
+          ls -la tfplan
+          echo "File size: $(wc -c < tfplan) bytes"
+          echo "File type: $(file tfplan)"
+
+          # Apply the plan
           terraform apply -auto-approve tfplan
 
       - name: Extract Environment Variables
