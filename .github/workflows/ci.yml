@@ -372,17 +372,17 @@ jobs:
           if [ -f "tfplan" ]; then
             echo "✅ Terraform plan file exists before upload"
             ls -la tfplan
+            echo "File size: $(wc -c < tfplan) bytes"
+            echo "File type: $(file tfplan)"
           else
             echo "❌ Terraform plan file does not exist before upload"
             echo "Current directory: $(pwd)"
             echo "Directory contents:"
             ls -la
-            
-            # Create a placeholder tfplan file to allow deployment to proceed
-            echo "Creating placeholder tfplan file..."
-            echo "# Placeholder Terraform plan for ${{ steps.env.outputs.environment }}" > tfplan
-            echo "Created placeholder tfplan file"
-            ls -la tfplan
+            echo ""
+            echo "❌ Terraform plan file was not created. Cannot proceed with deployment."
+            echo "Please check the Terraform plan step above for errors."
+            exit 1
           fi
 
       - name: Upload Terraform Plan
