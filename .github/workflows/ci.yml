@@ -2,9 +2,19 @@ name: Continuous Integration (Optimized)
 
 on:
   push:
-    branches: [main, "dev*", "qa*", "staging*", "hotfix*"]
+    branches:
+      - main
+      - "dev[0-9][0-9]"
+      - "qa[0-9][0-9]"
+      - "staging[0-9][0-9]"
+      - "hotfix[0-9][0-9]"
   pull_request:
-    branches: [main, "dev*", "qa*", "staging*", "hotfix*"]
+    branches:
+      - main
+      - "dev[0-9][0-9]"
+      - "qa[0-9][0-9]"
+      - "staging[0-9][0-9]"
+      - "hotfix[0-9][0-9]"
   workflow_dispatch:
 
 permissions:
@@ -233,32 +243,35 @@ jobs:
       - name: Determine Environment
         id: env
         run: |
-          # Determine environment based on branch
+          # Determine environment based on branch - ONLY allow numbered formats
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             ENVIRONMENT="prod"
-          elif [[ "${{ github.ref_name }}" =~ ^dev[0-9]+$ ]]; then
+          elif [[ "${{ github.ref_name }}" =~ ^dev[0-9][0-9]$ ]]; then
             ENVIRONMENT="${{ github.ref_name }}"
-          elif [[ "${{ github.ref_name }}" =~ ^qa[0-9]+$ ]]; then
+          elif [[ "${{ github.ref_name }}" =~ ^qa[0-9][0-9]$ ]]; then
             ENVIRONMENT="${{ github.ref_name }}"
-          elif [[ "${{ github.ref_name }}" =~ ^staging[0-9]+$ ]]; then
+          elif [[ "${{ github.ref_name }}" =~ ^staging[0-9][0-9]$ ]]; then
             ENVIRONMENT="${{ github.ref_name }}"
-          elif [[ "${{ github.ref_name }}" =~ ^hotfix[0-9]+$ ]]; then
+          elif [[ "${{ github.ref_name }}" =~ ^hotfix[0-9][0-9]$ ]]; then
             ENVIRONMENT="${{ github.ref_name }}"
           else
-            ENVIRONMENT="dev"
+            echo "❌ Invalid branch name: ${{ github.ref_name }}"
+            echo "❌ Only these formats are allowed: dev##, qa##, staging##, hotfix##, main"
+            echo "❌ Examples: dev01, qa15, staging03, hotfix07"
+            exit 1
           fi
 
-          # For sub-environments, use the base environment (dev01 -> dev, qa01 -> qa, etc.)
-          if [[ "$ENVIRONMENT" =~ ^dev[0-9]+$ ]]; then
+          # For numbered environments, use the base environment (dev01 -> dev, qa15 -> qa, etc.)
+          if [[ "$ENVIRONMENT" =~ ^dev[0-9][0-9]$ ]]; then
             MAIN_ENV="dev"
-          elif [[ "$ENVIRONMENT" =~ ^qa[0-9]+$ ]]; then
+          elif [[ "$ENVIRONMENT" =~ ^qa[0-9][0-9]$ ]]; then
             MAIN_ENV="qa"
-          elif [[ "$ENVIRONMENT" =~ ^staging[0-9]+$ ]]; then
+          elif [[ "$ENVIRONMENT" =~ ^staging[0-9][0-9]$ ]]; then
             MAIN_ENV="staging"
-          elif [[ "$ENVIRONMENT" =~ ^hotfix[0-9]+$ ]]; then
+          elif [[ "$ENVIRONMENT" =~ ^hotfix[0-9][0-9]$ ]]; then
             MAIN_ENV="hotfix"
           else
-            MAIN_ENV="$ENVIRONMENT"
+            MAIN_ENV="$ENVIRONMENT"  # For main -> prod
           fi
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT

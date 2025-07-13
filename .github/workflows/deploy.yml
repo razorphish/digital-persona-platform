@@ -5,7 +5,11 @@ on:
     workflows: ["Continuous Integration (Optimized)"]
     types:
       - completed
-    branches: ["dev*", "qa*", "staging*", "hotfix*"]
+    branches:
+      - "dev[0-9][0-9]"
+      - "qa[0-9][0-9]"
+      - "staging[0-9][0-9]"
+      - "hotfix[0-9][0-9]"
   workflow_dispatch:
     inputs:
       environment:
@@ -14,23 +18,27 @@ on:
         default: "prod"
         type: choice
         options:
-          - dev
+          - prod
           - dev01
           - dev02
           - dev03
-          - qa
+          - dev04
+          - dev05
           - qa01
           - qa02
           - qa03
-          - staging
+          - qa04
+          - qa05
           - staging01
           - staging02
           - staging03
-          - hotfix
+          - staging04
+          - staging05
           - hotfix01
           - hotfix02
           - hotfix03
-          - prod
+          - hotfix04
+          - hotfix05
       force_deploy:
         description: "Force deployment even if tests fail"
         required: false
@@ -87,32 +95,46 @@ jobs:
             BRANCH_NAME="${{ github.ref_name }}"
           fi
 
-          # Determine environment based on branch
+          # Determine environment based on branch - ONLY allow numbered formats
           if [[ "$BRANCH_NAME" == "main" ]]; then
             ENVIRONMENT="prod"
-          elif [[ "$BRANCH_NAME" =~ ^dev[0-9]+$ ]]; then
+          elif [[ "$BRANCH_NAME" =~ ^dev[0-9][0-9]$ ]]; then
             ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" =~ ^qa[0-9]+$ ]]; then
+          elif [[ "$BRANCH_NAME" =~ ^qa[0-9][0-9]$ ]]; then
             ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" =~ ^staging[0-9]+$ ]]; then
+          elif [[ "$BRANCH_NAME" =~ ^staging[0-9][0-9]$ ]]; then
             ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" =~ ^hotfix[0-9]+$ ]]; then
+          elif [[ "$BRANCH_NAME" =~ ^hotfix[0-9][0-9]$ ]]; then
             ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" == "dev" ]]; then
-            ENVIRONMENT="dev"
-          elif [[ "$BRANCH_NAME" == "qa" ]]; then
-            ENVIRONMENT="qa"
-          elif [[ "$BRANCH_NAME" == "staging" ]]; then
-            ENVIRONMENT="staging"
           else
+            # For manual dispatch, validate the environment input
             ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
+            
+            # Validate manual environment input follows naming convention
+            if [[ "$ENVIRONMENT" != "prod" ]] && [[ ! "$ENVIRONMENT" =~ ^(dev|qa|staging|hotfix)[0-9][0-9]$ ]]; then
+              echo "❌ Invalid environment: $ENVIRONMENT"
+              echo "❌ Only these formats are allowed: dev##, qa##, staging##, hotfix##, prod"
+              echo "❌ Examples: dev01, qa15, staging03, hotfix07, prod"
+              exit 1
+            fi
           fi
 
-          MAIN_ENV=$(echo $ENVIRONMENT | sed 's/[0-9]*$//')
+          # For numbered environments, use the base environment (dev01 -> dev, qa15 -> qa, etc.)
+          if [[ "$ENVIRONMENT" =~ ^dev[0-9][0-9]$ ]]; then
+            MAIN_ENV="dev"
+          elif [[ "$ENVIRONMENT" =~ ^qa[0-9][0-9]$ ]]; then
+            MAIN_ENV="qa"
+          elif [[ "$ENVIRONMENT" =~ ^staging[0-9][0-9]$ ]]; then
+            MAIN_ENV="staging"
+          elif [[ "$ENVIRONMENT" =~ ^hotfix[0-9][0-9]$ ]]; then
+            MAIN_ENV="hotfix"
+          else
+            MAIN_ENV="$ENVIRONMENT"  # For prod
+          fi
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
-          echo "is_sub_env=$([[ "$ENVIRONMENT" =~ [0-9]+$ ]] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
+          echo "is_sub_env=$([[ "$ENVIRONMENT" =~ [0-9][0-9]$ ]] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
 
           echo "Deploying to environment: $ENVIRONMENT"
           echo "Main environment: $MAIN_ENV"
@@ -123,9 +145,11 @@ jobs:
           ENVIRONMENT="${{ steps.env.outputs.environment }}"
           echo "Validating deployment to: $ENVIRONMENT"
 
-          # Validate environment format
-          if [[ ! "$ENVIRONMENT" =~ ^(dev|qa|staging|hotfix|prod)([0-9]+)?$ ]]; then
+          # Validate environment format - ONLY allow numbered formats and prod
+          if [[ ! "$ENVIRONMENT" =~ ^((dev|qa|staging|hotfix)[0-9][0-9]|prod)$ ]]; then
             echo "❌ Invalid environment: $ENVIRONMENT"
+            echo "❌ Only these formats are allowed: dev##, qa##, staging##, hotfix##, prod"
+            echo "❌ Examples: dev01, qa15, staging03, hotfix07, prod"
             exit 1
           fi
 
