@@ -60,6 +60,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -156,6 +157,11 @@ jobs:
           path: terraform/environments/${{ steps.env.outputs.main_env }}/
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ env.CI_RUN_ID }}
+
+      - name: Setup Terraform for validation
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
 
       - name: Verify Terraform plan
         run: |
