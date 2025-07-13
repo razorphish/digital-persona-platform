@@ -5,6 +5,7 @@ on:
     branches: [main, "dev*", "qa*", "staging*", "hotfix*"]
   pull_request:
     branches: [main, "dev*", "qa*", "staging*", "hotfix*"]
+  workflow_dispatch:
 
 permissions:
   id-token: write
