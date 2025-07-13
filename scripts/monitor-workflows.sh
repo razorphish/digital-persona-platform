@@ -99,10 +99,19 @@ display_workflow() {
 # Function to check if we should trigger deploy
 should_trigger_deploy() {
     local ci_status=$(get_workflow_status "Continuous Integration (Optimized)" "$BRANCH")
+    local deploy_status=$(get_workflow_status "deploy.yml" "$BRANCH")
+    
     if [ -n "$ci_status" ]; then
         local ci_conclusion=$(echo "$ci_status" | cut -f2)
         if [ "$ci_conclusion" = "success" ]; then
-            return 0  # true
+            # Only trigger if no deploy workflow is currently running
+            if [ -n "$deploy_status" ]; then
+                local deploy_status_type=$(echo "$deploy_status" | cut -f1)
+                if [ "$deploy_status_type" = "in_progress" ] || [ "$deploy_status_type" = "queued" ] || [ "$deploy_status_type" = "waiting" ]; then
+                    return 1  # false - deploy already running
+                fi
+            fi
+            return 0  # true - CI succeeded and no deploy running
         fi
     fi
     return 1  # false

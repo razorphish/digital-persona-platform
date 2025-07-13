@@ -135,6 +135,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-1
+
       - name: Determine Environment
         id: env
         run: |
@@ -178,11 +184,18 @@ jobs:
           echo "Main environment: $MAIN_ENV"
           echo "Is sub-environment: ${{ steps.env.outputs.is_sub_env }}"
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-west-1
+      - name: Validate environment input
+        run: |
+          ENVIRONMENT="${{ steps.env.outputs.environment }}"
+          echo "Validating deployment to: $ENVIRONMENT"
+
+          # Validate environment format
+          if [[ ! "$ENVIRONMENT" =~ ^(dev|qa|staging|hotfix|prod)([0-9]+)?$ ]]; then
+            echo "❌ Invalid environment: $ENVIRONMENT"
+            exit 1
+          fi
+
+          echo "✅ Environment validation passed"
 
       - name: Get ECR Registry URL
         id: ecr
