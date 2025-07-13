@@ -329,42 +329,31 @@ jobs:
           path: terraform/environments/${{ steps.env.outputs.main_env }}/
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ env.CI_RUN_ID }}
-        continue-on-error: true
+                continue-on-error: true
 
-      - name: Ensure Terraform plan exists
+      - name: Verify Terraform plan exists
         run: |
-          echo "Ensuring Terraform plan exists..."
+          echo "Verifying Terraform plan exists..."
           echo "Environment: ${{ steps.env.outputs.environment }}"
           echo "Main environment: ${{ steps.env.outputs.main_env }}"
-
+          
           PLAN_PATH="terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
-
-          # Check if tfplan already exists (from successful download)
-          if [ -f "$PLAN_PATH" ]; then
-            echo "✅ Terraform plan found from download"
-            ls -la "$PLAN_PATH"
-          else
-            echo "❌ Terraform plan not found, creating placeholder..."
-            
-            # Create directory if it doesn't exist
-            mkdir -p "terraform/environments/${{ steps.env.outputs.main_env }}/"
-            
-            # Create a simple placeholder tfplan file
-            echo "# Placeholder Terraform plan for ${{ steps.env.outputs.environment }}" > "$PLAN_PATH"
-            echo "# Created automatically to allow deployment to proceed" >> "$PLAN_PATH"
-            echo "# while Terraform plan issues are being resolved" >> "$PLAN_PATH"
-            echo "" >> "$PLAN_PATH"
-            echo "terraform_version = \"1.5.0\"" >> "$PLAN_PATH"
-            echo "format_version = \"1.0\"" >> "$PLAN_PATH"
-            echo "" >> "$PLAN_PATH"
-            echo "# No changes - placeholder plan" >> "$PLAN_PATH"
-            echo "resource_changes = []" >> "$PLAN_PATH"
-            
-            echo "✅ Created placeholder tfplan file"
-            ls -la "$PLAN_PATH"
-            echo "File contents:"
-            head -20 "$PLAN_PATH"
+          
+          if [ ! -f "$PLAN_PATH" ]; then
+            echo "❌ Terraform plan not found at $PLAN_PATH"
+            echo "Current directory: $(pwd)"
+            echo "Directory contents:"
+            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/ 2>/dev/null || echo "Directory not found"
+            echo ""
+            echo "❌ Please ensure the CI workflow uploads the Terraform plan artifact first."
+            echo "Expected artifact name: terraform-plan-${{ steps.env.outputs.environment }}"
+            echo "Please run the CI workflow and ensure it completes successfully before deploying."
+            exit 1
           fi
+          
+          echo "✅ Terraform plan found from download"
+          ls -la "$PLAN_PATH"
+          echo "File size: $(wc -c < "$PLAN_PATH") bytes"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
