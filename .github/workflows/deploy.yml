@@ -411,6 +411,9 @@ jobs:
 
           # 3. Generate tfvars file if missing
           if [ ! -f "$TFVARS_FILE" ]; then
+            # Ensure the directory exists
+            mkdir -p "$(dirname "$TFVARS_FILE")"
+            
             echo "Generating $TFVARS_FILE from template"
             sed \
               -e "s/{{MAIN_ENV}}/$MAIN_ENV/g" \
