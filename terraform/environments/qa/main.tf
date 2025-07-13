@@ -479,8 +479,6 @@ module "ecs" {
   
   environment = local.main_env
   sub_environment = local.sub_env
-  
-  common_tags = local.common_tags
 }
 
 # Route53 Records
