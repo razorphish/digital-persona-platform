@@ -151,7 +151,6 @@ jobs:
       - name: Download Terraform plan from latest CI run
         uses: actions/download-artifact@v4
         if: github.event_name == 'workflow_dispatch'
-        continue-on-error: true
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
           path: terraform/environments/${{ steps.env.outputs.main_env }}/
@@ -168,6 +167,12 @@ jobs:
             echo "Expected file: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
             echo "Current directory contents:"
             ls -la || echo "No current directory"
+            echo ""
+            echo "Debugging information:"
+            echo "Environment: ${{ steps.env.outputs.environment }}"
+            echo "Main environment: ${{ steps.env.outputs.main_env }}"
+            echo "Expected artifact name: terraform-plan-${{ steps.env.outputs.environment }}"
+            echo "Expected path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
             exit 1
           fi
           echo "✅ Terraform plan found"
@@ -311,26 +316,6 @@ jobs:
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v4
-        if: github.event_name == 'workflow_run'
-        with:
-          name: terraform-plan-${{ steps.env.outputs.environment }}
-          path: terraform/environments/${{ steps.env.outputs.main_env }}/
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-        continue-on-error: true
-
-      - name: Download Terraform Plan from latest CI run
-        uses: actions/download-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        with:
-          name: terraform-plan-${{ steps.env.outputs.environment }}
-          path: terraform/environments/${{ steps.env.outputs.main_env }}/
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ env.CI_RUN_ID }}
 
       - name: Verify Terraform plan exists
         run: |
