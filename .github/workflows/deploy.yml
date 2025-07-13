@@ -61,6 +61,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      main_env: ${{ steps.env.outputs.main_env }}
+      is_sub_env: ${{ steps.env.outputs.is_sub_env }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,6 +74,99 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-1
+
+      - name: Determine Environment
+        id: env
+        run: |
+          # Determine environment based on workflow_run context or manual input
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # Get the branch from the triggering workflow
+            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          else
+            # Manual dispatch
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+
+          # Determine environment based on branch
+          if [[ "$BRANCH_NAME" == "main" ]]; then
+            ENVIRONMENT="prod"
+          elif [[ "$BRANCH_NAME" =~ ^dev[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^qa[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^staging[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" =~ ^hotfix[0-9]+$ ]]; then
+            ENVIRONMENT="$BRANCH_NAME"
+          elif [[ "$BRANCH_NAME" == "dev" ]]; then
+            ENVIRONMENT="dev"
+          elif [[ "$BRANCH_NAME" == "qa" ]]; then
+            ENVIRONMENT="qa"
+          elif [[ "$BRANCH_NAME" == "staging" ]]; then
+            ENVIRONMENT="staging"
+          else
+            ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
+          fi
+
+          MAIN_ENV=$(echo $ENVIRONMENT | sed 's/[0-9]*$//')
+
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
+          echo "is_sub_env=$([[ "$ENVIRONMENT" =~ [0-9]+$ ]] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
+
+          echo "Deploying to environment: $ENVIRONMENT"
+          echo "Main environment: $MAIN_ENV"
+          echo "Is sub-environment: ${{ steps.env.outputs.is_sub_env }}"
+
+      - name: Validate environment input
+        run: |
+          ENVIRONMENT="${{ steps.env.outputs.environment }}"
+          echo "Validating deployment to: $ENVIRONMENT"
+
+          # Validate environment format
+          if [[ ! "$ENVIRONMENT" =~ ^(dev|qa|staging|hotfix|prod)([0-9]+)?$ ]]; then
+            echo "❌ Invalid environment: $ENVIRONMENT"
+            exit 1
+          fi
+
+          echo "✅ Environment validation passed"
+
+      - name: Check Terraform plan exists
+        uses: actions/download-artifact@v4
+        if: github.event_name == 'workflow_run'
+        with:
+          name: terraform-plan-${{ steps.env.outputs.environment }}
+          path: terraform/environments/${{ steps.env.outputs.main_env }}/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Find latest CI run for manual trigger
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find the most recent successful CI run from the same branch
+          CURRENT_BRANCH="${{ github.ref_name }}"
+          echo "Looking for CI runs from branch: $CURRENT_BRANCH"
+
+          # Get CI runs and filter by branch and success status
+          LATEST_CI_RUN=$(gh run list --workflow="Continuous Integration (Optimized)" --json databaseId,conclusion,headBranch --limit 20 | jq -r ".[] | select(.conclusion == \"success\" and .headBranch == \"$CURRENT_BRANCH\") | .databaseId" | head -1)
+
+          if [ -z "$LATEST_CI_RUN" ]; then
+            echo "❌ No successful CI run found for branch $CURRENT_BRANCH. Run CI first."
+            exit 1
+          fi
+          echo "CI_RUN_ID=$LATEST_CI_RUN" >> $GITHUB_ENV
+          echo "Using CI run ID: $LATEST_CI_RUN from branch $CURRENT_BRANCH"
+
+      - name: Download Terraform plan from latest CI run
+        uses: actions/download-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: terraform-plan-${{ steps.env.outputs.environment }}
+          path: terraform/environments/${{ steps.env.outputs.main_env }}/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.CI_RUN_ID }}
 
       - name: Setup Terraform for validation
         uses: hashicorp/setup-terraform@v3
@@ -140,62 +237,6 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-1
-
-      - name: Determine Environment
-        id: env
-        run: |
-          # Determine environment based on workflow_run context or manual input
-          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            # Get the branch from the triggering workflow
-            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
-          else
-            # Manual dispatch
-            BRANCH_NAME="${{ github.ref_name }}"
-          fi
-
-          # Determine environment based on branch
-          if [[ "$BRANCH_NAME" == "main" ]]; then
-            ENVIRONMENT="prod"
-          elif [[ "$BRANCH_NAME" =~ ^dev[0-9]+$ ]]; then
-            ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" =~ ^qa[0-9]+$ ]]; then
-            ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" =~ ^staging[0-9]+$ ]]; then
-            ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" =~ ^hotfix[0-9]+$ ]]; then
-            ENVIRONMENT="$BRANCH_NAME"
-          elif [[ "$BRANCH_NAME" == "dev" ]]; then
-            ENVIRONMENT="dev"
-          elif [[ "$BRANCH_NAME" == "qa" ]]; then
-            ENVIRONMENT="qa"
-          elif [[ "$BRANCH_NAME" == "staging" ]]; then
-            ENVIRONMENT="staging"
-          else
-            ENVIRONMENT="${{ github.event.inputs.environment || 'prod' }}"
-          fi
-
-          MAIN_ENV=$(echo $ENVIRONMENT | sed 's/[0-9]*$//')
-
-          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
-          echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
-          echo "is_sub_env=$([[ "$ENVIRONMENT" =~ [0-9]+$ ]] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
-
-          echo "Deploying to environment: $ENVIRONMENT"
-          echo "Main environment: $MAIN_ENV"
-          echo "Is sub-environment: ${{ steps.env.outputs.is_sub_env }}"
-
-      - name: Validate environment input
-        run: |
-          ENVIRONMENT="${{ steps.env.outputs.environment }}"
-          echo "Validating deployment to: $ENVIRONMENT"
-
-          # Validate environment format
-          if [[ ! "$ENVIRONMENT" =~ ^(dev|qa|staging|hotfix|prod)([0-9]+)?$ ]]; then
-            echo "❌ Invalid environment: $ENVIRONMENT"
-            exit 1
-          fi
-
-          echo "✅ Environment validation passed"
 
       - name: Get ECR Registry URL
         id: ecr
@@ -280,19 +321,19 @@ jobs:
       - name: Verify Terraform plan exists
         run: |
           echo "Verifying Terraform plan exists..."
-          echo "Environment: ${{ steps.env.outputs.environment }}"
-          echo "Main environment: ${{ steps.env.outputs.main_env }}"
+          echo "Environment: ${{ needs.validate.outputs.environment }}"
+          echo "Main environment: ${{ needs.validate.outputs.main_env }}"
 
-          PLAN_PATH="terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
+          PLAN_PATH="terraform/environments/${{ needs.validate.outputs.main_env }}/tfplan"
 
           if [ ! -f "$PLAN_PATH" ]; then
             echo "❌ Terraform plan not found at $PLAN_PATH"
             echo "Current directory: $(pwd)"
             echo "Directory contents:"
-            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/ 2>/dev/null || echo "Directory not found"
+            ls -la terraform/environments/${{ needs.validate.outputs.main_env }}/ 2>/dev/null || echo "Directory not found"
             echo ""
             echo "❌ Please ensure the CI workflow uploads the Terraform plan artifact first."
-            echo "Expected artifact name: terraform-plan-${{ steps.env.outputs.environment }}"
+            echo "Expected artifact name: terraform-plan-${{ needs.validate.outputs.environment }}"
             echo "Please run the CI workflow and ensure it completes successfully before deploying."
             exit 1
           fi
@@ -308,8 +349,8 @@ jobs:
 
       - name: Set up Terraform workspace and tfvars
         run: |
-          MAIN_ENV="${{ steps.env.outputs.main_env }}"
-          SUB_ENV="${{ steps.env.outputs.environment }}"
+          MAIN_ENV="${{ needs.validate.outputs.main_env }}"
+          SUB_ENV="${{ needs.validate.outputs.environment }}"
           TFVARS_FILE="terraform/environments/$MAIN_ENV/${SUB_ENV}.auto.tfvars"
           TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -391,10 +432,10 @@ jobs:
       - name: Terraform Apply
         id: terraform
         run: |
-          cd terraform/environments/${{ steps.env.outputs.main_env }}
+          cd terraform/environments/${{ needs.validate.outputs.main_env }}
 
           # Apply the plan file (variables are already included in the plan)
-          echo "Deploying to environment: ${{ steps.env.outputs.environment }}"
+          echo "Deploying to environment: ${{ needs.validate.outputs.environment }}"
           echo "Using plan file: tfplan"
 
           # Final verification before apply
