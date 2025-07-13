@@ -106,6 +106,11 @@ resource "aws_subnet" "public" {
     Name = "${local.resource_prefix}-public-${count.index + 1}"
     Tier = "Public"
   })
+  
+  # Ensure these subnets are not destroyed while resources depend on them
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Private Subnets
@@ -119,6 +124,11 @@ resource "aws_subnet" "private" {
     Name = "${local.resource_prefix}-private-${count.index + 1}"
     Tier = "Private"
   })
+  
+  # Ensure these subnets are not destroyed while resources depend on them
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Route Table for Public Subnets
@@ -149,6 +159,9 @@ resource "aws_eip" "nat" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-nat-eip"
   })
+  
+  # Ensure ENI dependencies are handled properly
+  depends_on = [aws_internet_gateway.main]
 }
 
 resource "aws_nat_gateway" "main" {
@@ -212,6 +225,10 @@ resource "aws_security_group" "alb" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-alb-sg"
   })
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_security_group" "app" {
@@ -242,6 +259,10 @@ resource "aws_security_group" "app" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-app-sg"
   })
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Application Load Balancer
@@ -257,6 +278,12 @@ resource "aws_lb" "main" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-alb"
   })
+  
+  # Ensure load balancer depends on subnets and security groups
+  depends_on = [
+    aws_subnet.public,
+    aws_security_group.alb
+  ]
 }
 
 # Random suffix for unique resource names
@@ -463,6 +490,13 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot = true
   
   tags = local.common_tags
+  
+  # Ensure RDS instance depends on subnets and security groups
+  depends_on = [
+    aws_db_subnet_group.main,
+    aws_security_group.app,
+    aws_subnet.private
+  ]
 }
 
 # DB Subnet Group
@@ -471,6 +505,13 @@ resource "aws_db_subnet_group" "main" {
   subnet_ids = aws_subnet.private[*].id
   
   tags = local.common_tags
+  
+  # Ensure subnet group depends on subnets and is destroyed before subnets
+  depends_on = [aws_subnet.private]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Data sources
@@ -525,7 +566,51 @@ module "ecs" {
   secret_key_arn       = aws_secretsmanager_secret.secret_key.arn
   database_password_arn = aws_secretsmanager_secret.database_password.arn
   
-  depends_on = [aws_lb_listener.backend, aws_lb_listener.frontend]
+  # Ensure ECS module depends on all network resources to prevent ENI dependency issues
+  depends_on = [
+    aws_lb_listener.backend,
+    aws_lb_listener.frontend,
+    aws_subnet.private,
+    aws_security_group.app,
+    aws_lb_target_group.backend,
+    aws_lb_target_group.frontend,
+    aws_lb.main,
+    aws_route_table_association.private,
+    aws_nat_gateway.main,
+    aws_db_instance.main
+  ]
+}
+
+# ENI Cleanup Resource - handles orphaned ENIs before subnet destruction
+resource "null_resource" "eni_cleanup" {
+  triggers = {
+    subnet_ids = join(",", aws_subnet.private[*].id)
+    vpc_id     = aws_vpc.main.id
+  }
+  
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      # Clean up orphaned ENIs in private subnets
+      aws ec2 describe-network-interfaces \
+        --filters "Name=subnet-id,Values=${self.triggers.subnet_ids}" \
+        --query 'NetworkInterfaces[?Status==`available`].NetworkInterfaceId' \
+        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
+      
+      # Clean up orphaned ENIs in the VPC
+      aws ec2 describe-network-interfaces \
+        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
+        --query 'NetworkInterfaces[].NetworkInterfaceId' \
+        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
+    EOT
+  }
+  
+  depends_on = [
+    module.ecs,
+    aws_db_instance.main,
+    aws_lb.main,
+    aws_nat_gateway.main
+  ]
 }
 
 # Route 53 record for sub-environment
