@@ -186,6 +186,8 @@ jobs:
           # Verify the plan file is a valid Terraform plan
           echo "Verifying plan file integrity..."
           cd terraform/environments/${{ steps.env.outputs.main_env }}
+          terraform init -input=false
+          terraform version
           if ! terraform show tfplan > /dev/null 2>&1; then
             echo "❌ Terraform plan file is corrupted or invalid"
             echo "File size: $(wc -c < tfplan) bytes"

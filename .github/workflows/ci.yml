@@ -269,6 +269,8 @@ jobs:
           echo "Main environment: $MAIN_ENV"
           echo "Is sub-environment: ${{ steps.env.outputs.is_sub_env }}"
 
+      - name: Terraform Version
+        run: terraform version
       - name: Terraform Init
         run: |
           cd terraform/environments/${{ steps.env.outputs.main_env }}
