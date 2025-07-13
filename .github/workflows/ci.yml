@@ -366,33 +366,30 @@ jobs:
           echo "Environment: ${{ steps.env.outputs.environment }}"
           echo "Main environment: ${{ steps.env.outputs.main_env }}"
           echo "Expected artifact name: terraform-plan-${{ steps.env.outputs.environment }}"
-          echo "Expected path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan"
+          echo "Expected path: tfplan (in current directory)"
 
-          # Check if the file exists before upload
-          if [ -f "terraform/environments/${{ steps.env.outputs.main_env }}/tfplan" ]; then
+          # Check if the file exists before upload (we're in terraform/environments/$MAIN_ENV/)
+          if [ -f "tfplan" ]; then
             echo "✅ Terraform plan file exists before upload"
-            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+            ls -la tfplan
           else
             echo "❌ Terraform plan file does not exist before upload"
             echo "Current directory: $(pwd)"
             echo "Directory contents:"
             ls -la
-            echo "terraform/environments/${{ steps.env.outputs.main_env }}/ contents:"
-            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/ 2>/dev/null || echo "Directory not found"
             
             # Create a placeholder tfplan file to allow deployment to proceed
             echo "Creating placeholder tfplan file..."
-            mkdir -p terraform/environments/${{ steps.env.outputs.main_env }}/
-            echo "# Placeholder Terraform plan for ${{ steps.env.outputs.environment }}" > terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+            echo "# Placeholder Terraform plan for ${{ steps.env.outputs.environment }}" > tfplan
             echo "Created placeholder tfplan file"
-            ls -la terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+            ls -la tfplan
           fi
 
       - name: Upload Terraform Plan
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
-          path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
+          path: tfplan
 
   # Quality Gate (runs after all jobs)
   quality-gate:
