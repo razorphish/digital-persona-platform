@@ -91,6 +91,10 @@ resource "aws_internet_gateway" "main" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-igw"
   })
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Public Subnets
@@ -143,6 +147,12 @@ resource "aws_route_table" "public" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-public-rt"
   })
+  
+  depends_on = [aws_internet_gateway.main]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Route Table Association for Public Subnets
@@ -162,6 +172,10 @@ resource "aws_eip" "nat" {
   
   # Ensure ENI dependencies are handled properly
   depends_on = [aws_internet_gateway.main]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_nat_gateway" "main" {
@@ -173,6 +187,10 @@ resource "aws_nat_gateway" "main" {
   })
   
   depends_on = [aws_internet_gateway.main]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Route Table for Private Subnets
@@ -187,6 +205,12 @@ resource "aws_route_table" "private" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-private-rt"
   })
+  
+  depends_on = [aws_nat_gateway.main]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Route Table Association for Private Subnets
@@ -282,8 +306,14 @@ resource "aws_lb" "main" {
   # Ensure load balancer depends on subnets and security groups
   depends_on = [
     aws_subnet.public,
-    aws_security_group.alb
+    aws_security_group.alb,
+    aws_internet_gateway.main,
+    aws_route_table.public
   ]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Random suffix for unique resource names
@@ -584,20 +614,35 @@ module "ecs" {
 # ENI Cleanup Resource - handles orphaned ENIs before subnet destruction
 resource "null_resource" "eni_cleanup" {
   triggers = {
-    subnet_ids = join(",", aws_subnet.private[*].id)
+    subnet_ids = join(",", concat(aws_subnet.private[*].id, aws_subnet.public[*].id))
     vpc_id     = aws_vpc.main.id
   }
   
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      # Clean up orphaned ENIs in private subnets
+      # Wait for resources to be properly destroyed
+      sleep 30
+      
+      # Clean up orphaned ENIs in all subnets
       aws ec2 describe-network-interfaces \
         --filters "Name=subnet-id,Values=${self.triggers.subnet_ids}" \
         --query 'NetworkInterfaces[?Status==`available`].NetworkInterfaceId' \
         --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
       
       # Clean up orphaned ENIs in the VPC
+      aws ec2 describe-network-interfaces \
+        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
+        --query 'NetworkInterfaces[].NetworkInterfaceId' \
+        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
+      
+      # Force detach any remaining ENIs 
+      aws ec2 describe-network-interfaces \
+        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
+        --query 'NetworkInterfaces[?Status==`in-use`].NetworkInterfaceId' \
+        --output text | xargs -r -n1 aws ec2 detach-network-interface --network-interface-id --force || true
+      
+      # Clean up detached ENIs
       aws ec2 describe-network-interfaces \
         --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
         --query 'NetworkInterfaces[].NetworkInterfaceId' \
@@ -609,7 +654,9 @@ resource "null_resource" "eni_cleanup" {
     module.ecs,
     aws_db_instance.main,
     aws_lb.main,
-    aws_nat_gateway.main
+    aws_nat_gateway.main,
+    aws_route_table.public,
+    aws_route_table.private
   ]
 }
 
