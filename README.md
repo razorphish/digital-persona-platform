@@ -978,3 +978,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 # Updated Sun Jul 13 10:55:05 PDT 2025
 
 <!-- Force fresh CI run with v4 actions: 2025-01-13 -->
+<!-- Test Terraform fix - removed common_tags from ECS module: 2025-01-13 -->
