@@ -139,14 +139,20 @@ resource "aws_subnet" "private" {
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
-  }
-  
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-public-rt"
   })
+  
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Separate route resource for proper destruction ordering
+resource "aws_route" "public_internet_access" {
+  route_table_id         = aws_route_table.public.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.main.id
   
   depends_on = [aws_internet_gateway.main]
   
@@ -160,6 +166,11 @@ resource "aws_route_table_association" "public" {
   count          = 2
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
+  
+  depends_on = [
+    aws_route_table.public,
+    aws_route.public_internet_access
+  ]
 }
 
 # NAT Gateway
@@ -308,7 +319,8 @@ resource "aws_lb" "main" {
     aws_subnet.public,
     aws_security_group.alb,
     aws_internet_gateway.main,
-    aws_route_table.public
+    aws_route_table.public,
+    aws_route.public_internet_access
   ]
   
   lifecycle {
@@ -533,14 +545,21 @@ resource "aws_db_instance" "main" {
 resource "aws_db_subnet_group" "main" {
   name       = "${local.resource_prefix}-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
+  description = "DB subnet group for ${local.resource_prefix}"
   
-  tags = local.common_tags
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-db-subnet-group"
+  })
   
   # Ensure subnet group depends on subnets and is destroyed before subnets
-  depends_on = [aws_subnet.private]
+  depends_on = [
+    aws_subnet.private,
+    aws_vpc.main
+  ]
   
   lifecycle {
     create_before_destroy = true
+    ignore_changes = [description]
   }
 }
 
@@ -656,7 +675,8 @@ resource "null_resource" "eni_cleanup" {
     aws_lb.main,
     aws_nat_gateway.main,
     aws_route_table.public,
-    aws_route_table.private
+    aws_route_table.private,
+    aws_route.public_internet_access
   ]
 }
 
