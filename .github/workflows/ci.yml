@@ -362,11 +362,14 @@ jobs:
 
       - name: Verify Artifact Upload
         run: |
+          cd terraform/environments/${{ steps.env.outputs.main_env }}
+
           echo "Verifying artifact upload..."
           echo "Environment: ${{ steps.env.outputs.environment }}"
           echo "Main environment: ${{ steps.env.outputs.main_env }}"
           echo "Expected artifact name: terraform-plan-${{ steps.env.outputs.environment }}"
           echo "Expected path: tfplan (in current directory)"
+          echo "Current directory: $(pwd)"
 
           # Check if the file exists before upload (we're in terraform/environments/$MAIN_ENV/)
           if [ -f "tfplan" ]; then
@@ -389,7 +392,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ steps.env.outputs.environment }}
-          path: tfplan
+          path: terraform/environments/${{ steps.env.outputs.main_env }}/tfplan
 
   # Quality Gate (runs after all jobs)
   quality-gate:
