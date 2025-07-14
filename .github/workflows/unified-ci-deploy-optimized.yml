@@ -462,11 +462,7 @@ jobs:
             # Add tags
             aws s3api put-bucket-tagging \
               --bucket "$BUCKET_NAME" \
-              --tagging 'TagSet=[
-                {Key=Project,Value=hibiji},
-                {Key=Purpose,Value=terraform-state},
-                {Key=ManagedBy,Value=github-actions}
-              ]'
+              --tagging 'TagSet=[{"Key":"Project","Value":"hibiji"},{"Key":"Purpose","Value":"terraform-state"},{"Key":"ManagedBy","Value":"github-actions"}]'
             
             echo "✅ S3 bucket '$BUCKET_NAME' created with versioning and encryption"
           else
@@ -484,11 +480,7 @@ jobs:
               --name hibiji-database-password \
               --description "Database password for Hibiji platform" \
               --secret-string "$DB_PASSWORD" \
-              --tags '[
-                {Key=Project,Value=hibiji},
-                {Key=Environment,Value=${{ needs.detect-environment.outputs.main_env }}},
-                {Key=ManagedBy,Value=github-actions}
-              ]'
+              --tags '[{"Key":"Project","Value":"hibiji"},{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.main_env }}"},{"Key":"ManagedBy","Value":"github-actions"}]'
             echo "✅ Database password secret created"
           else
             echo "✅ Database password secret already exists"
@@ -502,11 +494,7 @@ jobs:
               --name hibiji-secret-key \
               --description "Application secret key for Hibiji platform" \
               --secret-string "$SECRET_KEY" \
-              --tags '[
-                {Key=Project,Value=hibiji},
-                {Key=Environment,Value=${{ needs.detect-environment.outputs.main_env }}},
-                {Key=ManagedBy,Value=github-actions}
-              ]'
+              --tags '[{"Key":"Project","Value":"hibiji"},{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.main_env }}"},{"Key":"ManagedBy","Value":"github-actions"}]'
             echo "✅ Application secret key created"
           else
             echo "✅ Application secret key already exists"
