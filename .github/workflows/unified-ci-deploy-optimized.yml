@@ -586,8 +586,35 @@ jobs:
         id: terraform-outputs
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         run: |
-          echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
-          echo "cluster_name=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_OUTPUT
+          set -e
+          echo "🔍 Retrieving Terraform outputs..."
+
+          # Get outputs safely, handle missing outputs gracefully
+          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || echo "")
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || echo "")
+
+          # Validate outputs exist
+          if [ -z "$ALB_DNS" ]; then
+            echo "⚠️  Warning: alb_dns_name output not found, checking available outputs..."
+            terraform output 2>/dev/null || echo "No outputs available"
+            ALB_DNS=""
+          else
+            echo "✅ Found ALB DNS: $ALB_DNS"
+          fi
+
+          if [ -z "$CLUSTER_NAME" ]; then
+            echo "⚠️  Warning: ecs_cluster_name output not found, checking available outputs..."
+            terraform output 2>/dev/null || echo "No outputs available"
+            CLUSTER_NAME=""
+          else
+            echo "✅ Found Cluster Name: $CLUSTER_NAME"
+          fi
+
+          # Set GitHub Actions outputs (even if empty)
+          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+
+          echo "🎯 Terraform outputs retrieved successfully"
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -597,7 +624,22 @@ jobs:
 
       - name: Deploy application to ECS
         run: |
+          echo "🚀 Starting ECS deployment..."
+
+          # Validate required outputs exist
+          CLUSTER_NAME="${{ steps.terraform-outputs.outputs.cluster_name }}"
+          if [ -z "$CLUSTER_NAME" ]; then
+            echo "❌ Error: ECS cluster name not found in Terraform outputs"
+            echo "Available outputs:"
+            cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+            terraform output 2>/dev/null || echo "No outputs available"
+            exit 1
+          fi
+
+          echo "✅ Using ECS cluster: $CLUSTER_NAME"
+
           # Get the latest task definition
+          echo "📋 Retrieving current task definition..."
           TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
             --region ${{ env.AWS_REGION }} \
@@ -623,17 +665,21 @@ jobs:
             --output text)
 
           # Update service
+          echo "🔄 Updating ECS service..."
           aws ecs update-service \
-            --cluster "${{ steps.terraform-outputs.outputs.cluster_name }}" \
+            --cluster "$CLUSTER_NAME" \
             --service "hibiji-${{ needs.detect-environment.outputs.environment }}-service" \
             --task-definition "$NEW_TASK_DEF_ARN" \
             --region ${{ env.AWS_REGION }}
 
           # Wait for deployment to complete
+          echo "⏳ Waiting for deployment to stabilize..."
           aws ecs wait services-stable \
-            --cluster "${{ steps.terraform-outputs.outputs.cluster_name }}" \
+            --cluster "$CLUSTER_NAME" \
             --services "hibiji-${{ needs.detect-environment.outputs.environment }}-service" \
             --region ${{ env.AWS_REGION }}
+
+          echo "✅ ECS deployment completed successfully"
 
       - name: Run post-deployment health check
         run: |
