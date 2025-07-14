@@ -753,4 +753,35 @@ resource "aws_cloudfront_distribution" "main" {
   }
   
   tags = local.common_tags
+}
+
+# Outputs
+output "alb_dns_name" {
+  description = "DNS name of the load balancer"
+  value       = aws_lb.main.dns_name
+}
+
+output "alb_name" {
+  description = "Name of the load balancer"
+  value       = aws_lb.main.name
+}
+
+output "cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = aws_ecs_cluster.main.name
+}
+
+output "database_url" {
+  description = "Database connection URL"
+  value       = local.database_url
+}
+
+output "secret_key_arn" {
+  description = "ARN of the application secret key"
+  value       = aws_secretsmanager_secret.secret_key.arn
+}
+
+output "database_password_arn" {
+  description = "ARN of the database password secret"
+  value       = aws_secretsmanager_secret.database_password.arn
 } 

@@ -612,7 +612,7 @@ jobs:
 
           # Get outputs safely
           ALB_DNS=$(get_terraform_output "alb_dns_name")
-          CLUSTER_NAME=$(get_terraform_output "ecs_cluster_name")
+          CLUSTER_NAME=$(get_terraform_output "cluster_name")
 
           # Validate and report outputs
           if [ -z "$ALB_DNS" ]; then
