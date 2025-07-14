@@ -580,11 +580,6 @@ resource "aws_db_subnet_group" "main" {
       create_before_destroy = true
       ignore_changes = [description]
     }
-  
-  timeouts {
-    create = "10m"
-    delete = "10m"
-  }
 }
 
 # Data sources
