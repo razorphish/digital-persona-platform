@@ -50,6 +50,12 @@ variable "frontend_image_tag" {
   default     = "latest"
 }
 
+variable "aws_region" {
+  description = "AWS region for resource deployment"
+  type        = string
+  default     = "us-west-1"
+}
+
 # Local values for sub-environment
 locals {
   sub_env = var.sub_environment
@@ -82,10 +88,6 @@ resource "aws_vpc" "main" {
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-vpc"
   })
-  
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 # Internet Gateway
@@ -99,13 +101,6 @@ resource "aws_internet_gateway" "main" {
   lifecycle {
     create_before_destroy = true
   }
-  
-  timeouts {
-    create = "10m"
-    delete = "15m"
-  }
-  
-  # IGW will be destroyed after all dependent resources through implicit dependencies
 }
 
 # Public Subnets
@@ -150,22 +145,15 @@ resource "aws_subnet" "private" {
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+  
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-public-rt"
   })
   
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Separate route resource for proper destruction ordering
-resource "aws_route" "public_internet_access" {
-  route_table_id         = aws_route_table.public.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.main.id
-  
-  # Route to IGW requires IGW to be attached
   depends_on = [aws_internet_gateway.main]
   
   lifecycle {
@@ -178,12 +166,6 @@ resource "aws_route_table_association" "public" {
   count          = 2
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
-  
-  # Implicit dependencies through resource references are sufficient
-  
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 # NAT Gateway
@@ -194,7 +176,7 @@ resource "aws_eip" "nat" {
     Name = "${local.resource_prefix}-nat-eip"
   })
   
-  # EIP in VPC requires IGW to be attached
+  # Ensure ENI dependencies are handled properly
   depends_on = [aws_internet_gateway.main]
   
   lifecycle {
@@ -210,16 +192,10 @@ resource "aws_nat_gateway" "main" {
     Name = "${local.resource_prefix}-nat"
   })
   
-  # NAT Gateway requires IGW to be attached to VPC before creation
   depends_on = [aws_internet_gateway.main]
   
   lifecycle {
     create_before_destroy = true
-  }
-  
-  timeouts {
-    create = "10m"
-    delete = "10m"
   }
 }
 
@@ -248,10 +224,6 @@ resource "aws_route_table_association" "private" {
   count          = 2
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
-  
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 # Security Groups
@@ -337,27 +309,22 @@ resource "aws_lb" "main" {
     Name = "${local.resource_prefix}-alb"
   })
   
+  # Ensure load balancer depends on subnets and security groups
+  depends_on = [
+    aws_subnet.public,
+    aws_security_group.alb,
+    aws_internet_gateway.main,
+    aws_route_table.public
+  ]
+  
   lifecycle {
     create_before_destroy = true
   }
-  
-  # Ensure ALB is created after all dependencies and destroyed before them
-  depends_on = [
-    aws_internet_gateway.main,
-    aws_subnet.public,
-    aws_security_group.alb
-  ]
 }
 
-# Random suffix for unique resource names - force new on each apply to avoid conflicts
+# Random suffix for unique resource names
 resource "random_id" "suffix" {
   byte_length = 4
-  
-  keepers = {
-    # Force new ID when VPC changes to avoid naming conflicts
-    vpc_id = aws_vpc.main.id
-    timestamp = formatdate("YYYY-MM-DD-hhmm", timestamp())
-  }
 }
 
 # ALB Target Groups
@@ -387,8 +354,6 @@ resource "aws_lb_target_group" "backend" {
   lifecycle {
     create_before_destroy = true
   }
-  
-  depends_on = [aws_vpc.main]
 }
 
 resource "aws_lb_target_group" "frontend" {
@@ -403,7 +368,7 @@ resource "aws_lb_target_group" "frontend" {
     healthy_threshold   = 2
     interval            = 30
     matcher             = "200"
-    path                = "/health"
+    path                = "/"
     port                = "traffic-port"
     protocol            = "HTTP"
     timeout             = 5
@@ -417,8 +382,6 @@ resource "aws_lb_target_group" "frontend" {
   lifecycle {
     create_before_destroy = true
   }
-  
-  depends_on = [aws_vpc.main]
 }
 
 # ALB Listeners
@@ -564,43 +527,27 @@ resource "aws_db_instance" "main" {
   
   tags = local.common_tags
   
-  # Implicit dependencies through resource references
-  # RDS automatically depends on DB subnet group and security groups
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-  
-  timeouts {
-    create = "20m"
-    delete = "20m"
-    update = "20m"
-  }
+  # Ensure RDS instance depends on subnets and security groups
+  depends_on = [
+    aws_db_subnet_group.main,
+    aws_security_group.app,
+    aws_subnet.private
+  ]
 }
 
 # DB Subnet Group
 resource "aws_db_subnet_group" "main" {
   name       = "${local.resource_prefix}-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
-  description = "DB subnet group for ${local.resource_prefix}"
   
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-db-subnet-group"
-    VPC = aws_vpc.main.id
-  })
+  tags = local.common_tags
+  
+  # Ensure subnet group depends on subnets and is destroyed before subnets
+  depends_on = [aws_subnet.private]
   
   lifecycle {
     create_before_destroy = true
-    ignore_changes = [description]
-    # Replace if VPC changes
-    replace_triggered_by = [aws_vpc.main.id]
   }
-  
-  # Ensure subnet group depends on subnets and is managed carefully
-  depends_on = [
-    aws_subnet.private,
-    aws_vpc.main
-  ]
 }
 
 # Data sources
@@ -670,60 +617,42 @@ module "ecs" {
   ]
 }
 
-# Enhanced pre-destruction cleanup to handle IGW dependencies
-resource "null_resource" "pre_destroy_cleanup" {
+# ENI Cleanup Resource - handles orphaned ENIs before subnet destruction
+resource "null_resource" "eni_cleanup" {
   triggers = {
-    # Use static values to avoid dependency cycles
-    environment = local.sub_env
-    vpc_id = aws_vpc.main.id
-    region = "us-west-1"
+    subnet_ids = join(",", concat(aws_subnet.private[*].id, aws_subnet.public[*].id))
+    vpc_id     = aws_vpc.main.id
   }
   
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      echo "Starting comprehensive pre-destroy cleanup for environment: ${self.triggers.environment}"
-      
-      # Wait for services to be properly stopped
+      # Wait for resources to be properly destroyed
       sleep 30
       
-      # Clean up Load Balancers first (they hold public IPs)
-      echo "Cleaning up Load Balancers for VPC: ${self.triggers.vpc_id}"
-      aws elbv2 describe-load-balancers --region ${self.triggers.region} \
-        --query "LoadBalancers[?VpcId=='${self.triggers.vpc_id}'].LoadBalancerArn" \
-        --output text | xargs -r -n1 -I {} aws elbv2 delete-load-balancer --load-balancer-arn {} --region ${self.triggers.region} || true
+      # Clean up orphaned ENIs in all subnets
+      aws ec2 describe-network-interfaces \
+        --filters "Name=subnet-id,Values=${self.triggers.subnet_ids}" \
+        --query 'NetworkInterfaces[?Status==`available`].NetworkInterfaceId' \
+        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
       
-      # Wait for ALB deletion
-      sleep 60
-      
-      # Clean up NAT Gateways (they hold Elastic IPs)
-      echo "Cleaning up NAT Gateways for VPC: ${self.triggers.vpc_id}"
-      aws ec2 describe-nat-gateways --region ${self.triggers.region} \
-        --filter "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=state,Values=available" \
-        --query 'NatGateways[].NatGatewayId' \
-        --output text | xargs -r -n1 -I {} aws ec2 delete-nat-gateway --nat-gateway-id {} --region ${self.triggers.region} || true
-      
-      # Wait for NAT Gateway deletion
-      sleep 120
-      
-      # Release unattached Elastic IPs in the VPC
-      echo "Releasing unattached Elastic IPs"
-      aws ec2 describe-addresses --region ${self.triggers.region} \
-        --filters "Name=domain,Values=vpc" \
-        --query 'Addresses[?AssociationId==null].AllocationId' \
-        --output text | xargs -r -n1 -I {} aws ec2 release-address --allocation-id {} --region ${self.triggers.region} || true
-      
-      # Clean up orphaned ENIs by environment tag
-      echo "Cleaning up ENIs for environment: ${self.triggers.environment}"
-      aws ec2 describe-network-interfaces --region ${self.triggers.region} \
-        --filters "Name=tag:Environment,Values=${self.triggers.environment}" "Name=status,Values=available" \
+      # Clean up orphaned ENIs in the VPC
+      aws ec2 describe-network-interfaces \
+        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
         --query 'NetworkInterfaces[].NetworkInterfaceId' \
-        --output text | xargs -r -n1 -I {} aws ec2 delete-network-interface --network-interface-id {} --region ${self.triggers.region} || true
+        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
       
-      # Additional wait for all network resources to clean up
-      sleep 60
+      # Force detach any remaining ENIs 
+      aws ec2 describe-network-interfaces \
+        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
+        --query 'NetworkInterfaces[?Status==`in-use`].NetworkInterfaceId' \
+        --output text | xargs -r -n1 aws ec2 detach-network-interface --network-interface-id --force || true
       
-      echo "Pre-destroy cleanup completed"
+      # Clean up detached ENIs
+      aws ec2 describe-network-interfaces \
+        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
+        --query 'NetworkInterfaces[].NetworkInterfaceId' \
+        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
     EOT
   }
   
@@ -731,38 +660,9 @@ resource "null_resource" "pre_destroy_cleanup" {
     module.ecs,
     aws_db_instance.main,
     aws_lb.main,
-    aws_nat_gateway.main
-  ]
-}
-
-# Post-cleanup for networking resources - handles any remaining network cleanup
-resource "null_resource" "network_cleanup" {
-  triggers = {
-    environment = local.sub_env
-    vpc_id = aws_vpc.main.id
-    cleanup_id = null_resource.pre_destroy_cleanup.id
-  }
-  
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      echo "Starting final network cleanup for environment: ${self.triggers.environment}"
-      
-      # Final wait to ensure all network resources are properly cleaned
-      sleep 30
-      
-      # Force cleanup any remaining network interfaces in the VPC
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
-        --query 'NetworkInterfaces[].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
-      
-      echo "Network cleanup completed"
-    EOT
-  }
-  
-  depends_on = [
-    null_resource.pre_destroy_cleanup
+    aws_nat_gateway.main,
+    aws_route_table.public,
+    aws_route_table.private
   ]
 }
 
