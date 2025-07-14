@@ -163,10 +163,7 @@ resource "aws_route" "public_internet_access" {
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.main.id
   
-  depends_on = [
-    aws_internet_gateway.main,
-    aws_route_table.public
-  ]
+  # Implicit dependencies through resource references are sufficient
   
   lifecycle {
     create_before_destroy = true
@@ -179,10 +176,7 @@ resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
   
-  depends_on = [
-    aws_route_table.public,
-    aws_route.public_internet_access
-  ]
+  # Implicit dependencies through resource references are sufficient
   
   lifecycle {
     create_before_destroy = true
@@ -197,8 +191,7 @@ resource "aws_eip" "nat" {
     Name = "${local.resource_prefix}-nat-eip"
   })
   
-  # Ensure ENI dependencies are handled properly
-  depends_on = [aws_internet_gateway.main]
+  # Rely on implicit dependencies - EIP in VPC automatically depends on IGW
   
   lifecycle {
     create_before_destroy = true
@@ -213,10 +206,8 @@ resource "aws_nat_gateway" "main" {
     Name = "${local.resource_prefix}-nat"
   })
   
-  depends_on = [
-    aws_internet_gateway.main,
-    aws_route.public_internet_access
-  ]
+  # Rely on implicit dependencies through resource references
+  # NAT Gateway implicitly depends on EIP and public subnet
   
   lifecycle {
     create_before_destroy = true
@@ -342,13 +333,8 @@ resource "aws_lb" "main" {
     Name = "${local.resource_prefix}-alb"
   })
   
-  # Ensure load balancer depends on subnets and security groups
-  depends_on = [
-    aws_subnet.public,
-    aws_security_group.alb,
-    aws_route.public_internet_access,
-    aws_route_table_association.public
-  ]
+  # Implicit dependencies through resource references
+  # ALB automatically depends on subnets and security groups through references
   
   lifecycle {
     create_before_destroy = true
@@ -560,12 +546,8 @@ resource "aws_db_instance" "main" {
   
   tags = local.common_tags
   
-  # Ensure RDS instance depends on subnets and security groups
-  depends_on = [
-    aws_db_subnet_group.main,
-    aws_security_group.app,
-    aws_subnet.private
-  ]
+  # Implicit dependencies through resource references
+  # RDS automatically depends on DB subnet group and security groups
   
   lifecycle {
     create_before_destroy = true
@@ -588,15 +570,20 @@ resource "aws_db_subnet_group" "main" {
     Name = "${local.resource_prefix}-db-subnet-group"
   })
   
-  # Ensure subnet group depends on subnets
+  # Ensure subnet group depends on subnets and is managed carefully
   depends_on = [
     aws_subnet.private,
     aws_vpc.main
   ]
   
-  lifecycle {
-    create_before_destroy = true
-    ignore_changes = [description]
+      lifecycle {
+      create_before_destroy = true
+      ignore_changes = [description]
+    }
+  
+  timeouts {
+    create = "10m"
+    delete = "10m"
   }
 }
 
@@ -722,9 +709,7 @@ resource "null_resource" "network_cleanup" {
   }
   
   depends_on = [
-    null_resource.pre_destroy_cleanup,
-    aws_nat_gateway.main,
-    aws_route.public_internet_access
+    null_resource.pre_destroy_cleanup
   ]
 }
 
