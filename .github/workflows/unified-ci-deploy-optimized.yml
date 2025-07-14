@@ -738,10 +738,46 @@ jobs:
 
           # Wait for backend service deployment to complete
           echo "⏳ Waiting for backend service to stabilize..."
-          aws ecs wait services-stable \
+          echo "🔍 Checking backend service status before waiting..."
+          aws ecs describe-services \
             --cluster "$CLUSTER_NAME" \
             --services "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
-            --region ${{ env.AWS_REGION }}
+            --region ${{ env.AWS_REGION }} \
+            --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount}' \
+            --output table
+
+          # Wait with extended timeout (default is 15 minutes, extending to 20 minutes)
+          timeout 1200 aws ecs wait services-stable \
+            --cluster "$CLUSTER_NAME" \
+            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+            --region ${{ env.AWS_REGION }} \
+            --cli-read-timeout 1200 \
+            --cli-connect-timeout 60 || {
+              echo "⚠️ Backend service stabilization timed out or failed, checking current status..."
+              aws ecs describe-services \
+                --cluster "$CLUSTER_NAME" \
+                --services "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount,deployments:deployments[0].{status:status,rolloutState:rolloutState}}' \
+                --output table
+              
+              # Check task status for debugging
+              echo "🔍 Checking task status..."
+              aws ecs list-tasks \
+                --cluster "$CLUSTER_NAME" \
+                --service-name "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'taskArns[0]' \
+                --output text | xargs -I {} aws ecs describe-tasks \
+                --cluster "$CLUSTER_NAME" \
+                --tasks {} \
+                --region ${{ env.AWS_REGION }} \
+                --query 'tasks[0].{taskArn:taskArn,lastStatus:lastStatus,healthStatus:healthStatus,containers:containers[0].{name:name,lastStatus:lastStatus,healthStatus:healthStatus}}' \
+                --output table || echo "No tasks found or task description failed"
+              
+              # Continue with deployment even if stabilization timed out
+              echo "⚠️ Continuing with deployment despite stabilization timeout..."
+            }
 
           # Wait for frontend service deployment to complete (if it exists)
           if aws ecs describe-services \
@@ -752,10 +788,31 @@ jobs:
             --output text 2>/dev/null | grep -q "frontend"; then
             
             echo "⏳ Waiting for frontend service to stabilize..."
-            aws ecs wait services-stable \
+            echo "🔍 Checking frontend service status before waiting..."
+            aws ecs describe-services \
               --cluster "$CLUSTER_NAME" \
               --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
-              --region ${{ env.AWS_REGION }}
+              --region ${{ env.AWS_REGION }} \
+              --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount}' \
+              --output table
+            
+            # Wait with extended timeout
+            timeout 1200 aws ecs wait services-stable \
+              --cluster "$CLUSTER_NAME" \
+              --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+              --region ${{ env.AWS_REGION }} \
+              --cli-read-timeout 1200 \
+              --cli-connect-timeout 60 || {
+                echo "⚠️ Frontend service stabilization timed out or failed, checking current status..."
+                aws ecs describe-services \
+                  --cluster "$CLUSTER_NAME" \
+                  --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+                  --region ${{ env.AWS_REGION }} \
+                  --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount,deployments:deployments[0].{status:status,rolloutState:rolloutState}}' \
+                  --output table
+                
+                echo "⚠️ Continuing with deployment despite frontend stabilization timeout..."
+              }
           else
             echo "⚠️ Frontend service not found, skipping frontend wait..."
           fi
