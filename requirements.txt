@@ -56,4 +56,4 @@ httpx==0.28.1
 
 # Additional dependencies for testing and runtime
 click==8.1.7
-typing-extensions==4.8.0 
+typing-extensions==4.8.0 # Last updated: Mon Jul 14 13:39:16 PDT 2025
