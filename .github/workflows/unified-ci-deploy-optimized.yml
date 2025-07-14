@@ -661,46 +661,104 @@ jobs:
 
           echo "✅ Using ECS cluster: $CLUSTER_NAME"
 
-          # Get the latest task definition
-          echo "📋 Retrieving current task definition..."
-          TASK_DEF=$(aws ecs describe-task-definition \
+          # Get the latest backend task definition
+          echo "📋 Retrieving current backend task definition..."
+          BACKEND_TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
             --region ${{ env.AWS_REGION }} \
             --query 'taskDefinition' \
             --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
 
-          # Update image URIs
-          UPDATED_TASK_DEF=$(echo $TASK_DEF | jq \
+          # Update backend image URI
+          UPDATED_BACKEND_TASK_DEF=$(echo $BACKEND_TASK_DEF | jq \
             --arg BACKEND_IMAGE "${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}" \
-            --arg FRONTEND_IMAGE "${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}" \
             '.containerDefinitions |= map(
               if .name == "backend" then .image = $BACKEND_IMAGE
-              elif .name == "frontend" then .image = $FRONTEND_IMAGE
               else . end
             )')
 
-          # Register new task definition
-          echo $UPDATED_TASK_DEF > updated-task-def.json
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://updated-task-def.json \
+          # Register new backend task definition
+          echo $UPDATED_BACKEND_TASK_DEF > updated-backend-task-def.json
+          NEW_BACKEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://updated-backend-task-def.json \
             --region ${{ env.AWS_REGION }} \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
-          # Update service
-          echo "🔄 Updating ECS service..."
+          # Update backend service
+          echo "🔄 Updating ECS backend service..."
           aws ecs update-service \
             --cluster "$CLUSTER_NAME" \
-            --service "hibiji-${{ needs.detect-environment.outputs.environment }}-service" \
-            --task-definition "$NEW_TASK_DEF_ARN" \
+            --service "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+            --task-definition "$NEW_BACKEND_TASK_DEF_ARN" \
             --region ${{ env.AWS_REGION }}
 
-          # Wait for deployment to complete
-          echo "⏳ Waiting for deployment to stabilize..."
+          # Handle frontend service (if it exists)
+          echo "📋 Checking for frontend service..."
+          if aws ecs describe-services \
+            --cluster "$CLUSTER_NAME" \
+            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'services[0].serviceName' \
+            --output text 2>/dev/null | grep -q "frontend"; then
+            
+            echo "📋 Retrieving current frontend task definition..."
+            FRONTEND_TASK_DEF=$(aws ecs describe-task-definition \
+              --task-definition "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'taskDefinition' \
+              --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
+
+            # Update frontend image URI
+            UPDATED_FRONTEND_TASK_DEF=$(echo $FRONTEND_TASK_DEF | jq \
+              --arg FRONTEND_IMAGE "${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}" \
+              '.containerDefinitions |= map(
+                if .name == "frontend" then .image = $FRONTEND_IMAGE
+                else . end
+              )')
+
+            # Register new frontend task definition
+            echo $UPDATED_FRONTEND_TASK_DEF > updated-frontend-task-def.json
+            NEW_FRONTEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
+              --cli-input-json file://updated-frontend-task-def.json \
+              --region ${{ env.AWS_REGION }} \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+
+            # Update frontend service
+            echo "🔄 Updating ECS frontend service..."
+            aws ecs update-service \
+              --cluster "$CLUSTER_NAME" \
+              --service "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+              --task-definition "$NEW_FRONTEND_TASK_DEF_ARN" \
+              --region ${{ env.AWS_REGION }}
+          else
+            echo "⚠️ Frontend service not found, skipping frontend update..."
+          fi
+
+          # Wait for backend service deployment to complete
+          echo "⏳ Waiting for backend service to stabilize..."
           aws ecs wait services-stable \
             --cluster "$CLUSTER_NAME" \
-            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-service" \
+            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
             --region ${{ env.AWS_REGION }}
+
+          # Wait for frontend service deployment to complete (if it exists)
+          if aws ecs describe-services \
+            --cluster "$CLUSTER_NAME" \
+            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'services[0].serviceName' \
+            --output text 2>/dev/null | grep -q "frontend"; then
+            
+            echo "⏳ Waiting for frontend service to stabilize..."
+            aws ecs wait services-stable \
+              --cluster "$CLUSTER_NAME" \
+              --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+              --region ${{ env.AWS_REGION }}
+          else
+            echo "⚠️ Frontend service not found, skipping frontend wait..."
+          fi
 
           echo "✅ ECS deployment completed successfully"
 
