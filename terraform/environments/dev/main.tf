@@ -99,6 +99,11 @@ resource "aws_internet_gateway" "main" {
   lifecycle {
     create_before_destroy = true
   }
+  
+  timeouts {
+    create = "10m"
+    delete = "10m"
+  }
 }
 
 # Public Subnets
@@ -215,6 +220,11 @@ resource "aws_nat_gateway" "main" {
   
   lifecycle {
     create_before_destroy = true
+  }
+  
+  timeouts {
+    create = "10m"
+    delete = "10m"
   }
 }
 
@@ -556,6 +566,16 @@ resource "aws_db_instance" "main" {
     aws_security_group.app,
     aws_subnet.private
   ]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
+  
+  timeouts {
+    create = "20m"
+    delete = "20m"
+    update = "20m"
+  }
 }
 
 # DB Subnet Group
@@ -568,7 +588,7 @@ resource "aws_db_subnet_group" "main" {
     Name = "${local.resource_prefix}-db-subnet-group"
   })
   
-  # Ensure subnet group depends on subnets and is destroyed before subnets
+  # Ensure subnet group depends on subnets
   depends_on = [
     aws_subnet.private,
     aws_vpc.main
@@ -648,32 +668,63 @@ module "ecs" {
 }
 
 # ENI Cleanup Resource - handles orphaned ENIs before subnet destruction
-resource "null_resource" "eni_cleanup" {
+# Pre-destruction cleanup to ensure proper resource cleanup
+resource "null_resource" "pre_destroy_cleanup" {
   triggers = {
     # Use static values to avoid dependency cycles
-    vpc_cidr = "10.0.0.0/16"
     environment = local.sub_env
+    timestamp = timestamp()
   }
   
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      # Simple cleanup using environment-based naming
-      # Clean up orphaned ENIs in the VPC for this environment
+      echo "Starting pre-destroy cleanup for environment: ${self.triggers.environment}"
+      
+      # Wait for services to be properly stopped
+      sleep 30
+      
+      # Clean up orphaned ENIs by environment tag
+      echo "Cleaning up ENIs for environment: ${self.triggers.environment}"
       aws ec2 describe-network-interfaces \
         --filters "Name=tag:Environment,Values=${self.triggers.environment}" "Name=status,Values=available" \
         --query 'NetworkInterfaces[].NetworkInterfaceId' \
         --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
       
-      echo "ENI cleanup completed for environment: ${self.triggers.environment}"
+      echo "Pre-destroy cleanup completed"
     EOT
   }
   
   depends_on = [
     module.ecs,
     aws_db_instance.main,
-    aws_lb.main,
-    aws_nat_gateway.main
+    aws_lb.main
+  ]
+}
+
+# Post-cleanup for networking resources
+resource "null_resource" "network_cleanup" {
+  triggers = {
+    environment = local.sub_env
+    cleanup_id = null_resource.pre_destroy_cleanup.id
+  }
+  
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "Starting network cleanup for environment: ${self.triggers.environment}"
+      
+      # Additional wait for network resources
+      sleep 30
+      
+      echo "Network cleanup completed"
+    EOT
+  }
+  
+  depends_on = [
+    null_resource.pre_destroy_cleanup,
+    aws_nat_gateway.main,
+    aws_route.public_internet_access
   ]
 }
 
