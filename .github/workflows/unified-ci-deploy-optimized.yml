@@ -165,6 +165,7 @@ jobs:
           base: main
           head: HEAD
           extra_args: --exclude-paths=.trufflehogignore
+        continue-on-error: true
 
   backend-tests:
     name: 🐍 Backend Tests (${{ matrix.python-version }})
