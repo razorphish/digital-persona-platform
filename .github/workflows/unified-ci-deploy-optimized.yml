@@ -589,30 +589,53 @@ jobs:
           set -e
           echo "🔍 Retrieving Terraform outputs..."
 
-          # Get outputs safely, handle missing outputs gracefully
-          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || echo "")
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || echo "")
+          # Function to validate and clean terraform output
+          get_terraform_output() {
+            local output_name="$1"
+            local raw_output
+            
+            # Get raw output
+            raw_output=$(terraform output -raw "$output_name" 2>/dev/null || echo "")
+            
+            # Check if output contains warning patterns (multiline or box characters)
+            if [[ "$raw_output" == *"Warning: No outputs found"* ]] || \
+               [[ "$raw_output" == *"╷"* ]] || \
+               [[ "$raw_output" == *"│"* ]] || \
+               [[ "$raw_output" == *"╵"* ]] || \
+               [[ "$raw_output" =~ $'\n' ]]; then
+              echo ""  # Return empty if it's a warning or multiline
+            else
+              # Clean any remaining formatting and return single line
+              echo "$raw_output" | tr -d '\r\n' | sed 's/\x1b\[[0-9;]*m//g'
+            fi
+          }
 
-          # Validate outputs exist
+          # Get outputs safely
+          ALB_DNS=$(get_terraform_output "alb_dns_name")
+          CLUSTER_NAME=$(get_terraform_output "ecs_cluster_name")
+
+          # Validate and report outputs
           if [ -z "$ALB_DNS" ]; then
-            echo "⚠️  Warning: alb_dns_name output not found, checking available outputs..."
-            terraform output 2>/dev/null || echo "No outputs available"
+            echo "⚠️  Warning: alb_dns_name output not found or invalid"
+            echo "📋 Available outputs:"
+            terraform output 2>/dev/null | head -10 || echo "No outputs available"
             ALB_DNS=""
           else
             echo "✅ Found ALB DNS: $ALB_DNS"
           fi
 
           if [ -z "$CLUSTER_NAME" ]; then
-            echo "⚠️  Warning: ecs_cluster_name output not found, checking available outputs..."
-            terraform output 2>/dev/null || echo "No outputs available"
+            echo "⚠️  Warning: ecs_cluster_name output not found or invalid"
+            echo "📋 Available outputs:"
+            terraform output 2>/dev/null | head -10 || echo "No outputs available"
             CLUSTER_NAME=""
           else
             echo "✅ Found Cluster Name: $CLUSTER_NAME"
           fi
 
-          # Set GitHub Actions outputs (even if empty)
-          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
-          echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+          # Set GitHub Actions outputs (guaranteed single-line, safe format)
+          echo "alb_dns=${ALB_DNS}" >> $GITHUB_OUTPUT
+          echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
 
           echo "🎯 Terraform outputs retrieved successfully"
 
