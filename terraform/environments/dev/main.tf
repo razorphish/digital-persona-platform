@@ -771,11 +771,6 @@ output "cluster_name" {
   value       = aws_ecs_cluster.main.name
 }
 
-output "database_url" {
-  description = "Database connection URL"
-  value       = local.database_url
-}
-
 output "secret_key_arn" {
   description = "ARN of the application secret key"
   value       = aws_secretsmanager_secret.secret_key.arn
