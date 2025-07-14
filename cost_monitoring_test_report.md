@@ -1,11 +1,11 @@
 # Cost Monitoring Test Report
 
-Generated on: Fri Jul 11 14:27:51 PDT 2025
+Generated on: Mon Jul 14 06:20:27 PDT 2025
 
 ## Test Results
 
 ### AWS Permissions
-- Cost Explorer: 24.7200388475
+- Cost Explorer: 67.4802686061
 ✅ Working
 - Budgets: ✅ Working
 - CloudWatch: ✅ Working

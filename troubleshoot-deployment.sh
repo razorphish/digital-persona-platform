@@ -73,7 +73,7 @@ aws ecs describe-services --cluster hibiji-dev-cluster --services hibiji-dev-bac
 
 # Check ALB status
 print_status "Checking ALB status..."
-aws elbv2 describe-load-balancers --names hibiji-dev-alb --region us-west-1 --query 'LoadBalancers[0].{State:State.Code,DNSName:DNSName}' --output table
+aws elbv2 describe-load-balancers --names hibiji-dev01-alb --region us-west-1 --query 'LoadBalancers[0].{State:State.Code,DNSName:DNSName}' --output table
 
 # Check target groups
 print_status "Checking target groups..."
