@@ -481,23 +481,61 @@ jobs:
 
       - name: Create AWS Secrets if they don't exist
         run: |
-          # Create database password secret if it doesn't exist
-          aws secretsmanager describe-secret --secret-id "hibiji/${{ needs.detect-environment.outputs.environment }}/database/password" --region ${{ env.AWS_REGION }} || \
-          aws secretsmanager create-secret \
-            --name "hibiji/${{ needs.detect-environment.outputs.environment }}/database/password" \
-            --description "Database password for ${{ needs.detect-environment.outputs.environment }}" \
-            --secret-string "$(openssl rand -base64 32)" \
-            --region ${{ env.AWS_REGION }} \
-            --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+          # Get the environment-specific prefix
+          RESOURCE_PREFIX="hibiji-${{ needs.detect-environment.outputs.environment }}"
 
-          # Create application secret key if it doesn't exist
-          aws secretsmanager describe-secret --secret-id "hibiji/${{ needs.detect-environment.outputs.environment }}/app/secret-key" --region ${{ env.AWS_REGION }} || \
-          aws secretsmanager create-secret \
-            --name "hibiji/${{ needs.detect-environment.outputs.environment }}/app/secret-key" \
-            --description "Application secret key for ${{ needs.detect-environment.outputs.environment }}" \
-            --secret-string "$(openssl rand -base64 64)" \
+          # Check if secrets already exist (they may have random suffixes from Terraform)
+          echo "🔍 Checking for existing secrets..."
+
+          # Look for existing secret key (with pattern matching)
+          EXISTING_SECRET_KEY=$(aws secretsmanager list-secrets \
             --region ${{ env.AWS_REGION }} \
-            --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+            --query "SecretList[?starts_with(Name, '${RESOURCE_PREFIX}-secret-key')].Name" \
+            --output text)
+
+          # Look for existing database password (with pattern matching)
+          EXISTING_DB_PASSWORD=$(aws secretsmanager list-secrets \
+            --region ${{ env.AWS_REGION }} \
+            --query "SecretList[?starts_with(Name, '${RESOURCE_PREFIX}-db-password')].Name" \
+            --output text)
+
+          # Create app secret key if it doesn't exist
+          if [ -z "$EXISTING_SECRET_KEY" ]; then
+            echo "📝 Creating new application secret key..."
+            # Generate a random suffix to match Terraform naming convention
+            RANDOM_SUFFIX=$(openssl rand -hex 4)
+            SECRET_KEY_NAME="${RESOURCE_PREFIX}-secret-key-${RANDOM_SUFFIX}"
+            
+            aws secretsmanager create-secret \
+              --name "$SECRET_KEY_NAME" \
+              --description "Application secret key for ${{ needs.detect-environment.outputs.environment }}" \
+              --secret-string "$(openssl rand -base64 64)" \
+              --region ${{ env.AWS_REGION }} \
+              --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+            echo "✅ Created secret: $SECRET_KEY_NAME"
+          else
+            echo "✅ Found existing secret key: $EXISTING_SECRET_KEY"
+          fi
+
+          # Create database password if it doesn't exist
+          if [ -z "$EXISTING_DB_PASSWORD" ]; then
+            echo "📝 Creating new database password..."
+            # Generate a random suffix to match Terraform naming convention
+            RANDOM_SUFFIX=$(openssl rand -hex 4)
+            DB_PASSWORD_NAME="${RESOURCE_PREFIX}-db-password-${RANDOM_SUFFIX}"
+            
+            aws secretsmanager create-secret \
+              --name "$DB_PASSWORD_NAME" \
+              --description "Database password for ${{ needs.detect-environment.outputs.environment }}" \
+              --secret-string "$(openssl rand -base64 32)" \
+              --region ${{ env.AWS_REGION }} \
+              --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+            echo "✅ Created secret: $DB_PASSWORD_NAME"
+          else
+            echo "✅ Found existing database password: $EXISTING_DB_PASSWORD"
+          fi
+
+          echo "🎯 Secret verification complete"
 
       - name: Create S3 Terraform Backend Bucket
         run: |
