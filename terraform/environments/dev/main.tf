@@ -163,7 +163,8 @@ resource "aws_route" "public_internet_access" {
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.main.id
   
-  # Implicit dependencies through resource references are sufficient
+  # Route to IGW requires IGW to be attached
+  depends_on = [aws_internet_gateway.main]
   
   lifecycle {
     create_before_destroy = true
@@ -191,7 +192,8 @@ resource "aws_eip" "nat" {
     Name = "${local.resource_prefix}-nat-eip"
   })
   
-  # Rely on implicit dependencies - EIP in VPC automatically depends on IGW
+  # EIP in VPC requires IGW to be attached
+  depends_on = [aws_internet_gateway.main]
   
   lifecycle {
     create_before_destroy = true
@@ -206,8 +208,8 @@ resource "aws_nat_gateway" "main" {
     Name = "${local.resource_prefix}-nat"
   })
   
-  # Rely on implicit dependencies through resource references
-  # NAT Gateway implicitly depends on EIP and public subnet
+  # NAT Gateway requires IGW to be attached to VPC before creation
+  depends_on = [aws_internet_gateway.main]
   
   lifecycle {
     create_before_destroy = true
