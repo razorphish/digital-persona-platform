@@ -1,4 +1,4 @@
-name: Digital Persona Platform - Unified CI/CD (Optimized)
+name: Digital Persona Platform - Unified CI/CD (Optimized v2)
 
 on:
   push:
@@ -48,9 +48,8 @@ concurrency:
 
 jobs:
   # ===========================================
-  # VALIDATION PHASE (Runs First)
+  # ENVIRONMENT DETECTION
   # ===========================================
-
   detect-environment:
     name: 🔍 Environment Detection
     runs-on: ubuntu-latest
@@ -140,8 +139,8 @@ jobs:
         with:
           path: |
             ~/.cache/trivy
-            ~/.cache/trufflehog
-          key: ${{ runner.os }}-security-${{ hashFiles('**/requirements.txt', '**/package-lock.json') }}
+            ~/.cache/semgrep
+          key: ${{ runner.os }}-security-${{ hashFiles('**/requirements.txt', '**/package*.json') }}
           restore-keys: |
             ${{ runner.os }}-security-
 
@@ -149,9 +148,9 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: "fs"
+          scan-ref: "."
           format: "sarif"
           output: "trivy-results.sarif"
-          severity: "CRITICAL,HIGH"
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
@@ -163,23 +162,13 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          extra_args: --debug --only-verified
-
-      - name: Upload security scan artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: security-scan-results
-          path: |
-            trivy-results.sarif
-          retention-days: 30
+          base: main
+          head: HEAD
 
   backend-tests:
-    name: 🐍 Backend Tests
+    name: 🐍 Backend Tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     if: github.event.inputs.skip_tests != 'true'
     strategy:
       matrix:
@@ -189,62 +178,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Cache pip dependencies
+      - name: Cache Python dependencies
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cache/pip
-            ~/.cache/pytest
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-${{ matrix.python-version }}
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies with retry
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Retry pip install up to 3 times
-          for i in {1..3}; do
-            pip install -r requirements.txt && break
-            echo "Pip install attempt $i failed, retrying..."
-            sleep 5
-          done
-          pip install pytest pytest-cov pytest-asyncio pytest-xdist
+          pip install -r requirements.txt
 
-      - name: Run backend tests with coverage
+      - name: Run tests
         run: |
-          python -m pytest tests/ -v \
-            --cov=app \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --maxfail=5 \
-            -n auto \
-            --tb=short \
-            --strict-markers
+          python -m pytest tests/ -v --cov=app --cov-report=xml
 
-      - name: Upload coverage to Codecov
+      - name: Upload coverage reports
         uses: codecov/codecov-action@v3
         if: always()
         with:
           file: ./coverage.xml
           flags: backend
-          name: backend-coverage-${{ matrix.python-version }}
+          name: backend-coverage
           fail_ci_if_error: false
-
-      - name: Upload backend test artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: backend-test-results-${{ matrix.python-version }}
-          path: |
-            coverage.xml
-            .coverage
-            pytest.xml
-          retention-days: 30
 
   frontend-tests:
     name: ⚛️ Frontend Tests
@@ -253,43 +215,32 @@ jobs:
     if: github.event.inputs.skip_tests != 'true'
     defaults:
       run:
-        working-directory: frontend
+        working-directory: ./frontend
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js ${{ env.NODE_VERSION }}
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies with retry
-        run: |
-          # Retry npm ci up to 3 times
-          for i in {1..3}; do
-            npm ci && break
-            echo "npm ci attempt $i failed, retrying..."
-            sleep 5
-          done
-
-      - name: Run ESLint
-        run: npm run lint --if-present || echo "ESLint not configured"
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run frontend tests
-        run: |
-          npm test -- --coverage --watchAll=false --verbose --maxWorkers=2
+        run: npm test -- --coverage --watchAll=false
 
-      - name: Upload frontend test artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
         if: always()
         with:
-          name: frontend-test-results
-          path: |
-            frontend/coverage/
-            frontend/test-results.xml
-          retention-days: 30
+          directory: ./frontend/coverage
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: false
 
   dependency-scan:
     name: 📦 Dependency Scan
@@ -300,131 +251,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Run dependency vulnerability scan
+        uses: pypa/gh-action-pip-audit@v1.0.8
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Cache pip for dependency scanning
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-safety-${{ hashFiles('**/requirements.txt') }}
-
-      - name: Install safety
-        run: pip install safety
-
-      - name: Run Python dependency security scan
-        run: |
-          pip install -r requirements.txt
-          safety check --json > python-safety-report.json || true
-          safety check || echo "Python dependency vulnerabilities found"
-
-      - name: Set up Node.js for npm audit
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Run npm audit
-        working-directory: frontend
-        run: |
-          npm ci
-          npm audit --audit-level=moderate --json > ../npm-audit-report.json || true
-          npm audit --audit-level=moderate || echo "npm vulnerabilities found"
-
-      - name: Upload dependency scan results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dependency-scan-results
-          path: |
-            python-safety-report.json
-            npm-audit-report.json
-          retention-days: 30
-
-  build-and-package:
-    name: 🏗️ Build & Package
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    needs: [detect-environment]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build backend Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64
-          push: false
-          tags: |
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-
-      - name: Build frontend Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          platforms: linux/amd64
-          push: false
-          tags: |
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-
-      - name: Create build artifacts
-        run: |
-          mkdir -p dist
-          echo "Build completed for environment: ${{ needs.detect-environment.outputs.environment }}" > dist/build-info.txt
-          echo "Commit SHA: ${{ github.sha }}" >> dist/build-info.txt
-          echo "Build timestamp: $(date -u)" >> dist/build-info.txt
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts-${{ needs.detect-environment.outputs.environment }}
-          path: dist/
-          retention-days: 30
+          inputs: requirements.txt
 
   terraform-plan:
     name: 🏗️ Terraform Plan
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [detect-environment]
-    if: needs.detect-environment.outputs.is_numbered_env == 'true'
+    if: needs.detect-environment.outputs.should_deploy == 'true'
+    outputs:
+      plan_id: ${{ steps.plan.outputs.plan_id }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -439,77 +278,6 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Ensure Terraform prerequisites exist
-        run: |
-          echo "🔧 Ensuring Terraform prerequisites exist..."
-
-          # Create S3 bucket for Terraform state if it doesn't exist
-          BUCKET_NAME="hibiji-terraform-state"
-          if ! aws s3 ls "s3://$BUCKET_NAME" 2>/dev/null; then
-            echo "Creating S3 bucket for Terraform state..."
-            aws s3 mb "s3://$BUCKET_NAME" --region ${{ env.AWS_REGION }}
-            
-            # Enable versioning
-            aws s3api put-bucket-versioning \
-              --bucket "$BUCKET_NAME" \
-              --versioning-configuration Status=Enabled
-            
-            # Enable encryption
-            aws s3api put-bucket-encryption \
-              --bucket "$BUCKET_NAME" \
-              --server-side-encryption-configuration '{
-                "Rules": [
-                  {
-                    "ApplyServerSideEncryptionByDefault": {
-                      "SSEAlgorithm": "AES256"
-                    }
-                  }
-                ]
-              }'
-            
-            # Add tags
-            aws s3api put-bucket-tagging \
-              --bucket "$BUCKET_NAME" \
-              --tagging 'TagSet=[{"Key":"Project","Value":"hibiji"},{"Key":"Purpose","Value":"terraform-state"},{"Key":"ManagedBy","Value":"github-actions"}]'
-            
-            echo "✅ S3 bucket '$BUCKET_NAME' created with versioning and encryption"
-          else
-            echo "✅ S3 bucket '$BUCKET_NAME' already exists"
-          fi
-
-          # Ensure required secrets exist in AWS Secrets Manager
-          echo "🔐 Checking required secrets..."
-
-          # Create database password secret if it doesn't exist
-          if ! aws secretsmanager describe-secret --secret-id hibiji-database-password 2>/dev/null; then
-            echo "Creating database password secret..."
-            DB_PASSWORD=$(openssl rand -base64 32)
-            aws secretsmanager create-secret \
-              --name hibiji-database-password \
-              --description "Database password for Hibiji platform" \
-              --secret-string "$DB_PASSWORD" \
-              --tags '[{"Key":"Project","Value":"hibiji"},{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.main_env }}"},{"Key":"ManagedBy","Value":"github-actions"}]'
-            echo "✅ Database password secret created"
-          else
-            echo "✅ Database password secret already exists"
-          fi
-
-          # Create application secret key if it doesn't exist
-          if ! aws secretsmanager describe-secret --secret-id hibiji-secret-key 2>/dev/null; then
-            echo "Creating application secret key..."
-            SECRET_KEY=$(openssl rand -base64 64)
-            aws secretsmanager create-secret \
-              --name hibiji-secret-key \
-              --description "Application secret key for Hibiji platform" \
-              --secret-string "$SECRET_KEY" \
-              --tags '[{"Key":"Project","Value":"hibiji"},{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.main_env }}"},{"Key":"ManagedBy","Value":"github-actions"}]'
-            echo "✅ Application secret key created"
-          else
-            echo "✅ Application secret key already exists"
-          fi
-
-          echo "✅ All Terraform prerequisites ready"
 
       - name: Cache Terraform
         uses: actions/cache@v4
@@ -517,136 +285,176 @@ jobs:
           path: |
             .terraform
             .terraform.lock.hcl
-          key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/**/*.tf') }}
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/terraform/**/*.tf') }}
           restore-keys: |
             ${{ runner.os }}-terraform-
 
-      - name: Terraform Plan with retry
+      - name: Terraform Init
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
-        env:
-          TF_VAR_sub_environment: ${{ needs.detect-environment.outputs.environment }}
-          TF_VAR_environment: ${{ needs.detect-environment.outputs.main_env }}
-          TF_VAR_ecr_repository_url: ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend
-          TF_VAR_frontend_ecr_repository_url: ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend
-          TF_VAR_image_tag: ${{ github.sha }}
-          TF_VAR_frontend_image_tag: ${{ github.sha }}
         run: |
-          # Retry terraform operations up to 3 times
-          for i in {1..3}; do
-            terraform init && break
-            echo "Terraform init attempt $i failed, retrying..."
-            sleep 10
-          done
+          terraform init \
+            -backend-config="bucket=hibiji-terraform-state" \
+            -backend-config="key=${{ needs.detect-environment.outputs.environment }}/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
 
-          for i in {1..3}; do
-            terraform plan \
-              -var="sub_environment=${{ needs.detect-environment.outputs.environment }}" \
-              -var="environment=${{ needs.detect-environment.outputs.main_env }}" \
-              -out=tfplan && break
-            echo "Terraform plan attempt $i failed, retrying..."
-            sleep 10
-          done
+      - name: Terraform Plan
+        id: plan
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        run: |
+          terraform plan \
+            -var="environment=${{ needs.detect-environment.outputs.environment }}" \
+            -var="domain_name=${{ env.DOMAIN }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -out=tfplan
 
-      - name: Upload Terraform plan
+          # Generate readable plan
+          terraform show -no-color tfplan > plan.txt
+          echo "plan_id=tfplan" >> $GITHUB_OUTPUT
+
+      - name: Upload Terraform Plan
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ needs.detect-environment.outputs.environment }}
-          path: terraform/environments/${{ needs.detect-environment.outputs.main_env }}/tfplan
-          retention-days: 30
+          path: |
+            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/tfplan
+            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/plan.txt
 
   # ===========================================
-  # QUALITY GATE (Validates all CI results)
+  # BUILD & PACKAGE PHASE
   # ===========================================
-
-  quality-gate:
-    name: 🚦 Quality Gate
+  build-and-package:
+    name: 🏗️ Build & Package
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     needs:
       [
+        detect-environment,
         security-scan,
         backend-tests,
         frontend-tests,
         dependency-scan,
-        build-and-package,
+        terraform-plan,
       ]
-    if: github.event.inputs.skip_tests != 'true'
-    steps:
-      - name: Quality Gate Assessment
-        run: |
-          echo "🎯 Quality Gate Assessment"
-          echo "=========================="
-          echo "Security Scan: ${{ needs.security-scan.result }}"
-          echo "Backend Tests: ${{ needs.backend-tests.result }}"
-          echo "Frontend Tests: ${{ needs.frontend-tests.result }}"
-          echo "Dependency Scan: ${{ needs.dependency-scan.result }}"
-          echo "Build & Package: ${{ needs.build-and-package.result }}"
-
-          # Check if any critical jobs failed
-          if [[ "${{ needs.security-scan.result }}" == "failure" ]]; then
-            echo "❌ Security scan failed - blocking deployment"
-            exit 1
-          fi
-
-          if [[ "${{ needs.backend-tests.result }}" == "failure" ]]; then
-            echo "❌ Backend tests failed - blocking deployment"
-            exit 1
-          fi
-
-          if [[ "${{ needs.frontend-tests.result }}" == "failure" ]]; then
-            echo "❌ Frontend tests failed - blocking deployment"
-            exit 1
-          fi
-
-          if [[ "${{ needs.build-and-package.result }}" == "failure" ]]; then
-            echo "❌ Build and package failed - blocking deployment"
-            exit 1
-          fi
-
-          echo "✅ All quality gates passed!"
-
-  # ===========================================
-  # DEPLOY PHASE (Conditional deployment)
-  # ===========================================
-
-  pre-deploy-validation:
-    name: 🔍 Pre-deployment Validation
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [detect-environment, build-and-package, terraform-plan, quality-gate]
     if: |
       always() && 
-      needs.detect-environment.outputs.should_deploy == 'true' && 
-      (needs.quality-gate.result == 'success' || github.event.inputs.force_deploy == 'true' || github.event.inputs.skip_tests == 'true')
+      needs.detect-environment.result == 'success' &&
+      (needs.security-scan.result == 'success' || github.event.inputs.skip_tests == 'true') &&
+      (needs.backend-tests.result == 'success' || github.event.inputs.skip_tests == 'true') &&
+      (needs.frontend-tests.result == 'success' || github.event.inputs.skip_tests == 'true') &&
+      (needs.dependency-scan.result == 'success' || github.event.inputs.skip_tests == 'true') &&
+      (needs.terraform-plan.result == 'success' || github.event.inputs.force_deploy == 'true')
     steps:
-      - name: Pre-deployment checks
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Clean up disk space
         run: |
-          echo "🔍 Pre-deployment Validation"
-          echo "============================"
-          echo "Environment: ${{ needs.detect-environment.outputs.environment }}"
-          echo "Should Deploy: ${{ needs.detect-environment.outputs.should_deploy }}"
-          echo "Force Deploy: ${{ github.event.inputs.force_deploy }}"
-          echo "Skip Tests: ${{ github.event.inputs.skip_tests }}"
-          echo "Quality Gate: ${{ needs.quality-gate.result }}"
+          # Remove unnecessary files to free up space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
 
-          if [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
-            echo "⚠️  Force deployment enabled - bypassing quality gate"
-          elif [[ "${{ github.event.inputs.skip_tests }}" == "true" ]]; then
-            echo "⚠️  Tests skipped - emergency deployment mode"
-          else
-            echo "✅ Normal deployment - all checks passed"
-          fi
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create ECR repositories if they don't exist
+        run: |
+          # Create backend repository
+          aws ecr describe-repositories --repository-names hibiji-backend --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository \
+            --repository-name hibiji-backend \
+            --region ${{ env.AWS_REGION }} \
+            --tags Key=Environment,Value=${{ needs.detect-environment.outputs.environment }} \
+                   Key=Project,Value=hibiji \
+                   Key=ManagedBy,Value=github-actions
+
+          # Create frontend repository  
+          aws ecr describe-repositories --repository-names hibiji-frontend --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository \
+            --repository-name hibiji-frontend \
+            --region ${{ env.AWS_REGION }} \
+            --tags Key=Environment,Value=${{ needs.detect-environment.outputs.environment }} \
+                   Key=Project,Value=hibiji \
+                   Key=ManagedBy,Value=github-actions
+
+      - name: Build and push backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:latest
+          # Use registry cache to avoid disk space issues
+          cache-from: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:cache
+          cache-to: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:cache,mode=max
+
+      - name: Build and push frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:latest
+          # Use registry cache to avoid disk space issues
+          cache-from: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:cache
+          cache-to: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:cache,mode=max
+
+      - name: Create build artifacts
+        run: |
+          mkdir -p build-artifacts
+          echo "${{ github.sha }}" > build-artifacts/commit-sha.txt
+          echo "${{ needs.detect-environment.outputs.environment }}" > build-artifacts/environment.txt
+          echo "${{ needs.detect-environment.outputs.ecr_registry }}" > build-artifacts/ecr-registry.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ needs.detect-environment.outputs.environment }}
+          path: build-artifacts/
+
+  # ===========================================
+  # DEPLOYMENT PHASE
+  # ===========================================
   deploy:
     name: 🚀 Deploy to ${{ needs.detect-environment.outputs.environment }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs: [detect-environment, pre-deploy-validation]
+    timeout-minutes: 30
+    needs: [detect-environment, terraform-plan, build-and-package]
     if: |
       always() && 
-      needs.detect-environment.outputs.should_deploy == 'true' && 
-      needs.pre-deploy-validation.result == 'success'
-    environment: ${{ needs.detect-environment.outputs.environment }}
+      needs.detect-environment.outputs.should_deploy == 'true' &&
+      needs.detect-environment.result == 'success' &&
+      needs.terraform-plan.result == 'success' &&
+      (needs.build-and-package.result == 'success' || github.event.inputs.force_deploy == 'true')
+    environment:
+      name: ${{ needs.detect-environment.outputs.environment }}
+      url: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -662,155 +470,154 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Download Terraform plan
+      - name: Download Terraform Plan
         uses: actions/download-artifact@v4
         with:
           name: terraform-plan-${{ needs.detect-environment.outputs.environment }}
           path: terraform/environments/${{ needs.detect-environment.outputs.main_env }}/
 
+      - name: Create AWS Secrets if they don't exist
+        run: |
+          # Create database password secret if it doesn't exist
+          aws secretsmanager describe-secret --secret-id "hibiji/${{ needs.detect-environment.outputs.environment }}/database/password" --region ${{ env.AWS_REGION }} || \
+          aws secretsmanager create-secret \
+            --name "hibiji/${{ needs.detect-environment.outputs.environment }}/database/password" \
+            --description "Database password for ${{ needs.detect-environment.outputs.environment }}" \
+            --secret-string "$(openssl rand -base64 32)" \
+            --region ${{ env.AWS_REGION }} \
+            --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+
+          # Create application secret key if it doesn't exist
+          aws secretsmanager describe-secret --secret-id "hibiji/${{ needs.detect-environment.outputs.environment }}/app/secret-key" --region ${{ env.AWS_REGION }} || \
+          aws secretsmanager create-secret \
+            --name "hibiji/${{ needs.detect-environment.outputs.environment }}/app/secret-key" \
+            --description "Application secret key for ${{ needs.detect-environment.outputs.environment }}" \
+            --secret-string "$(openssl rand -base64 64)" \
+            --region ${{ env.AWS_REGION }} \
+            --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+
+      - name: Create S3 Terraform Backend Bucket
+        run: |
+          # Create S3 bucket for Terraform state if it doesn't exist
+          aws s3api head-bucket --bucket "hibiji-terraform-state" --region ${{ env.AWS_REGION }} || \
+          aws s3api create-bucket \
+            --bucket "hibiji-terraform-state" \
+            --region ${{ env.AWS_REGION }} \
+            --create-bucket-configuration LocationConstraint=${{ env.AWS_REGION }}
+
+          # Enable versioning
+          aws s3api put-bucket-versioning \
+            --bucket "hibiji-terraform-state" \
+            --versioning-configuration Status=Enabled
+
+          # Enable encryption
+          aws s3api put-bucket-encryption \
+            --bucket "hibiji-terraform-state" \
+            --server-side-encryption-configuration '{
+              "Rules": [
+                {
+                  "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "AES256"
+                  }
+                }
+              ]
+            }'
+
+          # Apply tags
+          aws s3api put-bucket-tagging \
+            --bucket "hibiji-terraform-state" \
+            --tagging '{"TagSet":[{"Key":"Environment","Value":"shared"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]}'
+
+      - name: Terraform Init
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        run: |
+          terraform init \
+            -backend-config="bucket=hibiji-terraform-state" \
+            -backend-config="key=${{ needs.detect-environment.outputs.environment }}/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Terraform Apply
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        run: |
+          terraform apply -auto-approve tfplan
+
+      - name: Get infrastructure outputs
+        id: terraform-outputs
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        run: |
+          echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+          echo "cluster_name=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_OUTPUT
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ needs.detect-environment.outputs.environment }}
-          path: dist/
+          path: build-artifacts/
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Ensure ECR repositories exist
+      - name: Deploy application to ECS
         run: |
-          echo "🏗️ Ensuring ECR repositories exist..."
+          # Get the latest task definition
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'taskDefinition' \
+            --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
 
-          # Create backend repository if it doesn't exist
-          aws ecr describe-repositories --repository-names hibiji-backend --region ${{ env.AWS_REGION }} 2>/dev/null || {
-            echo "Creating hibiji-backend repository..."
-            aws ecr create-repository \
-              --repository-name hibiji-backend \
-              --region ${{ env.AWS_REGION }} \
-              --image-scanning-configuration scanOnPush=true \
-              --encryption-configuration encryptionType=AES256 \
-              --tags Key=Project,Value=hibiji Key=Environment,Value=${{ needs.detect-environment.outputs.main_env }} Key=ManagedBy,Value=github-actions
-            echo "✅ hibiji-backend repository created"
-          }
+          # Update image URIs
+          UPDATED_TASK_DEF=$(echo $TASK_DEF | jq \
+            --arg BACKEND_IMAGE "${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}" \
+            --arg FRONTEND_IMAGE "${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}" \
+            '.containerDefinitions |= map(
+              if .name == "backend" then .image = $BACKEND_IMAGE
+              elif .name == "frontend" then .image = $FRONTEND_IMAGE
+              else . end
+            )')
 
-          # Create frontend repository if it doesn't exist
-          aws ecr describe-repositories --repository-names hibiji-frontend --region ${{ env.AWS_REGION }} 2>/dev/null || {
-            echo "Creating hibiji-frontend repository..."
-            aws ecr create-repository \
-              --repository-name hibiji-frontend \
-              --region ${{ env.AWS_REGION }} \
-              --image-scanning-configuration scanOnPush=true \
-              --encryption-configuration encryptionType=AES256 \
-              --tags Key=Project,Value=hibiji Key=Environment,Value=${{ needs.detect-environment.outputs.main_env }} Key=ManagedBy,Value=github-actions
-            echo "✅ hibiji-frontend repository created"
-          }
+          # Register new task definition
+          echo $UPDATED_TASK_DEF > updated-task-def.json
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://updated-task-def.json \
+            --region ${{ env.AWS_REGION }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
 
-          echo "✅ ECR repositories ready"
+          # Update service
+          aws ecs update-service \
+            --cluster "${{ steps.terraform-outputs.outputs.cluster_name }}" \
+            --service "hibiji-${{ needs.detect-environment.outputs.environment }}-service" \
+            --task-definition "$NEW_TASK_DEF_ARN" \
+            --region ${{ env.AWS_REGION }}
 
-      - name: Build and push Docker images
+          # Wait for deployment to complete
+          aws ecs wait services-stable \
+            --cluster "${{ steps.terraform-outputs.outputs.cluster_name }}" \
+            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-service" \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Run post-deployment health check
         run: |
-          echo "🐳 Building and pushing Docker images..."
+          # Wait a bit for the service to be ready
+          sleep 30
 
-          # Build and push backend
-          docker build -t ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }} .
-          docker tag ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }} \
-                     ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:latest
-          docker push ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}
-          docker push ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:latest
+          # Health check
+          HEALTH_URL="https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}/health"
 
-          # Build and push frontend
-          docker build -t ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }} ./frontend
-          docker tag ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }} \
-                     ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:latest
-          docker push ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}
-          docker push ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:latest
-
-      - name: Deploy infrastructure with rollback
-        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
-        env:
-          TF_VAR_sub_environment: ${{ needs.detect-environment.outputs.environment }}
-          TF_VAR_environment: ${{ needs.detect-environment.outputs.main_env }}
-          TF_VAR_ecr_repository_url: ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend
-          TF_VAR_frontend_ecr_repository_url: ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend
-          TF_VAR_image_tag: ${{ github.sha }}
-          TF_VAR_frontend_image_tag: ${{ github.sha }}
-        run: |
-          echo "🏗️ Deploying infrastructure..."
-          terraform init
-
-          # Apply with automatic retry and rollback capability
-          if ! terraform apply -auto-approve tfplan; then
-            echo "❌ Terraform apply failed - checking for rollback options"
-            echo "Manual intervention may be required"
-            exit 1
-          fi
-
-          echo "✅ Infrastructure deployment completed"
-
-      - name: Run health checks with retry
-        run: |
-          echo "🔍 Running post-deployment health checks..."
-
-          # Get ALB DNS name from Terraform output (if available)
-          ALB_DNS_NAME="${{ needs.detect-environment.outputs.environment }}.hibiji.com"
-
-          # Wait for ALB to be ready and perform health checks
-          for i in {1..12}; do
-            echo "Health check attempt $i/12..."
-            
-            if curl -f -s --max-time 10 "https://$ALB_DNS_NAME/health" > /dev/null 2>&1; then
+          for i in {1..10}; do
+            if curl -f -s "$HEALTH_URL" > /dev/null; then
               echo "✅ Health check passed"
               break
-            elif curl -f -s --max-time 10 "http://$ALB_DNS_NAME/health" > /dev/null 2>&1; then
-              echo "✅ Health check passed (HTTP)"
-              break
             else
-              echo "⏳ Health check failed, retrying in 30 seconds..."
-              if [ $i -eq 12 ]; then
-                echo "❌ Health checks failed after 12 attempts"
-                echo "🔍 Deployment may need manual verification"
-                # Don't fail the deployment for health check failures
-              fi
+              echo "⏳ Health check attempt $i/10 failed, retrying in 30s..."
               sleep 30
             fi
           done
 
-  # ===========================================
-  # POST-DEPLOYMENT (Summary and notifications)
-  # ===========================================
-
-  deployment-summary:
-    name: 📊 Deployment Summary
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: [detect-environment, deploy]
-    if: always() && needs.detect-environment.outputs.should_deploy == 'true'
-    steps:
-      - name: Generate deployment summary
+      - name: Update deployment status
+        if: always()
         run: |
-          echo "🎯 Deployment Summary"
-          echo "===================="
-          echo "Environment: ${{ needs.detect-environment.outputs.environment }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "Actor: ${{ github.actor }}"
-          echo "Deployment Status: ${{ needs.deploy.result }}"
-          echo "Timestamp: $(date -u)"
-
-          if [[ "${{ needs.deploy.result }}" == "success" ]]; then
-            echo ""
-            echo "✅ Deployment completed successfully!"
-            echo "🌐 Application should be available at:"
-            echo "   https://${{ needs.detect-environment.outputs.environment }}.hibiji.com"
-            echo ""
-            echo "📊 Next steps:"
-            echo "   • Verify application functionality"
-            echo "   • Monitor performance metrics"
-            echo "   • Check logs for any issues"
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "🎉 Deployment to ${{ needs.detect-environment.outputs.environment }} completed successfully!"
+            echo "🌐 Application URL: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
           else
-            echo ""
-            echo "❌ Deployment failed!"
-            echo "🔍 Please check the deployment logs for details"
-            echo "🛠️  Manual intervention may be required"
+            echo "❌ Deployment to ${{ needs.detect-environment.outputs.environment }} failed"
           fi
