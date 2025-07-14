@@ -101,45 +101,6 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Pre-destroy cleanup for IGW dependencies
-resource "null_resource" "igw_cleanup" {
-  triggers = {
-    igw_id = aws_internet_gateway.main.id
-    vpc_id = aws_vpc.main.id
-  }
-  
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      # Wait for dependent resources to be destroyed
-      sleep 30
-      
-      # Remove any routes pointing to the IGW
-      aws ec2 describe-route-tables \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
-        --query 'RouteTables[*].RouteTableId' \
-        --output text | xargs -r -n1 -I {} aws ec2 delete-route --route-table-id {} --destination-cidr-block 0.0.0.0/0 || true
-      
-      # Force cleanup of ENIs that might be blocking IGW detachment
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
-        --query 'NetworkInterfaces[*].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
-      
-      # Wait for cleanup to complete
-      sleep 30
-    EOT
-  }
-  
-  depends_on = [
-    aws_route.public_internet_access,
-    aws_nat_gateway.main,
-    aws_eip.nat,
-    aws_route_table.public,
-    aws_route_table.private
-  ]
-}
-
 # Public Subnets
 resource "aws_subnet" "public" {
   count             = 2
@@ -197,7 +158,10 @@ resource "aws_route" "public_internet_access" {
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.main.id
   
-  depends_on = [aws_internet_gateway.main]
+  depends_on = [
+    aws_internet_gateway.main,
+    aws_route_table.public
+  ]
   
   lifecycle {
     create_before_destroy = true
@@ -214,6 +178,10 @@ resource "aws_route_table_association" "public" {
     aws_route_table.public,
     aws_route.public_internet_access
   ]
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # NAT Gateway
@@ -240,7 +208,10 @@ resource "aws_nat_gateway" "main" {
     Name = "${local.resource_prefix}-nat"
   })
   
-  depends_on = [aws_internet_gateway.main]
+  depends_on = [
+    aws_internet_gateway.main,
+    aws_route.public_internet_access
+  ]
   
   lifecycle {
     create_before_destroy = true
@@ -272,6 +243,10 @@ resource "aws_route_table_association" "private" {
   count          = 2
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Security Groups
@@ -361,9 +336,8 @@ resource "aws_lb" "main" {
   depends_on = [
     aws_subnet.public,
     aws_security_group.alb,
-    aws_internet_gateway.main,
-    aws_route_table.public,
-    aws_route.public_internet_access
+    aws_route.public_internet_access,
+    aws_route_table_association.public
   ]
   
   lifecycle {
@@ -606,34 +580,6 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
-# Pre-destroy cleanup for RDS resources
-resource "null_resource" "rds_cleanup" {
-  triggers = {
-    db_subnet_group_name = aws_db_subnet_group.main.name
-    vpc_id = aws_vpc.main.id
-  }
-  
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      # Wait for RDS instance to be fully destroyed
-      sleep 60
-      
-      # Check if DB instance still exists and wait for it to be destroyed
-      while aws rds describe-db-instances --db-instance-identifier ${local.resource_prefix}-db 2>/dev/null; do
-        echo "Waiting for DB instance to be destroyed..."
-        sleep 30
-      done
-      
-      echo "DB instance destroyed, proceeding with subnet group cleanup"
-    EOT
-  }
-  
-  depends_on = [
-    aws_db_instance.main
-  ]
-}
-
 # Data sources
 data "aws_availability_zones" "available" {
   state = "available"
@@ -704,49 +650,22 @@ module "ecs" {
 # ENI Cleanup Resource - handles orphaned ENIs before subnet destruction
 resource "null_resource" "eni_cleanup" {
   triggers = {
-    subnet_ids = join(",", concat(aws_subnet.private[*].id, aws_subnet.public[*].id))
-    vpc_id     = aws_vpc.main.id
-    igw_id     = aws_internet_gateway.main.id
+    # Use static values to avoid dependency cycles
+    vpc_cidr = "10.0.0.0/16"
+    environment = local.sub_env
   }
   
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      # Wait for resources to be properly destroyed
-      sleep 60
-      
-      # Clean up orphaned ENIs in all subnets
+      # Simple cleanup using environment-based naming
+      # Clean up orphaned ENIs in the VPC for this environment
       aws ec2 describe-network-interfaces \
-        --filters "Name=subnet-id,Values=${self.triggers.subnet_ids}" \
-        --query 'NetworkInterfaces[?Status==`available`].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
-      
-      # Clean up orphaned ENIs in the VPC
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
+        --filters "Name=tag:Environment,Values=${self.triggers.environment}" "Name=status,Values=available" \
         --query 'NetworkInterfaces[].NetworkInterfaceId' \
         --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
       
-      # Force detach any remaining ENIs 
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
-        --query 'NetworkInterfaces[?Status==`in-use`].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 detach-network-interface --network-interface-id --force || true
-      
-      # Clean up detached ENIs
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
-        --query 'NetworkInterfaces[].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
-      
-      # Force cleanup of all route table associations with the IGW
-      aws ec2 describe-route-tables \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
-        --query 'RouteTables[*].RouteTableId' \
-        --output text | xargs -r -n1 -I {} aws ec2 delete-route --route-table-id {} --destination-cidr-block 0.0.0.0/0 || true
-      
-      # Wait for cleanup to complete
-      sleep 30
+      echo "ENI cleanup completed for environment: ${self.triggers.environment}"
     EOT
   }
   
@@ -754,12 +673,7 @@ resource "null_resource" "eni_cleanup" {
     module.ecs,
     aws_db_instance.main,
     aws_lb.main,
-    aws_nat_gateway.main,
-    aws_route_table.public,
-    aws_route_table.private,
-    aws_route.public_internet_access,
-    null_resource.igw_cleanup,
-    null_resource.rds_cleanup
+    aws_nat_gateway.main
   ]
 }
 
