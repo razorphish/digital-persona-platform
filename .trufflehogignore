@@ -1,0 +1,28 @@
+# TruffleHog ignore patterns for known false positives
+
+# Placeholder secrets in start.sh script
+start.sh:172:SECRET_KEY=your-secret-key-here-change-in-production
+start.sh:183:AWS_ACCESS_KEY_ID=your-aws-access-key  
+start.sh:184:AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+
+# Placeholder secrets in setup_aws.sh
+setup_aws.sh:73:SECRET_KEY=your-secret-key-here-change-in-production
+
+# Placeholder secrets in documentation
+AUTHENTICATION_SYSTEM.md:169:SECRET_KEY=your-secret-key-change-in-production
+README.md:724:SECRET_KEY=your-secret-key-here-change-in-production
+
+# AWS credential documentation examples (not real credentials)
+*:your-aws-access-key
+*:your-aws-secret-key
+*:your-secret-key-here-change-in-production
+*:your-secret-key-change-in-production
+
+# Generated placeholder patterns
+*:dpp_password
+*:hibiji-dev01-secret-key
+*:access_token
+*:refresh_token
+
+# Database password placeholders
+docker-compose.yml:70:POSTGRES_PASSWORD=dpp_password 
