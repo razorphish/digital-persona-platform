@@ -837,39 +837,88 @@ jobs:
             fi
           done
 
-      - name: Update deployment status
+      - name: Deployment Summary
         if: always()
         run: |
+          echo ""
+          echo "═══════════════════════════════════════════════════════════════"
+          echo "🚀 DEPLOYMENT SUMMARY"
+          echo "═══════════════════════════════════════════════════════════════"
+
           if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Status: DEPLOYMENT SUCCESSFUL"
             echo "🎉 Deployment to ${{ needs.detect-environment.outputs.environment }} completed successfully!"
-            echo ""
-            echo "═══════════════════════════════════════════════════════════════"
-            echo "🚀 DEPLOYMENT SUMMARY"
-            echo "═══════════════════════════════════════════════════════════════"
-            echo "🌐 Primary URL: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
-            
-            # Get ALB DNS name for internal access
-            ALB_DNS="${{ steps.terraform-outputs.outputs.alb_dns_name }}"
-            if [ -n "$ALB_DNS" ] && [ "$ALB_DNS" != "" ]; then
-              echo "🔗 Internal AWS URL: http://$ALB_DNS"
-              echo "   (Use this if custom domain DNS is not configured yet)"
-            else
-              echo "⚠️  Internal AWS URL: Not available (ALB DNS output missing)"
-            fi
-            
-            echo ""
-            echo "📊 Environment: ${{ needs.detect-environment.outputs.environment }}"
-            echo "🏗️  ECS Cluster: ${{ steps.terraform-outputs.outputs.cluster_name }}"
-            echo "🗄️  Database: RDS PostgreSQL"
-            echo "🔒 Security: AWS Secrets Manager"
-            echo "📦 Containers: Backend + Frontend deployed"
-            echo ""
-            echo "✅ All services are running and healthy!"
-            echo "═══════════════════════════════════════════════════════════════"
           else
-            echo "❌ Deployment to ${{ needs.detect-environment.outputs.environment }} failed"
-            echo "Please check the logs above for detailed error information."
+            echo "❌ Status: DEPLOYMENT FAILED"
+            echo "⚠️  Some deployment steps failed - check logs above for details"
           fi
+
+          echo ""
+          echo "🌐 APPLICATION URLS:"
+          echo "   Primary: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
+
+          # Get ALB DNS name for internal access
+          ALB_DNS="${{ steps.terraform-outputs.outputs.alb_dns_name }}"
+          if [ -n "$ALB_DNS" ] && [ "$ALB_DNS" != "" ]; then
+            echo "   Internal: http://$ALB_DNS"
+            echo "   (Use internal URL if custom domain DNS not configured)"
+            
+            echo ""
+            echo "🔧 DNS CONFIGURATION REQUIRED:"
+            echo "═══════════════════════════════════════════════════════════════"
+            echo "To enable custom domain access, add these DNS records to hibiji.com:"
+            echo ""
+            echo "┌─────────────────────────────────────────────────────────────┐"
+            echo "│ DNS Records for hibiji.com Domain Hosting Service          │"
+            echo "├─────────────────────────────────────────────────────────────┤"
+            echo "│ Type: CNAME                                                 │"
+            echo "│ Name: ${{ needs.detect-environment.outputs.environment }}  │"
+            echo "│ Value: $ALB_DNS                                             │"
+            echo "│ TTL: 300 (or your provider's default)                      │"
+            echo "└─────────────────────────────────────────────────────────────┘"
+            echo ""
+            echo "📝 INSTRUCTIONS:"
+            echo "1. Log into your hibiji.com DNS hosting provider"
+            echo "2. Navigate to DNS management/records section"
+            echo "3. Add a new CNAME record:"
+            echo "   • Subdomain: ${{ needs.detect-environment.outputs.environment }}"
+            echo "   • Points to: $ALB_DNS"
+            echo "4. Save the record and wait for DNS propagation (5-30 minutes)"
+            echo "5. Test: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
+          else
+            echo "   Internal: ⚠️ Not available (ALB DNS output missing)"
+            echo ""
+            echo "⚠️  DNS CONFIGURATION:"
+            echo "   Cannot provide DNS records - ALB DNS name not available"
+            echo "   Check Terraform outputs for alb_dns_name"
+          fi
+
+          echo ""
+          echo "📊 INFRASTRUCTURE DETAILS:"
+          echo "   Environment: ${{ needs.detect-environment.outputs.environment }}"
+          echo "   ECS Cluster: ${{ steps.terraform-outputs.outputs.cluster_name }}"
+          echo "   Database: RDS PostgreSQL"
+          echo "   Security: AWS Secrets Manager"
+          echo "   Containers: Backend + Frontend"
+          echo "   Region: ${{ env.AWS_REGION }}"
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo ""
+            echo "🎯 NEXT STEPS:"
+            echo "1. Configure DNS records above (if not already done)"
+            echo "2. Test application at both URLs"
+            echo "3. Monitor logs for any issues"
+            echo "4. All services are running and healthy!"
+          else
+            echo ""
+            echo "🔧 TROUBLESHOOTING:"
+            echo "1. Check job logs above for specific errors"
+            echo "2. Verify AWS credentials and permissions"
+            echo "3. Check Terraform state and resources"
+            echo "4. Use internal URL for direct testing if available"
+          fi
+
+          echo "═══════════════════════════════════════════════════════════════"
 
   # ===========================================
   # ASYNCHRONOUS DEPENDENCY FIX MONITORING
