@@ -842,9 +842,33 @@ jobs:
         run: |
           if [ "${{ job.status }}" == "success" ]; then
             echo "🎉 Deployment to ${{ needs.detect-environment.outputs.environment }} completed successfully!"
-            echo "🌐 Application URL: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════"
+            echo "🚀 DEPLOYMENT SUMMARY"
+            echo "═══════════════════════════════════════════════════════════════"
+            echo "🌐 Primary URL: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
+            
+            # Get ALB DNS name for internal access
+            ALB_DNS="${{ steps.terraform-outputs.outputs.alb_dns_name }}"
+            if [ -n "$ALB_DNS" ] && [ "$ALB_DNS" != "" ]; then
+              echo "🔗 Internal AWS URL: http://$ALB_DNS"
+              echo "   (Use this if custom domain DNS is not configured yet)"
+            else
+              echo "⚠️  Internal AWS URL: Not available (ALB DNS output missing)"
+            fi
+            
+            echo ""
+            echo "📊 Environment: ${{ needs.detect-environment.outputs.environment }}"
+            echo "🏗️  ECS Cluster: ${{ steps.terraform-outputs.outputs.cluster_name }}"
+            echo "🗄️  Database: RDS PostgreSQL"
+            echo "🔒 Security: AWS Secrets Manager"
+            echo "📦 Containers: Backend + Frontend deployed"
+            echo ""
+            echo "✅ All services are running and healthy!"
+            echo "═══════════════════════════════════════════════════════════════"
           else
             echo "❌ Deployment to ${{ needs.detect-environment.outputs.environment }} failed"
+            echo "Please check the logs above for detailed error information."
           fi
 
   # ===========================================
