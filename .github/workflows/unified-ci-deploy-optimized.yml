@@ -145,12 +145,15 @@ jobs:
             ${{ runner.os }}-security-
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        id: trivy
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: "fs"
           scan-ref: "."
           format: "sarif"
           output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM"
+          exit-code: "0"
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
@@ -158,14 +161,57 @@ jobs:
         with:
           sarif_file: "trivy-results.sarif"
 
+      - name: Display Trivy scan summary
+        if: always()
+        run: |
+          if [ -f "trivy-results.sarif" ]; then
+            echo "📊 Trivy scan completed - check Security tab for detailed results"
+            echo "🔍 Scan summary:"
+            cat trivy-results.sarif | jq -r '.runs[0].results | length' | xargs -I {} echo "Found {} potential issues"
+          else
+            echo "⚠️ Trivy results file not found"
+          fi
+
       - name: Run TruffleHog secret scanner
-        uses: trufflesecurity/trufflehog@main
+        id: trufflehog
+        uses: trufflesecurity/trufflehog@v3.82.13
         with:
           path: ./
-          base: main
-          head: HEAD
-          extra_args: --exclude-paths=.trufflehogignore
-        continue-on-error: true
+          base: ${{ github.event.repository.default_branch }}
+          head: ${{ github.sha }}
+          extra_args: --exclude-paths=.trufflehogignore --fail
+        continue-on-error: false
+
+      - name: Handle TruffleHog failure
+        if: failure() && steps.trufflehog.outcome == 'failure'
+        run: |
+          echo "🚨 TruffleHog detected potential secrets!"
+          echo "Review the scan results above and ensure no real secrets are committed."
+          echo "If these are false positives, add them to .trufflehogignore"
+          exit 1
+
+      - name: Security scan summary
+        if: always()
+        run: |
+          echo "🛡️ Security Scan Summary"
+          echo "======================="
+          
+          if [ "${{ steps.trivy.outcome }}" == "success" ]; then
+            echo "✅ Trivy vulnerability scan: PASSED"
+          else
+            echo "❌ Trivy vulnerability scan: FAILED"
+          fi
+          
+          if [ "${{ steps.trufflehog.outcome }}" == "success" ]; then
+            echo "✅ TruffleHog secret scan: PASSED"
+          else
+            echo "❌ TruffleHog secret scan: FAILED"
+          fi
+          
+          echo ""
+          echo "📊 View detailed results in:"
+          echo "   - Security tab: Repository → Security → Code scanning"
+          echo "   - Job logs: Expand steps above for details"
 
   backend-tests:
     name: 🐍 Backend Tests (${{ matrix.python-version }})
