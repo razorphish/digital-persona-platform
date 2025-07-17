@@ -146,3 +146,7 @@ test-server-startup.py
 
 # Development scripts (keep in scripts/ directory)
 # test-*.sh files in root should be moved to scripts/
+
+# Next.js
+.next/
+out/
