@@ -549,7 +549,7 @@ const mediaRouter = router({
       let assignedPersonaId = input.personaId;
       if (!assignedPersonaId) {
         const defaultPersona = await getOrCreateDefaultPersona(ctx.user.id);
-        assignedPersonaId = defaultPersona.id;
+        assignedPersonaId = (defaultPersona as any).id;
       }
 
       // Generate presigned URL
@@ -584,7 +584,10 @@ const mediaRouter = router({
       `);
 
       // Queue file for AI processing if it's an image or video
-      if (mediaType === "image" || mediaType === "video") {
+      if (
+        (mediaType === "image" || mediaType === "video") &&
+        assignedPersonaId
+      ) {
         await queueFileForAIProcessing(
           presignedData.fileId,
           assignedPersonaId,
@@ -619,24 +622,19 @@ const mediaRouter = router({
         const s3Url = `https://${
           process.env.S3_BUCKET || "digital-persona-uploads"
         }.s3.${process.env.AWS_REGION || "us-east-1"}.amazonaws.com/`;
-        const result = await db.execute(
-          `
+        await db.execute(sql`
           UPDATE media_files 
-          SET upload_status = $1, is_s3_stored = $2, uploaded_at = $3, s3_url = s3_url
-          WHERE file_id = $4 AND user_id = $5
-          RETURNING *
-        `,
-          [input.status, true, new Date(), input.fileId, ctx.user.id]
-        );
+          SET upload_status = ${
+            input.status
+          }, is_s3_stored = ${true}, uploaded_at = ${new Date()}
+          WHERE file_id = ${input.fileId} AND user_id = ${ctx.user.id}
+        `);
       } else {
-        await db.execute(
-          `
+        await db.execute(sql`
           UPDATE media_files 
-          SET upload_status = $1, updated_at = $2
-          WHERE file_id = $3 AND user_id = $4
-        `,
-          [input.status, new Date(), input.fileId, ctx.user.id]
-        );
+          SET upload_status = ${input.status}, updated_at = ${new Date()}
+          WHERE file_id = ${input.fileId} AND user_id = ${ctx.user.id}
+        `);
       }
 
       return { success: true };
@@ -645,28 +643,22 @@ const mediaRouter = router({
   getFilesByConversation: protectedProcedure
     .input(z.object({ conversationId: z.string() }))
     .query(async ({ input, ctx }) => {
-      const result = await db.execute(
-        `
+      const result = await db.execute(sql`
         SELECT * FROM media_files 
-        WHERE conversation_id = $1 AND user_id = $2 
+        WHERE conversation_id = ${input.conversationId} AND user_id = ${ctx.user.id}
         ORDER BY created_at DESC
-      `,
-        [input.conversationId, ctx.user.id]
-      );
+      `);
 
       return result.rows;
     }),
 
   getUserFiles: protectedProcedure.query(async ({ ctx }) => {
-    const result = await db.execute(
-      `
+    const result = await db.execute(sql`
         SELECT * FROM media_files 
-        WHERE user_id = $1 AND upload_status != 'deleted'
+        WHERE user_id = ${ctx.user.id} AND upload_status != 'deleted'
         ORDER BY created_at DESC
         LIMIT 50
-      `,
-      [ctx.user.id]
-    );
+      `);
 
     return result.rows;
   }),
@@ -755,17 +747,8 @@ const mediaRouter = router({
       })
     )
     .query(async ({ input, ctx }) => {
-      let whereClause = `WHERE mf.user_id = '${ctx.user.id}'`;
-
-      if (!input.includeDeleted) {
-        whereClause += ` AND mf.upload_status != 'deleted'`;
-      }
-
-      if (input.mediaType) {
-        whereClause += ` AND mf.media_type = '${input.mediaType}'`;
-      }
-
-      const result = await db.execute(sql`
+      // Build the main query with proper parameter binding
+      let baseQuery = sql`
         SELECT 
           mf.*,
           p.name as persona_name,
@@ -775,18 +758,35 @@ const mediaRouter = router({
         LEFT JOIN personas p ON mf.persona_id = p.id
         LEFT JOIN conversations c ON mf.conversation_id = c.id
         LEFT JOIN persona_learning_data pld ON pld.source_type = 'media_file' AND pld.source_id = mf.file_id
-        ${whereClause}
+        WHERE mf.user_id = ${ctx.user.id}
+      `;
+
+      let countQuery = sql`
+        SELECT COUNT(*) as total 
+        FROM media_files mf 
+        WHERE mf.user_id = ${ctx.user.id}
+      `;
+
+      // Add conditional filters
+      if (!input.includeDeleted) {
+        baseQuery = sql`${baseQuery} AND mf.upload_status != 'deleted'`;
+        countQuery = sql`${countQuery} AND mf.upload_status != 'deleted'`;
+      }
+
+      if (input.mediaType) {
+        baseQuery = sql`${baseQuery} AND mf.media_type = ${input.mediaType}`;
+        countQuery = sql`${countQuery} AND mf.media_type = ${input.mediaType}`;
+      }
+
+      // Complete the main query
+      baseQuery = sql`${baseQuery}
         GROUP BY mf.id, p.name, c.title
         ORDER BY mf.created_at DESC
         LIMIT ${input.limit} OFFSET ${input.offset}
-      `);
+      `;
 
-      // Get total count
-      const countResult = await db.execute(sql`
-        SELECT COUNT(*) as total 
-        FROM media_files mf 
-        ${whereClause}
-      `);
+      const result = await db.execute(baseQuery);
+      const countResult = await db.execute(countQuery);
 
       return {
         files: result.rows,
