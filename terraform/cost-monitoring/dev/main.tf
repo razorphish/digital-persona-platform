@@ -8,7 +8,17 @@ terraform {
   }
 }
 
+# Provider configuration
+provider "aws" {
+  region = var.aws_region
+}
+
 # Cost monitoring variables
+variable "aws_region" {
+  description = "AWS region for resource deployment"
+  type        = string
+  default     = "us-west-1"
+}
 variable "alert_emails" {
   description = "Email addresses for cost alerts"
   type        = list(string)
