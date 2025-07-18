@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadFile } from "@/services/fileUpload";
-import { AuthUtils } from "@/lib/auth";
+import { trpc } from "@/lib/trpc";
 
 interface FileRecord {
   id: string;
@@ -38,14 +38,70 @@ interface FileStats {
 export default function FilesPage() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
-  const [files, setFiles] = useState<FileRecord[]>([]);
-  const [stats, setStats] = useState<FileStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use tRPC queries instead of manual fetch
+  const {
+    data: filesData,
+    isLoading: filesLoading,
+    refetch: refetchFiles,
+  } = trpc.media.getAllUserFiles.useQuery(
+    {
+      includeDeleted,
+      limit: 20,
+      offset: (page - 1) * 20,
+      mediaType: selectedFilter === "all" ? undefined : selectedFilter,
+    },
+    {
+      enabled: isAuthenticated, // Only run when authenticated
+    }
+  );
+
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    refetch: refetchStats,
+  } = trpc.media.getFileStats.useQuery(undefined, {
+    enabled: isAuthenticated, // Only run when authenticated
+  });
+
+  // Extract typed data with fallbacks
+  const files = (filesData as any)?.files || [];
+  const hasMore = (filesData as any)?.hasMore || false;
+  const fileStats = (stats as any) || {
+    total_files: 0,
+    completed_files: 0,
+    pending_files: 0,
+    deleted_files: 0,
+    image_files: 0,
+    video_files: 0,
+    document_files: 0,
+    total_size: 0,
+  };
+
+  // tRPC mutations
+  const deleteFileMutation = trpc.media.deleteFile.useMutation({
+    onSuccess: () => {
+      refetchFiles();
+      refetchStats();
+    },
+    onError: (error) => {
+      setError("Failed to delete file: " + error.message);
+    },
+  });
+
+  const restoreFileMutation = trpc.media.restoreFile.useMutation({
+    onSuccess: () => {
+      refetchFiles();
+      refetchStats();
+    },
+    onError: (error) => {
+      setError("Failed to restore file: " + error.message);
+    },
+  });
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -54,164 +110,29 @@ export default function FilesPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  const fetchFiles = async (pageNum: number = 1, append: boolean = false) => {
-    try {
-      setLoading(true);
-      const tokens = AuthUtils.getTokens();
-      if (!tokens?.accessToken) return;
-
-      const limit = 20;
-      const offset = (pageNum - 1) * limit;
-
-      const response = await fetch(
-        "http://localhost:4001/api/trpc/media.getAllUserFiles",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.accessToken}`,
-          },
-          body: JSON.stringify({
-            includeDeleted,
-            limit,
-            offset,
-            mediaType: selectedFilter === "all" ? undefined : selectedFilter,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const result = await response.json();
-        const data = result.result?.data;
-        if (data) {
-          if (append) {
-            setFiles((prev) => [...prev, ...data.files]);
-          } else {
-            setFiles(data.files);
-          }
-          setHasMore(data.hasMore);
-        }
-      }
-    } catch (err) {
-      setError("Failed to fetch files");
-      console.error(err);
-    } finally {
-      setLoading(false);
+  // Refetch when filters change
+  useEffect(() => {
+    if (isAuthenticated) {
+      setPage(1); // Reset to first page when filters change
+      refetchFiles();
     }
-  };
-
-  const fetchStats = async () => {
-    try {
-      const tokens = AuthUtils.getTokens();
-      if (!tokens?.accessToken) return;
-
-      const response = await fetch(
-        "http://localhost:4001/api/trpc/media.getFileStats",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.accessToken}`,
-          },
-          body: JSON.stringify({}),
-        }
-      );
-
-      if (response.ok) {
-        const result = await response.json();
-        setStats(result.result?.data || null);
-      }
-    } catch (err) {
-      console.error("Failed to fetch stats:", err);
-    }
-  };
+  }, [isAuthenticated, selectedFilter, includeDeleted, refetchFiles]);
 
   const deleteFile = async (fileId: string) => {
     try {
-      const tokens = AuthUtils.getTokens();
-      if (!tokens?.accessToken) return;
-
-      const response = await fetch(
-        "http://localhost:4001/api/trpc/media.deleteFile",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.accessToken}`,
-          },
-          body: JSON.stringify({ fileId }),
-        }
-      );
-
-      if (response.ok) {
-        // Update local state
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.file_id === fileId
-              ? {
-                  ...f,
-                  upload_status: "deleted" as const,
-                  updated_at: new Date().toISOString(),
-                }
-              : f
-          )
-        );
-        fetchStats(); // Refresh stats
-      } else {
-        setError("Failed to delete file");
-      }
+      await deleteFileMutation.mutateAsync({ fileId });
     } catch (err) {
-      setError("Failed to delete file");
-      console.error(err);
+      // Error handled by mutation onError
     }
   };
 
   const restoreFile = async (fileId: string) => {
     try {
-      const tokens = AuthUtils.getTokens();
-      if (!tokens?.accessToken) return;
-
-      const response = await fetch(
-        "http://localhost:4001/api/trpc/media.restoreFile",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.accessToken}`,
-          },
-          body: JSON.stringify({ fileId }),
-        }
-      );
-
-      if (response.ok) {
-        // Update local state
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.file_id === fileId
-              ? {
-                  ...f,
-                  upload_status: "completed" as const,
-                  updated_at: new Date().toISOString(),
-                }
-              : f
-          )
-        );
-        fetchStats(); // Refresh stats
-      } else {
-        setError("Failed to restore file");
-      }
+      await restoreFileMutation.mutateAsync({ fileId });
     } catch (err) {
-      setError("Failed to restore file");
-      console.error(err);
+      // Error handled by mutation onError
     }
   };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchFiles(1, false);
-      fetchStats();
-    }
-  }, [isAuthenticated, selectedFilter, includeDeleted]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
@@ -354,7 +275,7 @@ export default function FilesPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        {stats && (
+        {fileStats && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center">
@@ -381,7 +302,7 @@ export default function FilesPage() {
                       Total Files
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      {stats.total_files}
+                      {fileStats.total_files}
                     </dd>
                   </dl>
                 </div>
@@ -413,7 +334,7 @@ export default function FilesPage() {
                       Completed
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      {stats.completed_files}
+                      {fileStats.completed_files}
                     </dd>
                   </dl>
                 </div>
@@ -445,7 +366,7 @@ export default function FilesPage() {
                       Images
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      {stats.image_files}
+                      {fileStats.image_files}
                     </dd>
                   </dl>
                 </div>
@@ -477,7 +398,7 @@ export default function FilesPage() {
                       Total Size
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      {formatFileSize(stats.total_size)}
+                      {formatFileSize(fileStats.total_size)}
                     </dd>
                   </dl>
                 </div>
@@ -568,7 +489,7 @@ export default function FilesPage() {
             <h3 className="text-lg font-medium text-gray-900">Your Files</h3>
           </div>
 
-          {loading && page === 1 ? (
+          {filesLoading && page === 1 ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
               <p className="mt-2 text-gray-500">Loading files...</p>
@@ -627,7 +548,7 @@ export default function FilesPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {files.map((file) => (
+                  {files.map((file: FileRecord) => (
                     <tr key={file.file_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -764,12 +685,12 @@ export default function FilesPage() {
                 onClick={() => {
                   const nextPage = page + 1;
                   setPage(nextPage);
-                  fetchFiles(nextPage, true);
+                  refetchFiles();
                 }}
-                disabled={loading}
+                disabled={filesLoading}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
               >
-                {loading ? (
+                {filesLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
                     Loading...

@@ -51,8 +51,8 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
               return {};
             }
             return {
-              authorization: localStorage.getItem("token")
-                ? `Bearer ${localStorage.getItem("token")}`
+              authorization: localStorage.getItem("accessToken")
+                ? `Bearer ${localStorage.getItem("accessToken")}`
                 : "",
             };
           },
