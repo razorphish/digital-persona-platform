@@ -5,6 +5,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ interface AuthContextType {
   logout: () => void;
   error: string | null;
   clearError: () => void;
+  checkAuthState: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,30 +35,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginMutation = trpc.auth.login.useMutation();
   const registerMutation = trpc.auth.register.useMutation();
 
+  // Centralized logout function
+  const logout = useCallback(() => {
+    AuthUtils.clearTokens();
+    setUser(null);
+    setError(null);
+    router.push("/");
+  }, [router]);
+
+  // Enhanced authentication checking
+  const checkAuthState = useCallback(() => {
+    const tokens = AuthUtils.getTokens();
+
+    if (!tokens?.accessToken) {
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
+
+    // Check if token is expired
+    if (AuthUtils.isTokenExpired(tokens.accessToken)) {
+      console.warn("Token expired, logging out");
+      AuthUtils.clearTokens();
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
+
+    // Extract user data from valid token
+    const userData = AuthUtils.getUserFromToken(tokens.accessToken);
+
+    // Be less strict - only require id and email, name is optional
+    if (userData && userData.id && userData.email) {
+      setUser({
+        id: userData.id,
+        email: userData.email,
+        name: userData.name || "User", // Fallback if name is missing
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      console.warn("Invalid token payload - missing id or email, logging out");
+      AuthUtils.clearTokens();
+      setUser(null);
+    }
+
+    setIsLoading(false);
+  }, []);
+
   // Check for existing authentication on mount
   useEffect(() => {
-    const checkAuth = () => {
-      const tokens = AuthUtils.getTokens();
+    checkAuthState();
+  }, [checkAuthState]);
 
-      if (tokens && !AuthUtils.isTokenExpired(tokens.accessToken)) {
-        const userData = AuthUtils.getUserFromToken(tokens.accessToken);
-        if (userData) {
-          setUser({
-            id: userData.id!,
-            email: userData.email!,
-            name: userData.name!,
-            createdAt: new Date().toISOString(),
-          });
+  // Periodic token validation (every 5 minutes)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (user) {
+        const tokens = AuthUtils.getTokens();
+        if (
+          !tokens?.accessToken ||
+          AuthUtils.isTokenExpired(tokens.accessToken)
+        ) {
+          console.warn("Token expired during session, logging out");
+          logout();
         }
-      } else {
-        AuthUtils.clearTokens();
       }
+    }, 5 * 60 * 1000); // 5 minutes
 
-      setIsLoading(false);
+    return () => clearInterval(interval);
+  }, [user, logout]);
+
+  // Listen for storage changes (token updates in other tabs)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "accessToken") {
+        if (e.newValue === null) {
+          // Token was removed in another tab
+          setUser(null);
+        } else {
+          // Token was updated in another tab
+          checkAuthState();
+        }
+      }
     };
 
-    checkAuth();
-  }, []);
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [checkAuthState]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -76,11 +141,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Set user state
       setUser(result.user);
 
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Don't redirect here - let AuthMiddleware handle all auth-based redirects
+      // This prevents race conditions between login redirect and middleware redirect
     } catch (err: any) {
+      console.error("Login failed:", err);
       const errorMessage = err?.message || "Login failed. Please try again.";
       setError(errorMessage);
+
+      // Clear any potentially corrupted tokens
+      AuthUtils.clearTokens();
+      setUser(null);
+
       throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -106,22 +177,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Set user state
       setUser(result.user);
 
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Don't redirect here - let AuthMiddleware handle all auth-based redirects
+      // This prevents race conditions between register redirect and middleware redirect
     } catch (err: any) {
       const errorMessage =
         err?.message || "Registration failed. Please try again.";
       setError(errorMessage);
+
+      // Clear any potentially corrupted tokens
+      AuthUtils.clearTokens();
+      setUser(null);
+
       throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const logout = () => {
-    AuthUtils.clearTokens();
-    setUser(null);
-    router.push("/");
   };
 
   const clearError = () => {
@@ -137,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     error,
     clearError,
+    checkAuthState,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

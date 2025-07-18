@@ -1,6 +1,6 @@
 # Digital Persona Platform
 
-A modern full-stack AI-powered digital persona platform built with Next.js, tRPC, and Express. Create and manage AI-powered personas with advanced chat capabilities, file management, and social media integration.
+A modern full-stack AI-powered digital persona platform built with Next.js, tRPC, and Express. Create and manage AI-powered personas with advanced chat capabilities, file management, social media integration, and enterprise-grade authentication.
 
 ## 🏗️ Architecture
 
@@ -15,9 +15,51 @@ A modern full-stack AI-powered digital persona platform built with Next.js, tRPC
 
 ### Prerequisites
 
-- **Node.js 18+** and npm
-- **Docker & Docker Compose** (for PostgreSQL)
+- **Docker & Docker Compose** (recommended for full stack)
+- **Node.js 18+** and npm (for local development)
 - **PostgreSQL** (via Docker or local install)
+
+## 🐳 Docker Setup (Recommended)
+
+### Full Application with Docker
+
+Run the entire platform in containers with a single command:
+
+```bash
+# Development environment with hot reload
+./docker-start.sh dev
+
+# Production environment
+./docker-start.sh prod
+
+# Development with rebuild and logs
+./docker-start.sh dev --build --logs
+
+# Stop all services
+./docker-stop.sh dev
+```
+
+**Docker Access Points:**
+
+- 🌐 **Frontend**: http://localhost:3100
+- 🔧 **Backend API**: http://localhost:3101
+- 📚 **API Health**: http://localhost:3101/health
+
+### Docker Services
+
+```bash
+# Check service status
+docker-compose -f docker-compose.dev.yml ps
+
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Individual service logs
+docker logs dpp-frontend-dev
+docker logs dpp-backend-dev
+```
+
+## 💻 Local Development Setup
 
 ### 1. Clone and Setup
 
@@ -83,22 +125,65 @@ npm run dev
 
 ## 🎯 Key Features
 
-### ✅ Recently Implemented & Fixed
+### ✅ Recently Implemented & Enhanced
 
-- **Full-Stack Authentication**: JWT-based auth with proper token handling
-- **File Management System**: Upload, view, manage files with stats dashboard
-- **SPA Deployment**: Static build generation for S3 + CloudFront deployment
-- **Debug Configuration**: VS Code debugging with automatic port cleanup
-- **Error Resolution**: Fixed SQL syntax errors, authentication issues, and UI bugs
+- **🔐 Enterprise Authentication System**:
+  - JWT-based auth with automatic token validation
+  - Periodic token refresh and cross-tab synchronization
+  - Protected routes with automatic redirect to login
+  - Industry-standard security practices
+- **🛡️ Protected Pages**: Dashboard, File Management, Chat, Social, Analytics, Personas
+- **📁 Advanced File Management**: Upload, view, manage files with comprehensive stats
+- **🏗️ Full Docker Support**: Complete containerized development and production setup
+- **🎯 SPA Deployment**: Static build generation for S3 + CloudFront deployment
+- **🐛 Debug Configuration**: VS Code debugging with automatic port cleanup
+- **🔧 Error Resolution**: Fixed authentication race conditions and UI bugs
 
 ### 🔧 Core Capabilities
 
-- **User Management**: Registration, login, JWT authentication
-- **Digital Personas**: Create and manage AI-powered persona profiles
-- **File Upload & Management**: Direct S3 uploads with metadata tracking
-- **Real-time Stats**: File counts, sizes, and usage analytics
-- **tRPC API**: Type-safe client-server communication
-- **Database Integration**: PostgreSQL with Drizzle ORM
+- **👤 User Management**: Registration, login, JWT authentication with automatic redirects
+- **🤖 Digital Personas**: Create and manage AI-powered persona profiles (coming soon)
+- **📤 File Upload & Management**: Direct S3 uploads with metadata tracking
+- **📊 Real-time Stats**: File counts, sizes, and usage analytics
+- **🔗 tRPC API**: Type-safe client-server communication
+- **🗄️ Database Integration**: PostgreSQL with Drizzle ORM
+- **🎨 Social Media Integration**: Connect and analyze social media presence (coming soon)
+- **📈 Analytics & Insights**: Personality analysis and behavior tracking (coming soon)
+
+## 🛡️ Authentication & Security
+
+### Authentication Flow
+
+1. **Register/Login** → Frontend sends credentials to `/api/trpc/auth.register|login`
+2. **JWT Token** → Server responds with signed JWT token
+3. **Secure Storage** → Frontend stores token securely in localStorage
+4. **Auto-Protection** → AuthGuard and AuthMiddleware protect all routes
+5. **Token Validation** → Automatic expiration checks and cross-tab sync
+6. **Automatic Redirects** → Invalid/expired tokens redirect to login
+
+### Protected Routes
+
+All authenticated pages automatically redirect to login when:
+
+- Token is missing, expired, or corrupted
+- User is not authenticated
+- Cross-tab logout occurs
+
+**Protected Pages:**
+
+- `/dashboard` - Main dashboard with overview
+- `/files` - File management and analytics
+- `/chat` - AI conversation interface (coming soon)
+- `/social` - Social media integration (coming soon)
+- `/analytics` - Personality insights (coming soon)
+- `/personas` - Digital persona management (coming soon)
+
+**Public Routes:**
+
+- `/` - Landing page
+- `/auth/login` - Login page
+- `/auth/register` - Registration page
+- `/test` - API testing page
 
 ## 📁 Project Structure
 
@@ -107,7 +192,7 @@ digital-persona-platform/
 ├── apps/
 │   ├── web/                    # Next.js Frontend (SPA)
 │   │   ├── src/app/           # App router pages
-│   │   ├── src/components/    # React components
+│   │   ├── src/components/    # React components & AuthGuard
 │   │   ├── src/contexts/      # Authentication context
 │   │   └── src/services/      # API services
 │   └── server/                # tRPC Express Backend
@@ -120,16 +205,10 @@ digital-persona-platform/
 ├── .vscode/                   # VS Code debug configurations
 ├── scripts/                   # Port cleanup and automation scripts
 ├── docs/                      # Comprehensive documentation
+├── docker-compose*.yml        # Docker configurations
+├── docker-start.sh           # Docker startup script
 └── terraform/                 # AWS infrastructure
 ```
-
-## 🔐 Authentication Flow
-
-1. **Register/Login** → Frontend sends credentials to `/api/trpc/auth.register|login`
-2. **JWT Token** → Server responds with signed JWT token
-3. **Local Storage** → Frontend stores token as `accessToken`
-4. **API Requests** → All requests include `Authorization: Bearer <token>` header
-5. **Middleware** → Server validates JWT and injects user context
 
 ## 🗃️ Database Schema
 
@@ -148,55 +227,21 @@ digital-persona-platform/
 3. **Update Status** → Notify server of successful upload
 4. **Database Record** → File metadata stored in PostgreSQL
 
-### File Operations
+### File Statistics
 
-- ✅ **Upload**: Images, videos, documents
-- ✅ **View**: File list with stats, thumbnails, metadata
-- ✅ **Delete/Restore**: Soft delete with restore capability
-- ✅ **Stats Dashboard**: Total files, sizes, type breakdown
+- Real-time file counts and sizes
+- Upload status tracking
+- Media type categorization (images, videos, documents)
+- User-specific file analytics
 
-## 🚀 Deployment Options
+## 🔧 Development Tools
 
-### SPA Deployment (S3 + CloudFront)
+### Port Conflict Resolution
 
-```bash
-# Build static export
-npm run build:export
-
-# Deploy to S3 (60-80% cost reduction)
-./deploy-spa.sh
-```
-
-### Full-Stack Docker Deployment
+Automatic port cleanup for smooth development:
 
 ```bash
-# Production build
-docker-compose -f docker-compose.yml up
-
-# Development with hot reload
-docker-compose -f docker-compose.dev.yml up
-```
-
-### AWS ECS/Terraform
-
-```bash
-cd terraform/environments/main
-terraform init && terraform apply
-```
-
-## 🛠️ Development Tools
-
-### VS Code Debug Configurations
-
-- **Launch Full Stack**: Both services, no debugging overhead
-- **Debug Full Stack**: Frontend + backend debugging
-- **Debug Full Stack (Interactive)**: With port cleanup prompts
-- **Individual Services**: Backend-only or frontend-only
-
-### Port Cleanup Scripts
-
-```bash
-# Automatic cleanup
+# Automatic cleanup (recommended)
 ./scripts/kill-port-conflicts.sh
 
 # Interactive cleanup
@@ -206,6 +251,10 @@ terraform init && terraform apply
 ### Useful Commands
 
 ```bash
+# Docker operations
+./docker-start.sh dev --build      # Start development with rebuild
+./docker-stop.sh dev               # Stop development environment
+
 # Database operations
 cd apps/server
 npm run db:push        # Push schema changes
@@ -232,13 +281,26 @@ npm run test          # Run test suite
 
 #### Authentication Errors
 
-- **Problem**: `UNAUTHORIZED` errors
-- **Solution**: Ensure `JWT_SECRET` matches between login/verification (restart server)
+- **Problem**: Redirecting to login after successful authentication
+- **Solution**: Check console for token validation errors, ensure JWT payload has required fields
 
 #### Database Connection Issues
 
 - **Problem**: `password authentication failed`
 - **Solution**: Verify PostgreSQL container is running and `DATABASE_URL` is correct
+
+#### Docker Issues
+
+- **Problem**: Container startup failures
+- **Solution**:
+
+  ```bash
+  # Rebuild containers
+  ./docker-start.sh dev --build
+
+  # Check logs
+  docker-compose -f docker-compose.dev.yml logs
+  ```
 
 #### File Upload Failures
 
@@ -253,7 +315,8 @@ curl http://localhost:4001/health
 
 # View logs
 docker logs dpp-postgres
-pm2 logs (if using PM2)
+docker logs dpp-backend-dev
+docker logs dpp-frontend-dev
 
 # Database connectivity
 docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
@@ -261,14 +324,15 @@ docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
 
 ## 📚 Documentation
 
-| Document                                                           | Description                     |
-| ------------------------------------------------------------------ | ------------------------------- |
-| [S3_SPA_DEPLOYMENT.md](./docs/S3_SPA_DEPLOYMENT.md)                | Static deployment guide         |
-| [DEBUG_SETUP.md](./DEBUG_SETUP.md)                                 | VS Code debugging configuration |
-| [VSCODE_DEBUG_CONFIGURATIONS.md](./VSCODE_DEBUG_CONFIGURATIONS.md) | Complete debug setup            |
-| [AUTHENTICATION_SYSTEM.md](./docs/AUTHENTICATION_SYSTEM.md)        | Auth implementation details     |
-| [DATABASE.md](./docs/DATABASE.md)                                  | Database schema and operations  |
-| [UPLOAD_SYSTEM.md](./docs/UPLOAD_SYSTEM.md)                        | File upload architecture        |
+| Document                                                           | Description                      |
+| ------------------------------------------------------------------ | -------------------------------- |
+| [DOCKER_README.md](./DOCKER_README.md)                             | Comprehensive Docker setup guide |
+| [DOCKER_SETUP_COMPLETE.md](./DOCKER_SETUP_COMPLETE.md)             | Docker configuration details     |
+| [DEBUG_SETUP.md](./DEBUG_SETUP.md)                                 | VS Code debugging configuration  |
+| [VSCODE_DEBUG_CONFIGURATIONS.md](./VSCODE_DEBUG_CONFIGURATIONS.md) | Complete debug setup             |
+| [AUTHENTICATION_SYSTEM.md](./docs/AUTHENTICATION_SYSTEM.md)        | Auth implementation details      |
+| [DATABASE.md](./docs/DATABASE.md)                                  | Database schema and operations   |
+| [UPLOAD_SYSTEM.md](./docs/UPLOAD_SYSTEM.md)                        | File upload architecture         |
 
 ## 🤝 Contributing
 
@@ -280,35 +344,37 @@ docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
 
 ### Development Workflow
 
-1. Use VS Code debug configurations for development
-2. Run tests before committing
-3. Ensure both frontend and backend work together
-4. Update documentation for new features
+1. Use Docker for consistent development environment: `./docker-start.sh dev`
+2. Or use VS Code debug configurations for integrated development
+3. Run tests before committing
+4. Ensure both frontend and backend work together
+5. Update documentation for new features
 
 ## 🎯 Roadmap
 
 ### ✅ Completed
 
-- [x] Full-stack authentication system
-- [x] File management with S3 integration
+- [x] Enterprise-grade authentication system with auto-redirects
+- [x] Protected route implementation with AuthGuard
+- [x] Full Docker containerization for development and production
+- [x] Advanced file management with S3 integration
 - [x] SPA deployment configuration
-- [x] VS Code debugging setup
-- [x] Port conflict resolution
-- [x] Error handling and user feedback
+- [x] VS Code debugging setup with automatic port cleanup
+- [x] Comprehensive error handling and user feedback
 
 ### 🚧 In Progress
 
-- [ ] Chat system implementation
-- [ ] AI persona interactions
-- [ ] Social media integrations
-- [ ] Advanced file processing
+- [ ] Chat system implementation with AI personas
+- [ ] Social media integration and analysis
+- [ ] Advanced analytics and personality insights
+- [ ] Real-time persona interactions
 
 ### 📋 Planned
 
-- [ ] Real-time chat with WebSockets
 - [ ] Voice synthesis integration
 - [ ] Computer vision capabilities
 - [ ] Mobile app development
+- [ ] Advanced AI learning capabilities
 
 ## 📄 License
 
@@ -316,6 +382,19 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**🎉 The platform is fully functional with frontend, backend, authentication, and file management capabilities!**
+## 🎉 Getting Started
 
-For immediate development, use VS Code's "Debug Full Stack" configuration for the best experience with automatic port cleanup and integrated debugging.
+**For immediate development:**
+
+1. **Docker (Recommended)**: `./docker-start.sh dev --logs`
+2. **VS Code**: Use "Debug Full Stack" configuration
+3. **Manual**: Follow the Local Development Setup above
+
+The platform includes **enterprise-grade authentication**, **full containerization**, and **comprehensive file management** - ready for both development and production deployment!
+
+**🔗 Quick Access:**
+
+- **Docker Frontend**: http://localhost:3100
+- **Docker Backend**: http://localhost:3101
+- **Local Frontend**: http://localhost:4000
+- **Local Backend**: http://localhost:4001

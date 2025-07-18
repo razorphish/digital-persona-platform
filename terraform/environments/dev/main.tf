@@ -1,14 +1,36 @@
+# =================================
+# Digital Persona Platform - Serverless Architecture
+# Development Environment
+# =================================
+
 terraform {
   required_version = ">= 1.0"
   
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  
   backend "s3" {
     bucket = "hibiji-terraform-state"
-    key    = "dev/terraform.tfstate"
+    key    = "dev/serverless/terraform.tfstate"
     region = "us-west-1"
   }
 }
 
-# Variables for sub-environment
+# Provider configuration
+provider "aws" {
+  region = "us-west-1"
+  
+  # Temporarily disable default tags due to IAM permission constraints
+  # default_tags {
+  #   tags = local.common_tags
+  # }
+}
+
+# Variables
 variable "sub_environment" {
   description = "Sub-environment name (e.g., dev01, dev02)"
   type        = string
@@ -27,756 +49,421 @@ variable "domain_name" {
   default     = "hibiji.com"
 }
 
-# ECR and image variables
-variable "ecr_repository_url" {
-  description = "Backend ECR repository URL"
+variable "project_name" {
+  description = "Project name"
   type        = string
+  default     = "dpp"
 }
 
-variable "frontend_ecr_repository_url" {
-  description = "Frontend ECR repository URL"
-  type        = string
-}
-
-variable "image_tag" {
-  description = "Backend image tag"
-  type        = string
-  default     = "latest"
-}
-
-variable "frontend_image_tag" {
-  description = "Frontend image tag"
-  type        = string
-  default     = "latest"
-}
-
-variable "aws_region" {
-  description = "AWS region for resource deployment"
-  type        = string
-  default     = "us-west-1"
-}
-
-# Local values for sub-environment
+# Local values
 locals {
-  sub_env = var.sub_environment
-  main_env = var.environment
+  resource_prefix = "${var.environment}-${var.sub_environment}-${var.project_name}"
   
-  # Generate domain name for sub-environment
-  domain_name = "${local.sub_env}.${var.domain_name}"
-  
-  # Common tags with sub-environment
   common_tags = {
-    Project        = "hibiji"
-    Environment    = local.main_env
-    SubEnvironment = local.sub_env
-    ManagedBy      = "terraform"
-    Owner          = "hibiji-team"
-    CostCenter     = "hibiji-platform"
+    Environment    = var.environment
+    SubEnvironment = var.sub_environment
+    Project        = var.project_name
+    ManagedBy      = "Terraform"
+    Architecture   = "Serverless"
+    CreatedAt      = timestamp()
   }
   
-  # Resource naming with sub-environment
-  resource_prefix = "hibiji-${local.sub_env}"
+  # Domain configuration
+  api_domain     = "${var.sub_environment}-api.${var.domain_name}"
+  website_domain = "${var.sub_environment}.${var.domain_name}"
 }
 
-# VPC for sub-environment
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
+# Data sources
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+# Route53 hosted zone (existing)
+data "aws_route53_zone" "main" {
+  name = var.domain_name
+}
+
+# =================================
+# Secrets Manager
+# =================================
+
+# JWT Secret
+resource "aws_secretsmanager_secret" "jwt_secret" {
+  name                    = "${local.resource_prefix}-jwt-secret"
+  description             = "JWT secret for ${local.resource_prefix}"
+  recovery_window_in_days = 7
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-jwt-secret"
+    Type = "Secret"
+  })
+}
+
+resource "aws_secretsmanager_secret_version" "jwt_secret" {
+  secret_id = aws_secretsmanager_secret.jwt_secret.id
+  secret_string = jsonencode({
+    jwt_secret = "dev-jwt-secret-${random_password.jwt_secret.result}"
+  })
+}
+
+# Database password secret
+resource "aws_secretsmanager_secret" "database_password" {
+  name                    = "${local.resource_prefix}-database-password"
+  description             = "Database password for ${local.resource_prefix}"
+  recovery_window_in_days = 7
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-database-password"
+    Type = "Secret"
+  })
+}
+
+resource "aws_secretsmanager_secret_version" "database_password" {
+  secret_id = aws_secretsmanager_secret.database_password.id
+  secret_string = jsonencode({
+    password = random_password.database_password.result
+  })
+}
+
+# Random passwords
+resource "random_password" "jwt_secret" {
+  length  = 64
+  special = true
+}
+
+resource "random_password" "database_password" {
+  length  = 32
+  special = true
+}
+
+# =================================
+# Database (Aurora Serverless v2)
+# =================================
+
+# Database subnet group
+resource "aws_db_subnet_group" "database" {
+  name       = "${local.resource_prefix}-db-subnet-group"
+  subnet_ids = [aws_subnet.private[0].id, aws_subnet.private[1].id]
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-db-subnet-group"
+    Type = "DatabaseSubnetGroup"
+  })
+}
+
+# Database security group
+resource "aws_security_group" "database" {
+  name_prefix = "${local.resource_prefix}-db-"
+  vpc_id      = aws_vpc.main.id
+  description = "Security group for ${local.resource_prefix} database"
+
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+    description = "PostgreSQL access from VPC"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "All outbound traffic"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-db-sg"
+    Type = "SecurityGroup"
+  })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Aurora Serverless v2 cluster
+resource "aws_rds_cluster" "database" {
+  cluster_identifier     = "${local.resource_prefix}-cluster"
+  engine                = "aurora-postgresql"
+  engine_mode           = "provisioned"
+  engine_version        = "15.4"
+  database_name         = "digital_persona"
+  master_username       = "dpp_admin"
+  master_password       = random_password.database_password.result
+  backup_retention_period = 7
+  preferred_backup_window = "07:00-09:00"
+  preferred_maintenance_window = "sun:09:00-sun:10:00"
   
+  db_subnet_group_name   = aws_db_subnet_group.database.name
+  vpc_security_group_ids = [aws_security_group.database.id]
+  
+  serverlessv2_scaling_configuration {
+    max_capacity = 1
+    min_capacity = 0.5
+  }
+  
+  skip_final_snapshot = var.environment != "prod"
+  deletion_protection = var.environment == "prod"
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-cluster"
+    Type = "DatabaseCluster"
+  })
+}
+
+# Aurora Serverless v2 instance
+resource "aws_rds_cluster_instance" "database" {
+  identifier         = "${local.resource_prefix}-instance"
+  cluster_identifier = aws_rds_cluster.database.id
+  instance_class     = "db.serverless"
+  engine             = aws_rds_cluster.database.engine
+  engine_version     = aws_rds_cluster.database.engine_version
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-instance"
+    Type = "DatabaseInstance"
+  })
+}
+
+# =================================
+# S3 Buckets
+# =================================
+
+# S3 bucket for file uploads
+resource "aws_s3_bucket" "uploads" {
+  bucket = "${local.resource_prefix}-uploads"
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-uploads"
+    Type = "S3Bucket"
+    Purpose = "FileUploads"
+  })
+}
+
+resource "aws_s3_bucket_versioning" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# =================================
+# Simplified VPC (for database only)
+# =================================
+
+# VPC
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support   = true
-  
+
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-vpc"
+    Type = "VPC"
   })
 }
 
 # Internet Gateway
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
-  
+
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-igw"
+    Type = "InternetGateway"
   })
-  
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
-# Public Subnets
-resource "aws_subnet" "public" {
-  count             = 2
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 4, count.index)
-  availability_zone = data.aws_availability_zones.available.names[count.index]
-  
-  map_public_ip_on_launch = true
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-public-${count.index + 1}"
-    Tier = "Public"
-  })
-  
-  # Ensure these subnets are not destroyed while resources depend on them
-  lifecycle {
-    create_before_destroy = true
-  }
+# Data source for availability zones
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
-# Private Subnets
+# Private Subnets (for database)
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
   cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 4, count.index + 2)
   availability_zone = data.aws_availability_zones.available.names[count.index]
-  
+
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-private-${count.index + 1}"
-    Tier = "Private"
+    Type = "PrivateSubnet"
   })
-  
-  # Ensure these subnets are not destroyed while resources depend on them
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
-# Route Table for Public Subnets
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-  
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
-  }
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-public-rt"
-  })
-  
-  depends_on = [aws_internet_gateway.main]
-  
-  lifecycle {
-    create_before_destroy = true
-  }
+# =================================
+# Module Calls
+# =================================
+
+# S3 Static Website
+module "s3_website" {
+  source = "../../modules/s3-static-website"
+
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  common_tags     = local.common_tags
+
+  # Custom domain configuration (optional)
+  # custom_domain        = local.website_domain
+  # ssl_certificate_arn  = aws_acm_certificate.website.arn
+
+  cloudfront_price_class = "PriceClass_100"
+  build_retention_days   = 30
 }
 
-# Route Table Association for Public Subnets
-resource "aws_route_table_association" "public" {
-  count          = 2
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
+# Lambda Backend
+module "lambda_backend" {
+  source = "../../modules/lambda-backend"
 
-# NAT Gateway
-resource "aws_eip" "nat" {
-  domain = "vpc"
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-nat-eip"
-  })
-  
-  # Ensure ENI dependencies are handled properly
-  depends_on = [aws_internet_gateway.main]
-  
-  lifecycle {
-    create_before_destroy = true
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  common_tags     = local.common_tags
+
+  # Lambda configuration
+  lambda_runtime     = "nodejs18.x"
+  lambda_timeout     = 30
+  lambda_memory_size = 512
+
+  # Environment variables
+  database_url   = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${aws_rds_cluster.database.endpoint}:${aws_rds_cluster.database.port}/${aws_rds_cluster.database.database_name}"
+  cors_origin    = "https://${module.s3_website.cloudfront_domain_name}"
+
+  # AWS resources
+  database_secret_arn     = aws_secretsmanager_secret.database_password.arn
+  jwt_secret_arn         = aws_secretsmanager_secret.jwt_secret.arn
+  s3_uploads_bucket_arn  = aws_s3_bucket.uploads.arn
+  s3_uploads_bucket_name = aws_s3_bucket.uploads.bucket
+
+  # VPC configuration for database access
+  vpc_config = {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
   }
+
+  log_retention_days = 14
 }
 
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-nat"
-  })
-  
-  depends_on = [aws_internet_gateway.main]
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Route Table for Private Subnets
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
-  
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main.id
-  }
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-private-rt"
-  })
-  
-  depends_on = [aws_nat_gateway.main]
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Route Table Association for Private Subnets
-resource "aws_route_table_association" "private" {
-  count          = 2
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
-}
-
-# Security Groups
-resource "aws_security_group" "alb" {
-  name_prefix = "${local.resource_prefix}-alb-"
+# Lambda security group
+resource "aws_security_group" "lambda" {
+  name_prefix = "${local.resource_prefix}-lambda-"
   vpc_id      = aws_vpc.main.id
-  
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
+  description = "Security group for ${local.resource_prefix} Lambda functions"
+
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "All outbound traffic"
   }
-  
+
   tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-alb-sg"
+    Name = "${local.resource_prefix}-lambda-sg"
+    Type = "SecurityGroup"
   })
-  
+
   lifecycle {
     create_before_destroy = true
   }
 }
 
-resource "aws_security_group" "app" {
-  name_prefix = "${local.resource_prefix}-app-"
-  vpc_id      = aws_vpc.main.id
-  
-  ingress {
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-  
-  ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-  
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-app-sg"
-  })
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
+# API Gateway
+module "api_gateway" {
+  source = "../../modules/api-gateway"
 
-# Application Load Balancer
-resource "aws_lb" "main" {
-  name               = "${local.resource_prefix}-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = aws_subnet.public[*].id
-  
-  enable_deletion_protection = false
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-alb"
-  })
-  
-  # Ensure load balancer depends on subnets and security groups
-  depends_on = [
-    aws_subnet.public,
-    aws_security_group.alb,
-    aws_internet_gateway.main,
-    aws_route_table.public
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  common_tags     = local.common_tags
+
+  # Lambda function configuration
+  lambda_function_name             = module.lambda_backend.lambda_function_name
+  lambda_function_invoke_arn       = module.lambda_backend.lambda_function_invoke_arn
+  health_lambda_function_name      = module.lambda_backend.health_lambda_function_name
+  health_lambda_function_invoke_arn = module.lambda_backend.health_lambda_function_invoke_arn
+
+  # CORS configuration
+  cors_allow_origins = [
+    "https://${module.s3_website.cloudfront_domain_name}",
+    "https://${local.website_domain}",  # Custom domain
+    "http://localhost:3000",  # Development
+    "http://localhost:3100"   # Docker development
   ]
-  
-  lifecycle {
-    create_before_destroy = true
-  }
+
+  # Custom domain configuration (optional)
+  # custom_domain_name = local.api_domain
+  # certificate_arn    = aws_acm_certificate.api.arn
+
+  stage_name         = "v1"
+  log_retention_days = 14
 }
 
-# Random suffix for unique resource names
-resource "random_id" "suffix" {
-  byte_length = 4
+# =================================
+# Route53 Records (Custom Domains)
+# =================================
+
+# Website CNAME record pointing to CloudFront
+resource "aws_route53_record" "website" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = local.website_domain
+  type    = "CNAME"
+  ttl     = 300
+  records = [module.s3_website.cloudfront_domain_name]
 }
 
-# ALB Target Groups
-resource "aws_lb_target_group" "backend" {
-  name        = "hibiji-bk-${random_id.suffix.hex}"
-  port        = 8000
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
-  
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 30
-    matcher             = "200"
-    path                = "/health"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    timeout             = 5
-    unhealthy_threshold = 2
-  }
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-backend-tg"
-  })
-  
-  lifecycle {
-    create_before_destroy = true
-  }
+# API CNAME record pointing to API Gateway 
+resource "aws_route53_record" "api" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = local.api_domain
+  type    = "CNAME"
+  ttl     = 300
+  records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
 }
 
-resource "aws_lb_target_group" "frontend" {
-  name        = "hibiji-fr-${random_id.suffix.hex}"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
-  
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 30
-    matcher             = "200"
-    path                = "/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    timeout             = 5
-    unhealthy_threshold = 2
-  }
-  
-  tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-frontend-tg"
-  })
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# ALB Listeners
-resource "aws_lb_listener" "backend" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "80"
-  protocol          = "HTTP"
-  
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
-  }
-}
-
-resource "aws_lb_listener" "frontend" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "3000"
-  protocol          = "HTTP"
-  
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
-  }
-  
-  depends_on = [aws_lb_target_group.frontend]
-}
-
-# ECS Cluster for sub-environment
-resource "aws_ecs_cluster" "main" {
-  name = "${local.resource_prefix}-cluster"
-  
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
-  }
-  
-  tags = local.common_tags
-}
-
-# IAM Roles for ECS
-resource "aws_iam_role" "ecs_execution" {
-  name = "${local.resource_prefix}-ecs-execution"
-  
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
-  
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_execution" {
-  role       = aws_iam_role.ecs_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-resource "aws_iam_role" "ecs_task" {
-  name = "${local.resource_prefix}-ecs-task"
-  
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
-  
-  tags = local.common_tags
-}
-
-# Secrets for application
-resource "aws_secretsmanager_secret" "secret_key" {
-  name = "${local.resource_prefix}-secret-key-${random_id.suffix.hex}"
-  
-  tags = local.common_tags
-}
-
-resource "aws_secretsmanager_secret_version" "secret_key" {
-  secret_id     = aws_secretsmanager_secret.secret_key.id
-  secret_string = "your-secret-key-here"
-}
-
-resource "aws_secretsmanager_secret" "database_password" {
-  name = "${local.resource_prefix}-db-password-${random_id.suffix.hex}"
-  
-  tags = local.common_tags
-}
-
-resource "aws_secretsmanager_secret_version" "database_password" {
-  secret_id     = aws_secretsmanager_secret.database_password.id
-  secret_string = "your-database-password-here"
-}
-
-# RDS Instance for sub-environment
-resource "aws_db_instance" "main" {
-  identifier = "${local.resource_prefix}-db"
-  
-  # Database engine
-  engine         = "postgres"
-  engine_version = data.aws_rds_engine_version.postgres.version
-  
-  # Sub-environment specific configurations
-  instance_class = local.main_env == "prod" ? "db.t3.small" : "db.t3.micro"
-  multi_az       = local.main_env == "prod"
-  
-  # Database name includes sub-environment
-  db_name = "hibiji_${replace(local.sub_env, "-", "_")}"
-  
-  # Database credentials
-  username = "hibiji_admin"
-  password = aws_secretsmanager_secret_version.database_password.secret_string
-  
-  # Network configuration
-  vpc_security_group_ids = [aws_security_group.app.id]
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  
-  # Storage
-  allocated_storage     = 20
-  storage_type          = "gp2"
-  storage_encrypted     = true
-  
-  # Backup
-  backup_retention_period = 7
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "sun:04:00-sun:05:00"
-  
-  # Deletion protection
-  deletion_protection = false
-  skip_final_snapshot = true
-  
-  tags = local.common_tags
-  
-  # Ensure RDS instance depends on subnets and security groups
-  depends_on = [
-    aws_db_subnet_group.main,
-    aws_security_group.app,
-    aws_subnet.private
-  ]
-}
-
-# DB Subnet Group
-resource "aws_db_subnet_group" "main" {
-  name       = "${local.resource_prefix}-db-subnet-group"
-  subnet_ids = aws_subnet.private[*].id
-  
-  tags = local.common_tags
-  
-  # Ensure subnet group depends on subnets and is destroyed before subnets
-  depends_on = [aws_subnet.private]
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Data sources
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
-# Get available PostgreSQL versions
-data "aws_rds_engine_version" "postgres" {
-  engine = "postgres"
-}
-
-# ECS Module
-module "ecs" {
-  source = "../../modules/ecs"
-  
-  environment                = local.main_env
-  sub_environment           = local.sub_env
-  ecr_repository_url        = var.ecr_repository_url
-  frontend_ecr_repository_url = var.frontend_ecr_repository_url
-  image_tag                 = var.image_tag
-  frontend_image_tag        = var.frontend_image_tag
-  
-  # Resource sizing based on environment
-  backend_cpu    = local.main_env == "prod" ? 1024 : 256
-  backend_memory = local.main_env == "prod" ? 2048 : 512
-  frontend_cpu   = local.main_env == "prod" ? 512 : 256
-  frontend_memory = local.main_env == "prod" ? 1024 : 512
-  
-  backend_desired_count  = local.main_env == "prod" ? 2 : 1
-  frontend_desired_count = local.main_env == "prod" ? 2 : 1
-  
-  backend_min_capacity = local.main_env == "prod" ? 2 : 1
-  backend_max_capacity = local.main_env == "prod" ? 10 : 3
-  
-  # Network configuration
-  private_subnet_ids      = aws_subnet.private[*].id
-  app_security_group_id   = aws_security_group.app.id
-  backend_target_group_arn = aws_lb_target_group.backend.arn
-  frontend_target_group_arn = aws_lb_target_group.frontend.arn
-  
-  # Application configuration
-  database_url = "postgresql://hibiji_admin:${aws_secretsmanager_secret_version.database_password.secret_string}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}"
-  redis_url    = "redis://localhost:6379"  # Will be updated when Redis is added
-  api_url      = "http://${aws_lb.main.dns_name}"
-  
-  # IAM roles
-  ecs_execution_role_arn = aws_iam_role.ecs_execution.arn
-  ecs_task_role_arn     = aws_iam_role.ecs_task.arn
-  
-  # Secrets
-  secret_key_arn       = aws_secretsmanager_secret.secret_key.arn
-  database_password_arn = aws_secretsmanager_secret.database_password.arn
-  
-  # Ensure ECS module depends on all network resources to prevent ENI dependency issues
-  depends_on = [
-    aws_lb_listener.backend,
-    aws_lb_listener.frontend,
-    aws_subnet.private,
-    aws_security_group.app,
-    aws_lb_target_group.backend,
-    aws_lb_target_group.frontend,
-    aws_lb.main,
-    aws_route_table_association.private,
-    aws_nat_gateway.main,
-    aws_db_instance.main
-  ]
-}
-
-# ENI Cleanup Resource - handles orphaned ENIs before subnet destruction
-resource "null_resource" "eni_cleanup" {
-  triggers = {
-    subnet_ids = join(",", concat(aws_subnet.private[*].id, aws_subnet.public[*].id))
-    vpc_id     = aws_vpc.main.id
-  }
-  
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      # Wait for resources to be properly destroyed
-      sleep 30
-      
-      # Clean up orphaned ENIs in all subnets
-      aws ec2 describe-network-interfaces \
-        --filters "Name=subnet-id,Values=${self.triggers.subnet_ids}" \
-        --query 'NetworkInterfaces[?Status==`available`].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
-      
-      # Clean up orphaned ENIs in the VPC
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
-        --query 'NetworkInterfaces[].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
-      
-      # Force detach any remaining ENIs 
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
-        --query 'NetworkInterfaces[?Status==`in-use`].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 detach-network-interface --network-interface-id --force || true
-      
-      # Clean up detached ENIs
-      aws ec2 describe-network-interfaces \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" "Name=status,Values=available" \
-        --query 'NetworkInterfaces[].NetworkInterfaceId' \
-        --output text | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id || true
-    EOT
-  }
-  
-  depends_on = [
-    module.ecs,
-    aws_db_instance.main,
-    aws_lb.main,
-    aws_nat_gateway.main,
-    aws_route_table.public,
-    aws_route_table.private
-  ]
-}
-
-# Route 53 record for sub-environment
-resource "aws_route53_record" "sub_env" {
-  zone_id = aws_route53_zone.main.zone_id
-  name    = local.domain_name
-  type    = "A"
-  
-  alias {
-    name                   = aws_lb.main.dns_name
-    zone_id                = aws_lb.main.zone_id
-    evaluate_target_health = true
-  }
-}
-
-# Route 53 Zone (placeholder - you'll need to create this or use existing zone)
-resource "aws_route53_zone" "main" {
-  name = var.domain_name
-  
-  tags = local.common_tags
-}
-
-# ACM Certificate (placeholder - you'll need to validate this)
-resource "aws_acm_certificate" "main" {
-  domain_name       = var.domain_name
-  validation_method = "DNS"
-  
-  subject_alternative_names = [
-    "*.${var.domain_name}"
-  ]
-  
-  tags = local.common_tags
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# CloudFront distribution for sub-environment
-resource "aws_cloudfront_distribution" "main" {
-  enabled             = true
-  is_ipv6_enabled     = true
-  default_root_object = "index.html"
-  
-  origin {
-    domain_name = aws_lb.main.dns_name
-    origin_id   = "ALB"
-    
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
-  }
-  
-  default_cache_behavior {
-    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "ALB"
-    
-    forwarded_values {
-      query_string = true
-      headers      = ["*"]
-      
-      cookies {
-        forward = "all"
-      }
-    }
-    
-    viewer_protocol_policy = "allow-all"
-    min_ttl                = 0
-    default_ttl            = 3600
-    max_ttl                = 86400
-  }
-  
-  restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
-  }
-  
-  price_class = "PriceClass_100"
-  
-  viewer_certificate {
-    cloudfront_default_certificate = true
-  }
-  
-  tags = local.common_tags
-}
-
+# =================================
 # Outputs
-output "alb_dns_name" {
-  description = "DNS name of the load balancer"
-  value       = aws_lb.main.dns_name
+# =================================
+
+output "website_url" {
+  description = "URL of the static website"
+  value       = module.s3_website.website_url
 }
 
-output "alb_name" {
-  description = "Name of the load balancer"
-  value       = aws_lb.main.name
+output "api_url" {
+  description = "URL of the API Gateway"
+  value       = module.api_gateway.api_url
 }
 
-output "cluster_name" {
-  description = "Name of the ECS cluster"
-  value       = aws_ecs_cluster.main.name
+output "website_bucket_name" {
+  description = "Name of the website S3 bucket"
+  value       = module.s3_website.website_bucket_id
 }
 
-output "secret_key_arn" {
-  description = "ARN of the application secret key"
-  value       = aws_secretsmanager_secret.secret_key.arn
+output "lambda_function_name" {
+  description = "Name of the main Lambda function"
+  value       = module.lambda_backend.lambda_function_name
 }
 
-output "database_password_arn" {
-  description = "ARN of the database password secret"
-  value       = aws_secretsmanager_secret.database_password.arn
+output "database_endpoint" {
+  description = "RDS cluster endpoint"
+  value       = aws_rds_cluster.database.endpoint
+  sensitive   = true
+}
+
+output "uploads_bucket_name" {
+  description = "Name of the uploads S3 bucket"
+  value       = aws_s3_bucket.uploads.bucket
 } 

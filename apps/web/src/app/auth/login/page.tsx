@@ -2,22 +2,16 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, error, clearError, isAuthenticated } = useAuth();
-  const router = useRouter();
+  const { login, error, clearError } = useAuth();
 
-  // Redirect if already authenticated
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/dashboard");
-    }
-  }, [isAuthenticated, router]);
+  // AuthMiddleware will handle redirecting authenticated users away from auth pages
+  // No manual redirect logic needed here
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +24,7 @@ export default function LoginPage() {
       setIsSubmitting(true);
       clearError();
       await login(email, password);
+      // AuthMiddleware will automatically redirect to dashboard after successful login
     } catch (error) {
       // Error is handled by AuthContext
     } finally {

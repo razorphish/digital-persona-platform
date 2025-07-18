@@ -13,7 +13,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=4001
-      - DATABASE_URL=sqlite://./data/dev.db
+      - DATABASE_URL=postgresql://dpp_user:dpp_password@postgres:5432/digital_persona
       - JWT_SECRET=dev-secret-key-change-in-production
       - CORS_ORIGIN=http://localhost:3100
     volumes:
@@ -22,6 +22,8 @@ services:
       - node_modules_cache:/app/node_modules
     working_dir: /app
     command: ["sh", "-c", "npm install && cd apps/server && npm run dev"]
+    depends_on:
+      - postgres
     networks:
       - dpp-dev-network
     restart: unless-stopped
@@ -73,29 +75,29 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
-  # PostgreSQL for development (optional - can switch from SQLite)
-  # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: dpp-postgres-dev
-  #   environment:
-  #     POSTGRES_DB: digital_persona_dev
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #     - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-  #   ports:
-  #     - "5432:5432"
-  #   networks:
-  #     - dpp-dev-network
-  #   restart: unless-stopped
+  # PostgreSQL for development
+  postgres:
+    image: postgres:15-alpine
+    container_name: dpp-postgres-dev
+    environment:
+      POSTGRES_DB: digital_persona
+      POSTGRES_USER: dpp_user
+      POSTGRES_PASSWORD: dpp_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - dpp-dev-network
+    restart: unless-stopped
 
 volumes:
   backend_data:
   redis_data:
   node_modules_cache:
   frontend_node_modules:
-  # postgres_data:
+  postgres_data:
 
 networks:
   dpp-dev-network:

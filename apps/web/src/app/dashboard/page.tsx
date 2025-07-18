@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadFile, FileUploadResult } from "@/services/fileUpload";
 import { AuthUtils } from "@/lib/auth";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 interface UploadedFile {
   file: File;
@@ -17,18 +18,11 @@ interface UploadedFile {
   error?: string;
 }
 
-export default function DashboardPage() {
-  const { user, logout, isLoading, isAuthenticated } = useAuth();
+function DashboardPageContent() {
+  const { user, logout } = useAuth();
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [message, setMessage] = useState("");
-
-  // Redirect if not authenticated
-  React.useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push("/auth/login");
-    }
-  }, [isAuthenticated, isLoading, router]);
 
   // File handling functions
   const handleFiles = (files: FileList | File[]) => {
@@ -143,21 +137,6 @@ export default function DashboardPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null; // Will redirect via useEffect
-  }
-
   const handleLogout = () => {
     logout();
   };
@@ -174,7 +153,7 @@ export default function DashboardPage() {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome, {user.name}!</span>
+              <span className="text-gray-700">Welcome, {user?.name}!</span>
               <button
                 onClick={handleLogout}
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
@@ -254,7 +233,7 @@ export default function DashboardPage() {
                         <p className="text-gray-800">
                           Hello{" "}
                           <span className="font-semibold text-indigo-600">
-                            {user.name}
+                            {user?.name}
                           </span>
                           ! 👋 I'm{" "}
                           <span className="font-semibold text-purple-600">
@@ -593,7 +572,10 @@ export default function DashboardPage() {
               <p className="text-gray-600 mb-4">
                 Engage in intelligent conversations with your AI persona
               </p>
-              <button className="text-indigo-600 hover:text-indigo-500 font-medium">
+              <button
+                onClick={() => router.push("/chat")}
+                className="text-indigo-600 hover:text-indigo-500 font-medium"
+              >
                 Continue Chatting →
               </button>
             </div>
@@ -620,7 +602,10 @@ export default function DashboardPage() {
               <p className="text-gray-600 mb-4">
                 Create and manage your digital personas
               </p>
-              <button className="text-indigo-600 hover:text-indigo-500 font-medium">
+              <button
+                onClick={() => router.push("/personas")}
+                className="text-indigo-600 hover:text-indigo-500 font-medium"
+              >
                 Manage Personas →
               </button>
             </div>
@@ -647,7 +632,10 @@ export default function DashboardPage() {
               <p className="text-gray-600 mb-4">
                 View insights about your personality and preferences
               </p>
-              <button className="text-indigo-600 hover:text-indigo-500 font-medium">
+              <button
+                onClick={() => router.push("/analytics")}
+                className="text-indigo-600 hover:text-indigo-500 font-medium"
+              >
                 View Analytics →
               </button>
             </div>
@@ -700,5 +688,13 @@ export default function DashboardPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <AuthGuard>
+      <DashboardPageContent />
+    </AuthGuard>
   );
 }

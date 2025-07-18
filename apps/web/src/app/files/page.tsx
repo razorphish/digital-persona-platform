@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadFile } from "@/services/fileUpload";
 import { trpc } from "@/lib/trpc";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 interface FileRecord {
   id: string;
@@ -35,38 +36,31 @@ interface FileStats {
   total_size: number;
 }
 
-export default function FilesPage() {
-  const { user, isLoading, isAuthenticated } = useAuth();
+function FilesPageContent() {
+  const { user } = useAuth();
   const router = useRouter();
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
-  // Use tRPC queries instead of manual fetch
+  // Use tRPC queries - these will now always run since we're protected by AuthGuard
   const {
     data: filesData,
     isLoading: filesLoading,
     refetch: refetchFiles,
-  } = trpc.media.getAllUserFiles.useQuery(
-    {
-      includeDeleted,
-      limit: 20,
-      offset: (page - 1) * 20,
-      mediaType: selectedFilter === "all" ? undefined : selectedFilter,
-    },
-    {
-      enabled: isAuthenticated, // Only run when authenticated
-    }
-  );
+  } = trpc.media.getAllUserFiles.useQuery({
+    includeDeleted,
+    limit: 20,
+    offset: (page - 1) * 20,
+    mediaType: selectedFilter === "all" ? undefined : selectedFilter,
+  });
 
   const {
     data: stats,
     isLoading: statsLoading,
     refetch: refetchStats,
-  } = trpc.media.getFileStats.useQuery(undefined, {
-    enabled: isAuthenticated, // Only run when authenticated
-  });
+  } = trpc.media.getFileStats.useQuery();
 
   // Extract typed data with fallbacks
   const files = (filesData as any)?.files || [];
@@ -103,61 +97,26 @@ export default function FilesPage() {
     },
   });
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push("/auth/login");
-    }
-  }, [isAuthenticated, isLoading, router]);
-
-  // Refetch when filters change
-  useEffect(() => {
-    if (isAuthenticated) {
-      setPage(1); // Reset to first page when filters change
-      refetchFiles();
-    }
-  }, [isAuthenticated, selectedFilter, includeDeleted, refetchFiles]);
-
-  const deleteFile = async (fileId: string) => {
-    try {
-      await deleteFileMutation.mutateAsync({ fileId });
-    } catch (err) {
-      // Error handled by mutation onError
+  // Handle file operations
+  const handleDeleteFile = async (fileId: string) => {
+    if (confirm("Are you sure you want to delete this file?")) {
+      deleteFileMutation.mutate({ fileId });
     }
   };
 
-  const restoreFile = async (fileId: string) => {
-    try {
-      await restoreFileMutation.mutateAsync({ fileId });
-    } catch (err) {
-      // Error handled by mutation onError
-    }
+  const handleRestoreFile = async (fileId: string) => {
+    restoreFileMutation.mutate({ fileId });
   };
 
-  const formatFileSize = (bytes: number | undefined | null) => {
-    // Handle invalid or missing values
-    if (bytes == null || isNaN(Number(bytes)) || bytes < 0) {
-      return "0 Bytes";
-    }
-
-    const numBytes = Number(bytes);
-    if (numBytes === 0) return "0 Bytes";
-
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(numBytes) / Math.log(k));
-
-    // Ensure i is within bounds
-    const sizeIndex = Math.min(i, sizes.length - 1);
-
-    return (
-      parseFloat((numBytes / Math.pow(k, sizeIndex)).toFixed(2)) +
-      " " +
-      sizes[sizeIndex]
-    );
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
@@ -170,74 +129,50 @@ export default function FilesPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed":
-        return "text-green-600 bg-green-100";
+        return "bg-green-100 text-green-800";
       case "pending":
-        return "text-yellow-600 bg-yellow-100";
+        return "bg-yellow-100 text-yellow-800";
       case "deleted":
-        return "text-red-600 bg-red-100";
+        return "bg-red-100 text-red-800";
       case "failure":
-        return "text-red-600 bg-red-100";
-      case "archived":
-        return "text-gray-600 bg-gray-100";
+        return "bg-red-100 text-red-800";
       default:
-        return "text-gray-600 bg-gray-100";
+        return "bg-gray-100 text-gray-800";
     }
   };
 
-  const getMediaIcon = (mediaType: string) => {
+  const getFileIcon = (mediaType: string) => {
     switch (mediaType) {
       case "image":
         return (
-          <svg
-            className="w-5 h-5 text-blue-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              fillRule="evenodd"
+              d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
+              clipRule="evenodd"
             />
           </svg>
         );
       case "video":
         return (
-          <svg
-            className="w-5 h-5 text-purple-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-            />
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
           </svg>
         );
       default:
         return (
-          <svg
-            className="w-5 h-5 text-gray-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              fillRule="evenodd"
+              d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+              clipRule="evenodd"
             />
           </svg>
         );
     }
   };
 
-  if (isLoading) {
+  if (filesLoading && page === 1) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
@@ -246,10 +181,6 @@ export default function FilesPage() {
         </div>
       </div>
     );
-  }
-
-  if (!user) {
-    return null;
   }
 
   return (
@@ -282,7 +213,7 @@ export default function FilesPage() {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome, {user.name}!</span>
+              <span className="text-gray-700">Welcome, {user?.name}!</span>
             </div>
           </div>
         </div>
@@ -567,7 +498,7 @@ export default function FilesPage() {
                     <tr key={file.file_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          {getMediaIcon(file.media_type)}
+                          {getFileIcon(file.media_type)}
                           <div className="ml-3">
                             <div className="text-sm font-medium text-gray-900 truncate max-w-xs">
                               {file.original_filename}
@@ -614,7 +545,7 @@ export default function FilesPage() {
                         <div className="flex items-center space-x-2">
                           {file.upload_status === "deleted" ? (
                             <button
-                              onClick={() => restoreFile(file.file_id)}
+                              onClick={() => handleRestoreFile(file.file_id)}
                               className="text-green-600 hover:text-green-900"
                               title="Restore file"
                             >
@@ -664,7 +595,7 @@ export default function FilesPage() {
                                 </a>
                               )}
                               <button
-                                onClick={() => deleteFile(file.file_id)}
+                                onClick={() => handleDeleteFile(file.file_id)}
                                 className="text-red-600 hover:text-red-900"
                                 title="Delete file"
                               >
@@ -719,5 +650,13 @@ export default function FilesPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function FilesPage() {
+  return (
+    <AuthGuard>
+      <FilesPageContent />
+    </AuthGuard>
   );
 }

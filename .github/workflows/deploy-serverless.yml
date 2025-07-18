@@ -1,0 +1,417 @@
+name: Deploy Serverless Architecture
+
+on:
+  push:
+    branches:
+      - dev01
+      - dev02
+      - main
+      - staging
+      - prod
+  pull_request:
+    branches:
+      - dev01
+      - dev02
+      - main
+
+env:
+  AWS_REGION: us-west-1
+  NODE_VERSION: 18
+
+jobs:
+  # =================================
+  # Build and Test
+  # =================================
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint --if-present
+
+      - name: Run type checking
+        run: npm run type-check --if-present
+
+      - name: Run tests
+        run: npm run test --if-present
+
+  # =================================
+  # Build Frontend for Static Export
+  # =================================
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    outputs:
+      frontend-hash: ${{ steps.frontend-hash.outputs.hash }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages
+        run: |
+          npm run build --workspace=@digital-persona/shared
+          npm run build --workspace=@digital-persona/database
+
+      - name: Build frontend for static export
+        env:
+          NODE_ENV: production
+          # Set API URL based on branch
+          NEXT_PUBLIC_API_URL: >-
+            ${{ 
+              github.ref == 'refs/heads/main' && secrets.API_URL_MAIN ||
+              github.ref == 'refs/heads/staging' && secrets.API_URL_STAGING ||
+              github.ref == 'refs/heads/prod' && secrets.API_URL_PROD ||
+              secrets.API_URL_DEV 
+            }}
+        run: |
+          cd apps/web
+          npm run build
+
+      - name: Generate frontend hash
+        id: frontend-hash
+        run: |
+          cd apps/web
+          hash=$(find out -type f -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
+          echo "hash=${hash:0:8}" >> $GITHUB_OUTPUT
+
+      - name: Upload frontend build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-${{ steps.frontend-hash.outputs.hash }}
+          path: apps/web/out/
+          retention-days: 7
+
+  # =================================
+  # Build Backend Lambda Package
+  # =================================
+  build-backend:
+    name: Build Backend Lambda
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    outputs:
+      backend-hash: ${{ steps.backend-hash.outputs.hash }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages
+        run: |
+          npm run build --workspace=@digital-persona/shared
+          npm run build --workspace=@digital-persona/database
+
+      - name: Build backend for Lambda
+        run: |
+          cd apps/server
+          npm run build
+
+      - name: Create Lambda deployment package
+        run: |
+          cd apps/server
+          # Create deployment directory
+          mkdir -p deployment
+
+          # Copy built files
+          cp -r dist/* deployment/
+
+          # Copy package.json and install production dependencies
+          cp package.json deployment/
+          cd deployment
+          npm ci --only=production --ignore-scripts
+
+          # Create zip file
+          zip -r ../lambda-deployment.zip .
+          cd ..
+
+          # Clean up
+          rm -rf deployment
+
+      - name: Generate backend hash
+        id: backend-hash
+        run: |
+          cd apps/server
+          hash=$(sha256sum lambda-deployment.zip | cut -d' ' -f1)
+          echo "hash=${hash:0:8}" >> $GITHUB_OUTPUT
+
+      - name: Upload backend build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build-${{ steps.backend-hash.outputs.hash }}
+          path: apps/server/lambda-deployment.zip
+          retention-days: 7
+
+  # =================================
+  # Deploy Infrastructure
+  # =================================
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-backend]
+    if: github.event_name == 'push'
+
+    environment: >-
+      ${{ 
+        github.ref == 'refs/heads/main' && 'main' ||
+        github.ref == 'refs/heads/staging' && 'staging' ||
+        github.ref == 'refs/heads/prod' && 'prod' ||
+        'dev'
+      }}
+
+    outputs:
+      website-bucket: ${{ steps.terraform-output.outputs.website-bucket }}
+      api-url: ${{ steps.terraform-output.outputs.api-url }}
+      lambda-function: ${{ steps.terraform-output.outputs.lambda-function }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-ServerlessDeploy
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Determine environment and sub-environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=main" >> $GITHUB_OUTPUT
+            echo "sub_environment=main" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "sub_environment=staging" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "sub_environment=prod" >> $GITHUB_OUTPUT
+          else
+            # Extract sub-environment from branch name (e.g., dev01, dev02)
+            branch_name="${{ github.ref_name }}"
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "sub_environment=${branch_name}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init
+        run: |
+          cd terraform/environments/${{ steps.env.outputs.environment }}
+          terraform init
+
+      - name: Terraform Plan
+        run: |
+          cd terraform/environments/${{ steps.env.outputs.environment }}
+          terraform plan \
+            -var="sub_environment=${{ steps.env.outputs.sub_environment }}" \
+            -input=false \
+            -out=tfplan
+
+      - name: Terraform Apply
+        run: |
+          cd terraform/environments/${{ steps.env.outputs.environment }}
+          terraform apply -input=false tfplan
+
+      - name: Get Terraform outputs
+        id: terraform-output
+        run: |
+          cd terraform/environments/${{ steps.env.outputs.environment }}
+          echo "website-bucket=$(terraform output -raw website_bucket_name)" >> $GITHUB_OUTPUT
+          echo "api-url=$(terraform output -raw api_url)" >> $GITHUB_OUTPUT
+          echo "lambda-function=$(terraform output -raw lambda_function_name)" >> $GITHUB_OUTPUT
+
+  # =================================
+  # Deploy Frontend to S3
+  # =================================
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: [build-frontend, deploy-infrastructure]
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-FrontendDeploy
+
+      - name: Download frontend build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-${{ needs.build-frontend.outputs.frontend-hash }}
+          path: frontend-build/
+
+      - name: Deploy to S3
+        run: |
+          aws s3 sync frontend-build/ s3://${{ needs.deploy-infrastructure.outputs.website-bucket }}/ \
+            --delete \
+            --cache-control "public, max-age=31536000" \
+            --exclude "*.html" \
+            --exclude "*.json"
+
+          # Deploy HTML files with shorter cache
+          aws s3 sync frontend-build/ s3://${{ needs.deploy-infrastructure.outputs.website-bucket }}/ \
+            --delete \
+            --cache-control "public, max-age=3600" \
+            --include "*.html" \
+            --include "*.json"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          # Get CloudFront distribution ID
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='${{ needs.deploy-infrastructure.outputs.website-bucket }}'].Id" \
+            --output text)
+
+          if [ ! -z "$DISTRIBUTION_ID" ]; then
+            aws cloudfront create-invalidation \
+              --distribution-id $DISTRIBUTION_ID \
+              --paths "/*"
+          fi
+
+  # =================================
+  # Deploy Backend Lambda
+  # =================================
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    needs: [build-backend, deploy-infrastructure]
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-BackendDeploy
+
+      - name: Download backend build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build-${{ needs.build-backend.outputs.backend-hash }}
+          path: backend-build/
+
+      - name: Update Lambda function
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ needs.deploy-infrastructure.outputs.lambda-function }} \
+            --zip-file fileb://backend-build/lambda-deployment.zip
+
+      - name: Wait for Lambda update to complete
+        run: |
+          aws lambda wait function-updated \
+            --function-name ${{ needs.deploy-infrastructure.outputs.lambda-function }}
+
+  # =================================
+  # Health Check and Smoke Tests
+  # =================================
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, deploy-backend, deploy-infrastructure]
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-HealthCheck
+
+      - name: Test API health endpoint
+        run: |
+          API_URL="${{ needs.deploy-infrastructure.outputs.api-url }}"
+          echo "Testing API health at: $API_URL/health"
+
+          # Wait for API to be ready
+          for i in {1..10}; do
+            if curl -f "$API_URL/health"; then
+              echo "✅ API health check passed"
+              break
+            else
+              echo "⏳ Waiting for API to be ready... (attempt $i/10)"
+              sleep 30
+            fi
+          done
+
+      - name: Test website availability
+        run: |
+          # Get website URL from CloudFront distribution
+          BUCKET_NAME="${{ needs.deploy-infrastructure.outputs.website-bucket }}"
+          WEBSITE_URL=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='$BUCKET_NAME'].DomainName" \
+            --output text)
+
+          if [ ! -z "$WEBSITE_URL" ]; then
+            echo "Testing website at: https://$WEBSITE_URL"
+            if curl -f "https://$WEBSITE_URL"; then
+              echo "✅ Website health check passed"
+            else
+              echo "❌ Website health check failed"
+              exit 1
+            fi
+          fi
+
+  # =================================
+  # Notification
+  # =================================
+  notify-deployment:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: [health-check, deploy-infrastructure]
+    if: always() && github.event_name == 'push'
+
+    steps:
+      - name: Deployment notification
+        run: |
+          if [[ "${{ needs.health-check.result }}" == "success" ]]; then
+            echo "🎉 Serverless deployment completed successfully!"
+            echo "Frontend: Available via CloudFront"
+            echo "API: ${{ needs.deploy-infrastructure.outputs.api-url }}"
+          else
+            echo "❌ Deployment failed or health checks did not pass"
+            exit 1
+          fi

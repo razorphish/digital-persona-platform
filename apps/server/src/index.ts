@@ -10,7 +10,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "./router.js";
 
 const app = express();
-const port = process.env.PORT || 4001;
+const port = Number(process.env.PORT) || 4001;
 
 // Middleware
 app.use(
@@ -65,7 +65,8 @@ app.use("*", (req, res) => {
 });
 
 // Start server
-app.listen(port, () => {
-  console.log(`🚀 Server running on http://localhost:${port}`);
-  console.log(`📚 tRPC API available at http://localhost:${port}/api/trpc`);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${port}`);
+  console.log(`📚 tRPC API available at http://0.0.0.0:${port}/api/trpc`);
+  console.log(`🏥 Health check available at http://0.0.0.0:${port}/health`);
 });
