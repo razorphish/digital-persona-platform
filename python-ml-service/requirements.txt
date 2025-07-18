@@ -12,20 +12,20 @@ python-dotenv==1.0.0
 
 # HTTP client for inter-service communication
 httpx==0.28.1
-requests==2.32.4
+requests>=2.32.6
 
 # AI and ML core services
 openai==1.3.7
 numpy<2.0
-torch>=2.6.0
+torch>=2.7.2
 
 # Computer Vision and Image Processing
-opencv-python==4.8.1.78
-Pillow==10.2.0
+opencv-python>=4.9.0.80
+Pillow>=10.4.0
 
 # Vector Embeddings and Memory
-chromadb==0.4.24
-sentence-transformers==3.3.1
+chromadb>=0.5.0
+sentence-transformers>=3.3.1
 
 # Voice Synthesis
 gtts==2.4.0
@@ -37,12 +37,12 @@ aiofiles==23.2.1
 python-magic==0.4.27
 
 # AWS services (for S3 integration)
-boto3==1.34.0
-aioboto3==12.3.0
+boto3>=1.35.0
+aioboto3>=13.0.0
 
 # Data processing
-pandas==2.1.4
-scikit-learn==1.4.0
+pandas>=2.2.0
+scikit-learn>=1.5.0
 
 # Logging and monitoring
 structlog==23.1.0
