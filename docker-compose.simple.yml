@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # Simple test setup - just backend for verification
+  backend:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+      target: base  # Use base for faster builds during testing
+    container_name: dpp-backend-test
+    ports:
+      - "3101:4001"
+    environment:
+      - NODE_ENV=development
+      - PORT=4001
+      - DATABASE_URL=sqlite://./data/test.db
+      - JWT_SECRET=test-secret
+      - CORS_ORIGIN=http://localhost:3100
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: ["sh", "-c", "cd apps/server && npm install && npm run dev"]
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge 

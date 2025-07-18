@@ -123,8 +123,9 @@ Internet → ALB (Port 80/3000) → ECS Services → Containers
 
 ```
 digital-persona-platform/
-├── app/                    # Backend FastAPI application
-├── frontend/              # React frontend application
+├── app/                    # Original FastAPI backend
+├── nextjs-migration/       # Next.js frontend with integrated API routes
+├── python-ml-service/      # Specialized Python ML service
 ├── terraform/             # Infrastructure as Code
 ├── alembic/               # Database migrations
 ├── tests/                 # Test suite

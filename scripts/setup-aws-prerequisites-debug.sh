@@ -99,7 +99,7 @@ create_ecr_repositories() {
     print_debug "Starting ECR repository creation..."
     print_status "Creating ECR repositories..."
     
-    REPOS=("hibiji-backend" "hibiji-frontend")
+    REPOS=("hibiji-backend")
     
     for repo in "${REPOS[@]}"; do
         print_debug "Checking repository: $repo"

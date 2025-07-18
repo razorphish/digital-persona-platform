@@ -8,13 +8,15 @@ This guide provides comprehensive instructions for setting up the Digital Person
 
 ```
 digital-persona-platform/
-├── nextjs-migration/          # Main Next.js application with API routes
+├── frontend/                  # Main Next.js application with API routes
 ├── python-ml-service/         # Specialized Python ML service
+├── app/                       # Original FastAPI backend (legacy)
+├── app_old_backup/           # Backup of original backend
 ├── scripts/                   # Development and utility scripts
-├── docs/                      # Documentation files
-├── uploads/                   # File upload directory
-├── chroma_db/                 # Vector database storage
-├── .vscode/                   # VS Code debugging configuration
+├── docs/                     # Documentation files
+├── uploads/                  # File upload directory
+├── chroma_db/                # Vector database storage
+├── .vscode/                  # VS Code debugging configuration
 ├── docker-compose.yml         # Production Docker setup
 ├── docker-compose.dev.yml     # Development Docker setup
 └── README.md                  # Main project documentation
@@ -87,7 +89,7 @@ mkdir -p uploads chroma_db logs
 **Start Next.js Application:**
 
 ```bash
-cd nextjs-migration
+cd frontend
 npm install
 npm run dev
 ```
@@ -160,7 +162,7 @@ The project includes comprehensive VS Code debugging configurations:
 **Next.js with debugging:**
 
 ```bash
-cd nextjs-migration
+cd frontend
 NODE_OPTIONS='--inspect=0.0.0.0:9229' npm run dev
 ```
 
@@ -186,7 +188,7 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m uvicorn app.main:ap
 **Test Next.js Build:**
 
 ```bash
-cd nextjs-migration
+cd frontend
 npm run build
 ```
 
@@ -318,7 +320,7 @@ cd python-ml-service
 pip install -r requirements.txt
 
 # For Next.js
-cd nextjs-migration
+cd frontend
 npm ci
 ```
 
@@ -340,7 +342,7 @@ npm ci
 docker compose -f docker-compose.dev.yml logs -f
 
 # Specific service
-docker compose -f docker-compose.dev.yml logs -f nextjs-app
+docker compose -f docker-compose.dev.yml logs -f frontend
 docker compose -f docker-compose.dev.yml logs -f python-ml-service
 
 # System logs

@@ -88,7 +88,7 @@ create_terraform_backend() {
 create_ecr_repositories() {
     print_status "Creating ECR repositories..."
     
-    REPOS=("hibiji-backend" "hibiji-frontend")
+    REPOS=("hibiji-backend")
     
     for repo in "${REPOS[@]}"; do
         if ! aws ecr describe-repositories --repository-names "$repo" &> /dev/null; then

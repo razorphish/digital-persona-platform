@@ -84,24 +84,17 @@ create_terraform_backend() {
     fi
 }
 
-# Create ECR repositories
-create_ecr_repositories() {
-    print_status "Creating ECR repositories..."
-    
-    REPOS=("hibiji-backend" "hibiji-frontend")
-    
-    for repo in "${REPOS[@]}"; do
-        if ! aws ecr describe-repositories --repository-names "$repo" &> /dev/null; then
-            aws ecr create-repository \
-                --repository-name "$repo" \
-                --image-scanning-configuration scanOnPush=true \
-                --encryption-configuration encryptionType=AES256
-            print_success "ECR repository '$repo' created"
-        else
-            print_warning "ECR repository '$repo' already exists"
-        fi
-    done
-}
+# ECR Repositories
+print_status "Creating ECR repositories..."
+REPOS=("hibiji-backend")
+for repo in "${REPOS[@]}"; do
+    if aws ecr describe-repositories --repository-names "$repo" --region us-west-1 >/dev/null 2>&1; then
+        print_success "ECR repository '$repo' already exists"
+    else
+        aws ecr create-repository --repository-name "$repo" --region us-west-1 >/dev/null
+        print_success "Created ECR repository: $repo"
+    fi
+done
 
 # Create IAM roles for ECS
 create_iam_roles() {
@@ -229,7 +222,6 @@ main() {
     check_aws_cli
     check_aws_credentials
     create_terraform_backend
-    create_ecr_repositories
     create_iam_roles
     create_secrets
     

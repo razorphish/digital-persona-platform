@@ -103,7 +103,6 @@ Make sure the scripts are executable:
 
 ```bash
 chmod +x start-zen-full.sh
-chmod +x frontend/start-zen.sh
 ```
 
 ## 🎨 Zen Mode Features

@@ -1,92 +1,102 @@
-# Docker Compose file for development environment
+version: '3.8'
 
 services:
-  # Next.js Development Server with Hot Reload
-  nextjs-app:
+  # tRPC Backend Server (Development)
+  backend:
     build:
-      context: ./nextjs-migration
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/server/Dockerfile
       target: development
+    container_name: dpp-backend-dev
     ports:
-      - "3001:3000"
-      - "9229:9229"  # Node.js debugging port
+      - "3101:4001"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=sqlite:///app/digital_persona.db
-      - NEXTAUTH_SECRET=dev-secret-key-change-in-production
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-west-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
-      - ML_SERVICE_URL=http://python-ml-service:8001
-      - CHOKIDAR_USEPOLLING=true  # For file watching in Docker
+      - PORT=4001
+      - DATABASE_URL=sqlite://./data/dev.db
+      - JWT_SECRET=dev-secret-key-change-in-production
+      - CORS_ORIGIN=http://localhost:3100
     volumes:
-      - ./nextjs-migration:/app
-      - /app/node_modules
-      - /app/.next
-      - ./uploads:/app/uploads
-    depends_on:
-      - python-ml-service
+      - .:/app
+      - backend_data:/app/data
+      - node_modules_cache:/app/node_modules
+    working_dir: /app
+    command: ["sh", "-c", "npm install && cd apps/server && npm run dev"]
     networks:
-      - dev-network
-    stdin_open: true
-    tty: true
+      - dpp-dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Python ML Service Development
-  python-ml-service:
+  # Next.js Frontend (Development)
+  frontend:
     build:
-      context: ./python-ml-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: dpp-frontend-dev
     ports:
-      - "8001:8001"
-      - "5678:5678"  # Python debugging port (debugpy)
+      - "3100:4000"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-west-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
-      - ENVIRONMENT=development
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
+      - NODE_ENV=development
+      - PORT=4000
+      - NEXT_PUBLIC_API_URL=http://localhost:3101
+      - NEXT_PUBLIC_APP_ENV=development
+      - BETTER_AUTH_SECRET=dev-auth-secret-change-in-production
+      - BETTER_AUTH_URL=http://localhost:3100
     volumes:
-      - ./python-ml-service:/app
-      - ./uploads:/app/uploads
-      - ./chroma_db:/app/chroma_db
+      - .:/app
+      - frontend_node_modules:/app/node_modules
+    working_dir: /app
+    command: ["sh", "-c", "npm install && cd apps/web && npm run dev"]
+    depends_on:
+      backend:
+        condition: service_started
     networks:
-      - dev-network
-    command: >
-      sh -c "pip install debugpy -t /tmp && 
-             python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload"
+      - dpp-dev-network
+    restart: unless-stopped
 
-  # Redis for development
+  # Redis for development (caching, sessions)
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
+    container_name: dpp-redis-dev
     ports:
       - "6379:6379"
     volumes:
-      - redis_dev_data:/data
+      - redis_data:/data
     networks:
-      - dev-network
+      - dpp-dev-network
+    restart: unless-stopped
     command: redis-server --appendonly yes
 
-  # Database viewer (optional)
-  sqlite-web:
-    image: coleifer/sqlite-web
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./nextjs-migration:/data
-    networks:
-      - dev-network
-    command: sqlite_web -H 0.0.0.0 -x /data/digital_persona.db
-    profiles:
-      - tools
+  # PostgreSQL for development (optional - can switch from SQLite)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: dpp-postgres-dev
+  #   environment:
+  #     POSTGRES_DB: digital_persona_dev
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+  #   ports:
+  #     - "5432:5432"
+  #   networks:
+  #     - dpp-dev-network
+  #   restart: unless-stopped
 
 volumes:
-  redis_dev_data:
+  backend_data:
+  redis_data:
+  node_modules_cache:
+  frontend_node_modules:
+  # postgres_data:
 
 networks:
-  dev-network:
+  dpp-dev-network:
     driver: bridge 
