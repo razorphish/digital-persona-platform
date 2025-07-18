@@ -807,12 +807,24 @@ const mediaRouter = router({
           COUNT(CASE WHEN media_type = 'image' THEN 1 END) as image_files,
           COUNT(CASE WHEN media_type = 'video' THEN 1 END) as video_files,
           COUNT(CASE WHEN media_type = 'document' THEN 1 END) as document_files,
-          COALESCE(SUM(file_size), 0) as total_size
+          COALESCE(SUM(CASE WHEN file_size IS NOT NULL AND file_size >= 0 THEN file_size ELSE 0 END), 0) as total_size
         FROM media_files 
         WHERE user_id = ${ctx.user.id} AND upload_status != 'deleted'
       `);
 
-    return statsResult.rows[0] || {};
+    const result = statsResult.rows[0] as any;
+
+    // Ensure all values are properly typed and have defaults
+    return {
+      total_files: Number(result?.total_files) || 0,
+      completed_files: Number(result?.completed_files) || 0,
+      pending_files: Number(result?.pending_files) || 0,
+      deleted_files: Number(result?.deleted_files) || 0,
+      image_files: Number(result?.image_files) || 0,
+      video_files: Number(result?.video_files) || 0,
+      document_files: Number(result?.document_files) || 0,
+      total_size: Number(result?.total_size) || 0,
+    };
   }),
 });
 

@@ -134,12 +134,27 @@ export default function FilesPage() {
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
+  const formatFileSize = (bytes: number | undefined | null) => {
+    // Handle invalid or missing values
+    if (bytes == null || isNaN(Number(bytes)) || bytes < 0) {
+      return "0 Bytes";
+    }
+
+    const numBytes = Number(bytes);
+    if (numBytes === 0) return "0 Bytes";
+
     const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(numBytes) / Math.log(k));
+
+    // Ensure i is within bounds
+    const sizeIndex = Math.min(i, sizes.length - 1);
+
+    return (
+      parseFloat((numBytes / Math.pow(k, sizeIndex)).toFixed(2)) +
+      " " +
+      sizes[sizeIndex]
+    );
   };
 
   const formatDate = (dateString: string) => {
