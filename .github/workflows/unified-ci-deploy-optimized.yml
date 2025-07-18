@@ -195,19 +195,19 @@ jobs:
         run: |
           echo "🛡️ Security Scan Summary"
           echo "======================="
-          
+
           if [ "${{ steps.trivy.outcome }}" == "success" ]; then
             echo "✅ Trivy vulnerability scan: PASSED"
           else
             echo "❌ Trivy vulnerability scan: FAILED"
           fi
-          
+
           if [ "${{ steps.trufflehog.outcome }}" == "success" ]; then
             echo "✅ TruffleHog secret scan: PASSED"
           else
             echo "❌ TruffleHog secret scan: FAILED"
           fi
-          
+
           echo ""
           echo "📊 View detailed results in:"
           echo "   - Security tab: Repository → Security → Code scanning"
@@ -303,7 +303,7 @@ jobs:
       - name: Run dependency vulnerability scan
         uses: pypa/gh-action-pip-audit@v1.0.8
         with:
-          inputs: requirements.txt
+          inputs: python-ml-service/requirements.txt
 
   terraform-plan:
     name: 🏗️ Terraform Plan
