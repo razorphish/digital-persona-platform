@@ -493,7 +493,7 @@ jobs:
       - name: Build and push frontend Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
+          context: ./apps/web
           platforms: linux/amd64
           push: true
           tags: |
