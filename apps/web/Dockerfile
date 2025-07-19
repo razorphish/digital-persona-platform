@@ -60,8 +60,9 @@ COPY apps/web/ ./apps/web/
 # Build shared packages first
 RUN npm run build --workspace=@digital-persona/shared
 
-# Build Next.js - change to app directory first
+# Build Next.js - copy node_modules to web directory and build
 WORKDIR /app/apps/web
+COPY --from=deps /app/node_modules ./node_modules
 RUN npm run build
 
 # Change back to root for subsequent operations
