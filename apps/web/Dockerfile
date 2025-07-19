@@ -10,6 +10,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/database/package.json ./packages/database/
+COPY apps/web/package.json ./apps/web/
 
 # Install ALL dependencies (including devDependencies for development)
 RUN npm ci
@@ -17,8 +19,13 @@ RUN npm ci
 # Development target with all dependencies
 FROM deps AS development
 WORKDIR /app
-# Copy all source code for development
-COPY . .
+
+# Copy source files for development
+COPY package*.json ./
+COPY turbo.json ./
+COPY packages/ ./packages/
+COPY apps/web/ ./apps/web/
+
 # Set development environment
 ENV NODE_ENV=development
 EXPOSE 4000
@@ -33,6 +40,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/database/package.json ./packages/database/
+COPY apps/web/package.json ./apps/web/
 
 # Install only production dependencies
 RUN npm ci --only=production
@@ -41,7 +50,12 @@ RUN npm ci --only=production
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+
+# Copy source files
+COPY package*.json ./
+COPY turbo.json ./
+COPY packages/ ./packages/
+COPY apps/web/ ./apps/web/
 
 # Build shared packages first
 RUN npm run build --workspace=@digital-persona/shared
