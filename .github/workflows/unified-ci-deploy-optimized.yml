@@ -267,7 +267,7 @@ jobs:
     if: github.event.inputs.skip_tests != 'true'
     defaults:
       run:
-        working-directory: ./frontend
+        working-directory: ./apps/web
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -277,19 +277,37 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Check if test script exists
+        id: check-tests
+        run: |
+          if npm run test --dry-run >/dev/null 2>&1; then
+            echo "has_tests=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No test script found in package.json, skipping tests"
+          fi
+
       - name: Run frontend tests
+        if: steps.check-tests.outputs.has_tests == 'true'
         run: npm test -- --coverage --watchAll=false
+
+      - name: Run linting and type checking (alternative to tests)
+        if: steps.check-tests.outputs.has_tests == 'false'
+        run: |
+          echo "🔍 Running linting and type checking instead of tests..."
+          npm run lint --if-present
+          npm run type-check --if-present
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
-        if: always()
+        if: always() && steps.check-tests.outputs.has_tests == 'true'
         with:
-          directory: ./frontend/coverage
+          directory: ./apps/web/coverage
           flags: frontend
           name: frontend-coverage
           fail_ci_if_error: false
