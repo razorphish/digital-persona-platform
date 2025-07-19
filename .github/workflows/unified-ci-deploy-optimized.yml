@@ -218,6 +218,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event.inputs.skip_tests != 'true'
+    defaults:
+      run:
+        working-directory: ./python-ml-service
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -1018,7 +1021,7 @@ jobs:
           print('Testing urllib3 2.5.0 compatibility...')
 
           # Get current boto3 version from requirements.txt
-          with open('requirements.txt', 'r') as f:
+          with open('python-ml-service/requirements.txt', 'r') as f:
               content = f.read()
               for line in content.split('\n'):
                   if line.startswith('boto3=='):
