@@ -1,5 +1,5 @@
 # Next.js Frontend Dockerfile
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -33,7 +33,7 @@ EXPOSE 4000
 CMD ["sh", "-c", "cd apps/web && npm run dev"]
 
 # Production dependencies only
-FROM base AS deps-prod
+FROM node:20-alpine AS deps-prod
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
