@@ -6,6 +6,7 @@ import { createTRPCReact } from "@trpc/react-query";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthUtils } from "@/lib/auth";
+import superjson from "superjson";
 
 import type { AppRouter } from "../../../../server/src/router-simple";
 
@@ -83,6 +84,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
 
   const [trpcClient] = useState(() =>
     trpc.createClient({
+      transformer: superjson,
       links: [
         httpBatchLink({
           url: `${getBaseUrl()}/api/trpc`,
