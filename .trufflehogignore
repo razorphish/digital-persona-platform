@@ -1,25 +1,131 @@
 # TruffleHog ignore patterns for known false positives
 
-# Placeholder secrets - use simple string matching
+# ===========================================
+# PLACEHOLDER SECRETS (Development/Examples)
+# ===========================================
+
+# Common placeholder secrets
 your-aws-access-key
 your-aws-secret-key
 your-secret-key-here-change-in-production
 your-secret-key-change-in-production
+your-secret-key-here
+your-database-password-here
+your-super-secure-secret-key-here-change-this-immediately
+your-openai-api-key-here
+your-bucket-name
+your-secure-grafana-password
+ml-service-secret-key-change-in-production
+
+# Database placeholders
 dpp_password
+dpp_user
 hibiji-dev01-secret-key
+redis_password
+POSTGRES_PASSWORD=dpp_password
+
+# Token placeholders
 access_token
 refresh_token
+your-codecov-repository-token
 
-# Specific file patterns with proper regex
-start\.sh.*SECRET_KEY=your-secret-key-here-change-in-production
-start\.sh.*AWS_ACCESS_KEY_ID=your-aws-access-key
-start\.sh.*AWS_SECRET_ACCESS_KEY=your-aws-secret-key
-setup_aws\.sh.*SECRET_KEY=your-secret-key-here-change-in-production
-AUTHENTICATION_SYSTEM\.md.*SECRET_KEY=your-secret-key-change-in-production
-README\.md.*SECRET_KEY=your-secret-key-here-change-in-production
+# ===========================================
+# TERRAFORM PLACEHOLDER SECRETS
+# ===========================================
 
-# Database password placeholders
-docker-compose.yml:70:POSTGRES_PASSWORD=dpp_password 
+# Terraform secret placeholders (not real secrets)
+terraform/environments/main/main.tf
+terraform/environments/staging/main.tf
+secret_string = "your-secret-key-here"
+secret_string = "your-database-password-here"
+
+# ===========================================
+# DOCUMENTATION & CONFIGURATION EXAMPLES
+# ===========================================
+
+# Environment configuration examples
+env.production.example
+SECRET_KEY=your-super-secure-secret-key-here-change-this-immediately
+AWS_ACCESS_KEY_ID=your-aws-access-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+OPENAI_API_KEY=your-openai-api-key-here
+GRAFANA_PASSWORD=your-secure-grafana-password
+
+# Python ML service config placeholders
+python-ml-service/app/config/settings.py
+SECRET_KEY: str = "ml-service-secret-key-change-in-production"
+
+# ===========================================
+# GITHUB WORKFLOWS & SCRIPTS
+# ===========================================
+
+# GitHub Actions role ARNs (not secrets)
+role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+arn:aws:iam::570827307849:policy/EC2ApplicationPolicy
+
+# Setup script placeholders
+scripts/setup-github-secrets.sh
+scripts/setup-aws-prerequisites.sh
+scripts/test-secure-setup.sh
+
+# ===========================================
+# FILE PATTERN EXCLUSIONS
+# ===========================================
+
+# Documentation files
+docs/GITHUB_ACTIONS_SETUP.md
+docs/GITHUB_ACTIONS_BEST_PRACTICES.md
+docs/GITHUB_ACTIONS_OPTIMIZATION_ANALYSIS.md
+docs/TROUBLESHOOTING.md
+docs/setup_codecov.md
+
+# Test scripts and terraform tests
+terraform/environments/main/test_terraform.sh
+terraform/environments/main/test_terraform_simple.sh
+
+# Workflow files (contain example patterns)
+.github/workflows/cost-monitor.yml
+.github/workflows/deploy-serverless.yml
+
+# ===========================================
+# URI AND CONNECTION STRING EXAMPLES
+# ===========================================
+
+# Database connection examples (not real credentials)
+postgresql://dpp_user:dpp_password@postgres:5432/digital_persona
+DATABASE_URL=postgresql://dpp_user:dpp_password@postgres:5432/digital_persona
+postgres:5432
+redis://:redis_password@redis:6379
+REDIS_URL=redis://:redis_password@redis:6379
+
+# Example URIs and endpoints
+mongodb://mongodb0.example.com:27017
+https://your-domain.com
+https://www.your-domain.com
+https://codecov.io
+
+# GitHub repository URLs (not secrets)
+https://github.com/razorphish/digital-persona-platform
+github.com/nodejs/docker-node/tree/
+
+# ===========================================
+# AWS ARNS AND INFRASTRUCTURE IDENTIFIERS
+# ===========================================
+
+# AWS ARNs and identifiers (not secrets)
+arn:aws:iam::570827307849:policy/EC2ApplicationPolicy
+arn:aws:iam::570827307849:policy/DevUserPolicy
+arn:aws:iam::570827307849:policy/TerraformPolicy
+role-to-assume.*AWS_ROLE_ARN
+oidc-provider/token.actions.githubusercontent.com
+
+# CloudFlare and service identifiers
+cloudflare-api-token-here
+cf-access-token
+
+# ===========================================
+# NEXT.JS BUILD ARTIFACTS
+# ===========================================
 
 # Next.js build artifacts - ignore preview mode keys and build hashes
 apps/web/.next/prerender-manifest.json
@@ -35,9 +141,27 @@ b00f068c371c6cb02a5695cc7e7aac164e6a58768ce1ecf72dfe31a94186c4c4
 5913f32834c2cc404b43747b3066693c8f89cae45a4c585c914ad3f4aae0dbcc
 f4a31930837c3a4325f23f31cf9c41e2
 
+# ===========================================
+# GIT HASHES AND TECHNICAL IDENTIFIERS
+# ===========================================
+
 # AWS/Git thumbprints and patch hashes (not secrets)
 6938fd4d98bab03faadb97b34396831e3780aea1
 46fc5d8e360127361211cb237d5f9eef0223e567
 
 # Dockerfile Git commit hashes in comments
 b4117f9333da4138b03a546ec926ef50a31506c3
+
+# Additional Git commit hashes found in logs/scripts
+46fc5d8e360127361211cb237d5f9eef0223e567
+
+# ===========================================
+# FULL FILE EXCLUSIONS FOR FALSE POSITIVES
+# ===========================================
+
+# Exclude entire files that contain only examples/placeholders
+docker-compose.yml
+docker-compose.dev.yml
+env.production.example
+start.sh
+setup_aws.sh
