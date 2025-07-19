@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // For development, use standalone mode
-  output: process.env.NODE_ENV === "production" ? "export" : "standalone",
+  output: process.env.NODE_ENV === "production" ? "standalone" : "standalone",
   // Only add trailingSlash and unoptimized images for production export
   ...(process.env.NODE_ENV === "production" && {
     trailingSlash: true,
@@ -9,14 +9,12 @@ const nextConfig = {
       unoptimized: true,
     },
   }),
-  experimental: {
-    appDir: true,
-  },
   transpilePackages: ["@digital-persona/shared", "@digital-persona/database"],
   env: {
-    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
-    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
-    DATABASE_URL: process.env.DATABASE_URL,
+    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "build-time-secret",
+    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
+    DATABASE_URL:
+      process.env.DATABASE_URL || "postgres://localhost:5432/hibiji",
     NEXT_PUBLIC_API_URL:
       process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001",
   },
