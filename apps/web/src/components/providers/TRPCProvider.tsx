@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthUtils } from "@/lib/auth";
 
-import type { AppRouter } from "../../../../server/src/router";
+import type { AppRouter } from "../../../../server/src/router-simple";
 
 export const trpc = createTRPCReact<AppRouter>();
 

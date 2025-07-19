@@ -3,7 +3,7 @@ import { httpBatchLink, loggerLink } from "@trpc/client";
 import { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import superjson from "superjson";
 
-import type { AppRouter } from "@server/router";
+import type { AppRouter } from "@server/router-simple";
 
 const getBaseUrl = () => {
   if (typeof window !== "undefined")

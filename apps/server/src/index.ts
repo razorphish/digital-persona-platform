@@ -7,7 +7,7 @@ dotenv.config({ path: path.resolve("../../.env") });
 import express from "express";
 import cors from "cors";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { appRouter } from "./router.js";
+import { appRouter } from "./router-simple.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 4001;

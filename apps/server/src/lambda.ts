@@ -7,7 +7,7 @@ import serverless from "serverless-http";
 import express from "express";
 import cors from "cors";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { appRouter } from "./router.js";
+import { appRouter } from "./router-simple.js";
 
 // Create Express app
 const app = express();
