@@ -64,6 +64,16 @@ RUN npm run build --workspace=@digital-persona/shared
 WORKDIR /app/apps/web
 
 COPY --from=deps /app/node_modules ./node_modules
+
+# Debug: Check if lib directory exists and what's in it
+RUN echo "=== Checking if lib directory exists ===" && \
+    pwd && \
+    ls -la src/ && \
+    echo "=== Contents of src/lib (if exists) ===" && \
+    (ls -la src/lib/ && echo "Files in src/lib:" && find src/lib/ -type f) || echo "src/lib directory not found" && \
+    echo "=== Checking tsconfig.json paths ===" && \
+    cat tsconfig.json | grep -A 10 -B 5 '"@/*"' || echo "No path mapping found"
+
 RUN npm run build
 
 # Change back to root for subsequent operations
