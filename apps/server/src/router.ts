@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
 import express from "express";
+import superjson from "superjson";
 
 // Add logger
 const logger = console;
@@ -131,7 +132,7 @@ const t = initTRPC
     res: express.Response;
   }>()
   .create({
-    transformer: undefined, // We'll use superjson in the client
+    transformer: superjson,
   });
 
 // Base router and procedure
