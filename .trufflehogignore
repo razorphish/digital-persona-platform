@@ -20,3 +20,24 @@ README\.md.*SECRET_KEY=your-secret-key-here-change-in-production
 
 # Database password placeholders
 docker-compose.yml:70:POSTGRES_PASSWORD=dpp_password 
+
+# Next.js build artifacts - ignore preview mode keys and build hashes
+apps/web/.next/prerender-manifest.json
+apps/web/.next/prerender-manifest.js
+apps/web/.next/cache/config.json
+apps/web/.next/cache/.tsbuildinfo
+apps/web/.next/server/chunks/
+
+# False positive MongoDB ObjectId patterns (these are Next.js preview keys, not secrets)
+0e13cccfd12dfffd43e7d562494c3153
+b00f068c371c6cb02a5695cc7e7aac164e6a58768ce1ecf72dfe31a94186c4c4
+97ea6f5c1d4fcc828ff566b70c9f5abc3043cf7db3f4352fe8cb914dd2950b34
+5913f32834c2cc404b43747b3066693c8f89cae45a4c585c914ad3f4aae0dbcc
+f4a31930837c3a4325f23f31cf9c41e2
+
+# AWS/Git thumbprints and patch hashes (not secrets)
+6938fd4d98bab03faadb97b34396831e3780aea1
+46fc5d8e360127361211cb237d5f9eef0223e567
+
+# Dockerfile Git commit hashes in comments
+b4117f9333da4138b03a546ec926ef50a31506c3
