@@ -63,18 +63,6 @@ RUN npm run build --workspace=@digital-persona/shared
 # Build Next.js - copy node_modules to web directory and build
 WORKDIR /app/apps/web
 
-# Debug: List directory structure to verify files are copied correctly
-RUN echo "=== Debugging: Current directory contents ===" && \
-    pwd && \
-    ls -la && \
-    echo "=== src directory contents ===" && \
-    ls -la src/ && \
-    echo "=== src/lib directory contents ===" && \
-    ls -la src/lib/ && \
-    echo "=== tsconfig.json contents ===" && \
-    cat tsconfig.json && \
-    echo "=== End debugging ==="
-
 COPY --from=deps /app/node_modules ./node_modules
 RUN npm run build
 
@@ -85,7 +73,7 @@ WORKDIR /app
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -99,6 +87,6 @@ USER nextjs
 
 EXPOSE 4000
 
-ENV PORT 4000
+ENV PORT=4000
 
 CMD ["node", "apps/web/server.js"] 
