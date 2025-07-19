@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements file
-COPY requirements.txt ./
+COPY python-ml-service/requirements.txt ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -47,7 +47,7 @@ COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/p
 COPY --from=python-base /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser python-ml-service/ .
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/uploads /app/chroma_db && \
