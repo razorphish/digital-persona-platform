@@ -1,6 +1,5 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
-import express from "express";
 import superjson from "superjson";
 
 // Add logger
@@ -128,8 +127,8 @@ const updateFileStatusSchema = z.object({
 // Initialize tRPC with context
 const t = initTRPC
   .context<{
-    req: express.Request;
-    res: express.Response;
+    req: any;
+    res: any;
   }>()
   .create({
     transformer: superjson,
