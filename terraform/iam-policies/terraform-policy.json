@@ -115,6 +115,22 @@
       "Resource": "*"
     },
     {
+      "Sid": "TerraformAPIGatewayAccess",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TerraformLambdaAccess",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:*"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "TerraformSTSAccess",
       "Effect": "Allow",
       "Action": [
