@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadFile } from "@/services/fileUpload";
-// import { trpc } from "@/lib/trpc";
+import { trpc } from "@/lib/trpc";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 
 interface FileRecord {

@@ -9,7 +9,7 @@ import React, {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-// import { trpc } from "@/lib/trpc";
+import { trpc } from "@/lib/trpc";
 import { AuthUtils, User } from "@/lib/auth";
 
 interface AuthContextType {
@@ -32,19 +32,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Temporarily disable tRPC mutations for build testing
-  // const loginMutation = trpc.auth.login.useMutation();
-  // const registerMutation = trpc.auth.register.useMutation();
-  const loginMutation = {
-    mutate: async (params: any) => {},
-    mutateAsync: async (params: any) => ({ user: null, token: "" }),
-    isLoading: false,
-  };
-  const registerMutation = {
-    mutate: async (params: any) => {},
-    mutateAsync: async (params: any) => ({ user: null, token: "" }),
-    isLoading: false,
-  };
+  // Restore tRPC mutations for full functionality
+  const loginMutation = trpc.auth.login.useMutation();
+  const registerMutation = trpc.auth.register.useMutation();
 
   // Centralized logout function
   const logout = useCallback(() => {

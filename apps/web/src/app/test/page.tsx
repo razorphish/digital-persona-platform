@@ -1,16 +1,10 @@
 "use client";
 
-// import { trpc } from "../../lib/trpc";
+import { trpc } from "../../lib/trpc";
 
 export default function TestPage() {
-  // Temporarily disable tRPC call for build testing
-  const data = {
-    message: "Test data",
-    timestamp: new Date().toISOString(),
-    status: "success",
-  };
-  const isLoading = false;
-  const error = null;
+  // Restore tRPC call for full functionality
+  const { data, isLoading, error } = trpc.hello.useQuery();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
