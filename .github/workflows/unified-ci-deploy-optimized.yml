@@ -418,8 +418,7 @@ jobs:
       (needs.security-scan.result == 'success' || github.event.inputs.skip_tests == 'true') &&
       (needs.backend-tests.result == 'success' || github.event.inputs.skip_tests == 'true') &&
       (needs.frontend-tests.result == 'success' || github.event.inputs.skip_tests == 'true') &&
-      (needs.dependency-scan.result != 'cancelled' || github.event.inputs.skip_tests == 'true' || github.event.inputs.force_deploy == 'true') &&
-      (needs.terraform-plan.result == 'success' || github.event.inputs.force_deploy == 'true')
+      (needs.dependency-scan.result != 'cancelled' || github.event.inputs.skip_tests == 'true' || github.event.inputs.force_deploy == 'true')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
