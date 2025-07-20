@@ -411,7 +411,6 @@ jobs:
         backend-tests,
         frontend-tests,
         dependency-scan,
-        terraform-plan,
       ]
     if: |
       always() && 
