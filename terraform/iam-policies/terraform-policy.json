@@ -131,6 +131,18 @@
       "Resource": "*"
     },
     {
+      "Sid": "TerraformTaggingAccess",
+      "Effect": "Allow",
+      "Action": [
+        "tag:GetResources",
+        "tag:TagResources",
+        "tag:UntagResources",
+        "tag:GetTagKeys",
+        "tag:GetTagValues"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "TerraformSTSAccess",
       "Effect": "Allow",
       "Action": [
