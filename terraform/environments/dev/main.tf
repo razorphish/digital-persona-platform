@@ -496,6 +496,36 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Additional policy for ECR access
+resource "aws_iam_role_policy" "ecs_execution_ecr_policy" {
+  name = "${local.resource_prefix}-ecs-execution-ecr"
+  role = aws_iam_role.ecs_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:GetAuthorizationToken"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # ECS Task Role (for application permissions)
 resource "aws_iam_role" "ecs_task" {
   name = "${local.resource_prefix}-ecs-task"
@@ -613,7 +643,7 @@ resource "aws_ecs_service" "backend" {
   network_configuration {
     subnets          = [aws_subnet.private[0].id, aws_subnet.private[1].id]
     security_groups  = [aws_security_group.lambda.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
   tags = merge(local.common_tags, {
@@ -632,7 +662,7 @@ resource "aws_ecs_service" "frontend" {
   network_configuration {
     subnets          = [aws_subnet.private[0].id, aws_subnet.private[1].id]
     security_groups  = [aws_security_group.lambda.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
   tags = merge(local.common_tags, {
