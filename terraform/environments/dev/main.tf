@@ -193,7 +193,7 @@ resource "aws_rds_cluster" "database" {
   cluster_identifier     = "${local.resource_prefix}-cluster"
   engine                = "aurora-postgresql"
   engine_mode           = "provisioned"
-  engine_version        = "15.4"
+  engine_version        = "15.10"
   database_name         = "digital_persona"
   master_username       = "dpp_admin"
   master_password       = random_password.database_password.result
