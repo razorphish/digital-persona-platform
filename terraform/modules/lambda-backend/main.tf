@@ -125,7 +125,7 @@ resource "aws_lambda_function" "api" {
       CORS_ORIGIN           = var.cors_origin
       S3_UPLOADS_BUCKET     = var.s3_uploads_bucket_name
       AWS_ACCOUNT_ID        = data.aws_caller_identity.current.account_id
-      AWS_REGION            = data.aws_region.current.name
+      # AWS_REGION is reserved by AWS Lambda and cannot be set manually
     }, var.additional_environment_variables)
   }
 
