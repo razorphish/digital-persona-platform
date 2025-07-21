@@ -674,12 +674,12 @@ resource "aws_ecs_service" "frontend" {
 # CloudWatch Log Groups for ECS (with import blocks for existing resources)
 import {
   to = aws_cloudwatch_log_group.backend_ecs
-  id = "/ecs/hibiji-${var.sub_environment}-backend"
+  id = "/ecs/hibiji-dev01-backend"
 }
 
 import {
   to = aws_cloudwatch_log_group.frontend_ecs  
-  id = "/ecs/hibiji-${var.sub_environment}-frontend"
+  id = "/ecs/hibiji-dev01-frontend"
 }
 
 resource "aws_cloudwatch_log_group" "backend_ecs" {
