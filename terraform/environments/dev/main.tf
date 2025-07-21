@@ -83,9 +83,14 @@ locals {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-# Route53 hosted zone (existing)
-data "aws_route53_zone" "main" {
+# Route53 hosted zone (create if doesn't exist)
+resource "aws_route53_zone" "main" {
   name = var.domain_name
+
+  tags = merge(local.common_tags, {
+    Name = "Primary DNS Zone"
+    Type = "Route53HostedZone"
+  })
 }
 
 # =================================
