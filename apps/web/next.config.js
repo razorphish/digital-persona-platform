@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // For development, use standalone mode
-  output: process.env.NODE_ENV === "production" ? "standalone" : "standalone",
-  // Only add trailingSlash and unoptimized images for production export
-  ...(process.env.NODE_ENV === "production" && {
+  // Use export mode for static deployment, standalone for server deployment
+  output: process.env.NEXT_BUILD_EXPORT === "true" ? "export" : "standalone",
+  // Add trailingSlash and unoptimized images for static export
+  ...(process.env.NEXT_BUILD_EXPORT === "true" && {
     trailingSlash: true,
     images: {
       unoptimized: true,

@@ -93,6 +93,7 @@ jobs:
       - name: Build frontend for static export
         env:
           NODE_ENV: production
+          NEXT_BUILD_EXPORT: true
           # Set API URL based on branch
           NEXT_PUBLIC_API_URL: >-
             ${{ 
@@ -103,14 +104,41 @@ jobs:
             }}
         run: |
           cd apps/web
+          echo "🏗️ Building frontend for static export..."
           npm run build
+          echo "✅ Frontend build completed"
+
+      - name: Validate build output
+        run: |
+          cd apps/web
+          if [ ! -d "out" ]; then
+            echo "❌ Error: 'out' directory not found after build"
+            echo "📁 Available directories:"
+            ls -la
+            exit 1
+          fi
+
+          if [ -z "$(ls -A out)" ]; then
+            echo "❌ Error: 'out' directory is empty"
+            exit 1
+          fi
+
+          echo "✅ Build output validation passed"
+          echo "📁 Files in out directory:"
+          ls -la out/
 
       - name: Generate frontend hash
         id: frontend-hash
         run: |
           cd apps/web
+          if [ ! -d "out" ] || [ -z "$(ls -A out)" ]; then
+            echo "❌ Frontend build output is empty! Failing the job."
+            exit 1
+          fi
+
           hash=$(find out -type f -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
           echo "hash=${hash:0:8}" >> $GITHUB_OUTPUT
+          echo "✅ Generated frontend hash: ${hash:0:8}"
 
       - name: Upload frontend build artifacts
         uses: actions/upload-artifact@v4
