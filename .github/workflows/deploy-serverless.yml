@@ -183,6 +183,8 @@ jobs:
 
       - name: Create Lambda deployment package
         run: |
+          echo "🏗️ Creating comprehensive Lambda deployment package..."
+
           # Install production dependencies at root level (for workspaces)
           npm ci --omit=dev --ignore-scripts
 
@@ -191,31 +193,86 @@ jobs:
           mkdir -p deployment
 
           # Copy built files
+          echo "📦 Copying built JavaScript files..."
           cp -r dist/* deployment/
 
           # Copy package.json for Lambda runtime
           cp package.json deployment/
 
-          # Copy production node_modules from workspace root
-          # Only copy the specific dependencies needed by the server package
+          echo "📦 Creating comprehensive node_modules for Lambda..."
           mkdir -p deployment/node_modules
 
-          # Copy workspace packages that server depends on
+          # Copy ALL production dependencies for server
+          echo "📦 Copying all server dependencies..."
+
+          # Get all dependencies from package.json
+          SERVER_DEPS=$(node -e "
+            const pkg = require('./package.json');
+            const deps = Object.keys(pkg.dependencies || {});
+            console.log(deps.join(' '));
+          ")
+
+          echo "📋 Server dependencies to copy: $SERVER_DEPS"
+
+          # Copy workspace packages
           if [ -d "../../node_modules/@digital-persona" ]; then
+            echo "📦 Copying workspace packages..."
             cp -r ../../node_modules/@digital-persona deployment/node_modules/
           fi
 
-          # Copy other essential dependencies (you can expand this list as needed)
-          for pkg in "@trpc" "zod" "drizzle-orm" "express" "cors" "bcryptjs" "jsonwebtoken" "superjson" "serverless-http" "@aws-sdk"; do
+          # Copy ALL server dependencies and their transitive dependencies
+          for pkg in $SERVER_DEPS; do
             if [ -d "../../node_modules/$pkg" ]; then
+              echo "📦 Copying $pkg..."
+              cp -r "../../node_modules/$pkg" deployment/node_modules/
+            else
+              echo "⚠️ Warning: $pkg not found in node_modules"
+            fi
+          done
+
+          # Copy critical transitive dependencies that might be missing
+          echo "📦 Copying critical transitive dependencies..."
+          CRITICAL_DEPS="pg-pool pg-connection-string pg-types pg-int8 pg-protocol postgres-array postgres-bytea postgres-date postgres-interval @types/pg drizzle-kit"
+
+          for pkg in $CRITICAL_DEPS; do
+            if [ -d "../../node_modules/$pkg" ]; then
+              echo "📦 Copying critical dependency $pkg..."
               cp -r "../../node_modules/$pkg" deployment/node_modules/
             fi
           done
 
+          # Ensure essential runtime dependencies exist
+          echo "🔍 Verifying critical dependencies..."
+          REQUIRED_PACKAGES="pg express cors serverless-http drizzle-orm @trpc/server zod superjson jsonwebtoken bcryptjs uuid better-auth dotenv"
+
+          for pkg in $REQUIRED_PACKAGES; do
+            if [ ! -d "deployment/node_modules/$pkg" ]; then
+              echo "❌ CRITICAL: Missing required package $pkg"
+              # Try to find it with different path patterns
+              find ../../node_modules -name "*$pkg*" -type d | head -5
+            else
+              echo "✅ Found required package $pkg"
+            fi
+          done
+
           # Create zip file
+          echo "📦 Creating Lambda deployment zip..."
           cd deployment
-          zip -r ../lambda-deployment.zip .
+
+          # Show package size info
+          echo "📊 Package contents summary:"
+          du -sh . 2>/dev/null || echo "Size calculation failed"
+          echo "📁 Files in package:"
+          ls -la
+          echo "📦 Node modules included:"
+          ls node_modules/ | head -20
+
+          zip -r ../lambda-deployment.zip . -q
           cd ..
+
+          # Show final package info
+          PACKAGE_SIZE=$(du -sh lambda-deployment.zip | cut -f1)
+          echo "✅ Lambda deployment package created: $PACKAGE_SIZE"
 
           # Clean up
           rm -rf deployment
@@ -737,9 +794,12 @@ jobs:
 
           # Try to invoke Lambda directly to get more info
           echo "🔍 Direct Lambda Invocation Test:"
+
+          # Create simple test payload (skip complex JSON to avoid YAML issues)
+          echo "Testing Lambda function directly with minimal payload..."
           aws lambda invoke \
             --function-name "$LAMBDA_FUNCTION" \
-            --payload '{"httpMethod":"GET","path":"/health","headers":{}}' \
+            --payload '{}' \
             --cli-read-timeout 30 \
             lambda_test_response.json
 
