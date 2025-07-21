@@ -654,7 +654,42 @@ jobs:
       - name: Terraform Apply
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         run: |
-          terraform apply -auto-approve tfplan
+          echo "🚀 Applying Terraform configuration..."
+
+          # First attempt - normal apply
+          if ! terraform apply -auto-approve tfplan; then
+            echo "⚠️ Terraform apply failed, checking for CloudWatch Log Group conflicts..."
+            
+            # Check if failure was due to existing CloudWatch Log Groups
+            if terraform apply -auto-approve tfplan 2>&1 | grep -q "ResourceAlreadyExistsException.*CloudWatch.*Log Group"; then
+              echo "🔍 Detected existing CloudWatch Log Groups, attempting to import them..."
+              
+              # Import existing log groups if they exist
+              LOG_GROUP_BACKEND="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
+              LOG_GROUP_FRONTEND="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
+              
+              # Try to import backend log group
+              if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_BACKEND" --region ${{ env.AWS_REGION }} --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP_BACKEND"; then
+                echo "📥 Importing existing backend log group: $LOG_GROUP_BACKEND"
+                terraform import aws_cloudwatch_log_group.backend_ecs "$LOG_GROUP_BACKEND" || echo "⚠️ Backend log group import failed or already in state"
+              fi
+              
+              # Try to import frontend log group  
+              if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_FRONTEND" --region ${{ env.AWS_REGION }} --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP_FRONTEND"; then
+                echo "📥 Importing existing frontend log group: $LOG_GROUP_FRONTEND"
+                terraform import aws_cloudwatch_log_group.frontend_ecs "$LOG_GROUP_FRONTEND" || echo "⚠️ Frontend log group import failed or already in state"
+              fi
+              
+              # Retry apply after import
+              echo "🔄 Retrying Terraform apply after importing existing resources..."
+              terraform apply -auto-approve tfplan
+            else
+              echo "❌ Terraform apply failed for reasons other than CloudWatch Log Group conflicts"
+              exit 1
+            fi
+          else
+            echo "✅ Terraform apply completed successfully"
+          fi
 
       - name: Get infrastructure outputs
         id: terraform-outputs

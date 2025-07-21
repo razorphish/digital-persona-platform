@@ -113,3 +113,11 @@
 2025-07-21T16:55:45.719317Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
 2025-07-21T16:58:57.120439Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".github/workflows/deploy-serverless.yml")}
 2025-07-21T16:58:57.120449Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-21T17:27:04.845025Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("terraform/environments/dev/main.tf")}
+2025-07-21T17:27:04.845050Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-21T17:27:24.644570Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("terraform/environments/dev/main.tf")}
+2025-07-21T17:27:24.644578Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-21T17:27:45.545621Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("terraform/environments/dev/main.tf")}
+2025-07-21T17:27:45.545628Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-21T17:28:25.446408Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".github/workflows/unified-ci-deploy-optimized.yml")}
+2025-07-21T17:28:25.446415Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))

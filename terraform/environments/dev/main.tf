@@ -671,7 +671,17 @@ resource "aws_ecs_service" "frontend" {
   })
 }
 
-# CloudWatch Log Groups for ECS
+# CloudWatch Log Groups for ECS (with import blocks for existing resources)
+import {
+  to = aws_cloudwatch_log_group.backend_ecs
+  id = "/ecs/hibiji-${var.sub_environment}-backend"
+}
+
+import {
+  to = aws_cloudwatch_log_group.frontend_ecs  
+  id = "/ecs/hibiji-${var.sub_environment}-frontend"
+}
+
 resource "aws_cloudwatch_log_group" "backend_ecs" {
   name              = "/ecs/hibiji-${var.sub_environment}-backend"
   retention_in_days = 7
@@ -680,6 +690,11 @@ resource "aws_cloudwatch_log_group" "backend_ecs" {
     Name = "/ecs/hibiji-${var.sub_environment}-backend"
     Type = "CloudWatchLogGroup"
   })
+
+  lifecycle {
+    # Prevent destruction of log groups to avoid data loss
+    prevent_destroy = true
+  }
 }
 
 resource "aws_cloudwatch_log_group" "frontend_ecs" {
@@ -690,6 +705,11 @@ resource "aws_cloudwatch_log_group" "frontend_ecs" {
     Name = "/ecs/hibiji-${var.sub_environment}-frontend"
     Type = "CloudWatchLogGroup"
   })
+
+  lifecycle {
+    # Prevent destruction of log groups to avoid data loss  
+    prevent_destroy = true
+  }
 }
 
 # =================================
