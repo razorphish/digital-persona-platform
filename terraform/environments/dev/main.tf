@@ -422,13 +422,15 @@ module "api_gateway" {
 # =================================
 
 # Website CNAME record pointing to CloudFront
-resource "aws_route53_record" "website" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.website_domain
-  type    = "CNAME"
-  ttl     = 300
-  records = [module.s3_website.cloudfront_domain_name]
-}
+# Temporarily commented out since hosted zone was deleted
+# TODO: Recreate hosted zone or use alternative DNS management
+# resource "aws_route53_record" "website" {
+#   zone_id = data.aws_route53_zone.main.zone_id
+#   name    = local.website_domain
+#   type    = "CNAME"
+#   ttl     = 300
+#   records = [module.s3_website.cloudfront_domain_name]
+# }
 
 # API CNAME record pointing to API Gateway 
 # Temporarily commented out due to existing DNS record conflict
