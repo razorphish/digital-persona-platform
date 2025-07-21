@@ -112,9 +112,11 @@ resource "aws_lambda_function" "api" {
   timeout      = var.lambda_timeout
   memory_size  = var.lambda_memory_size
 
-  # Deployment package (will be updated by CI/CD)
-  s3_bucket = aws_s3_bucket.lambda_deployments.bucket
-  s3_key    = var.lambda_deployment_key
+  # Temporary: Use local zip file for testing infrastructure deployment
+  # TODO: Switch back to S3 deployment when CI/CD pipeline is ready
+  filename = "${path.module}/health-function.zip"
+  # s3_bucket = aws_s3_bucket.lambda_deployments.bucket
+  # s3_key    = var.lambda_deployment_key
 
   environment {
     variables = merge({
