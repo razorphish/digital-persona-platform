@@ -562,7 +562,7 @@ resource "aws_ecs_task_definition" "backend" {
   container_definitions = jsonencode([
     {
       name  = "backend"
-      image = "570827307849.dkr.ecr.us-west-1.amazonaws.com/hibiji-backend:latest"
+      image = "nginx:latest"  # Temporary placeholder until hibiji-backend image is built
       
       portMappings = [
         {
@@ -603,7 +603,7 @@ resource "aws_ecs_task_definition" "frontend" {
   container_definitions = jsonencode([
     {
       name  = "frontend"
-      image = "570827307849.dkr.ecr.us-west-1.amazonaws.com/hibiji-frontend:latest"
+      image = "nginx:latest"  # Temporary placeholder until hibiji-frontend image is built
       
       portMappings = [
         {
