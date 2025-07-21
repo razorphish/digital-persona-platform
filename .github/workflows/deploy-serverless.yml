@@ -241,7 +241,7 @@ jobs:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
     needs: [build-frontend, build-backend]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     environment: >-
       ${{ 
@@ -325,7 +325,7 @@ jobs:
     name: Deploy Frontend
     runs-on: ubuntu-latest
     needs: [build-frontend, deploy-infrastructure]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Configure AWS credentials
@@ -376,7 +376,7 @@ jobs:
     name: Deploy Backend
     runs-on: ubuntu-latest
     needs: [build-backend, deploy-infrastructure]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Configure AWS credentials
@@ -410,7 +410,7 @@ jobs:
     name: Health Check
     runs-on: ubuntu-latest
     needs: [deploy-frontend, deploy-backend, deploy-infrastructure]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Configure AWS credentials
@@ -580,8 +580,8 @@ jobs:
       - name: Capture Lambda function logs for debugging
         if: failure()
         run: |
-          echo "🔍 Capturing Lambda Function Logs for Debugging"
-          echo "=============================================="
+          echo "🔍 Capturing Comprehensive Lambda Function Analysis"
+          echo "=================================================="
 
           LAMBDA_FUNCTION="${{ needs.deploy-infrastructure.outputs.lambda-function }}"
           echo "Lambda Function: $LAMBDA_FUNCTION"
@@ -591,6 +591,63 @@ jobs:
           LOG_GROUP="/aws/lambda/$LAMBDA_FUNCTION"
           echo "Log Group: $LOG_GROUP"
           echo ""
+
+          # 1. ENHANCED LAMBDA CONFIGURATION ANALYSIS
+          echo "🔧 Enhanced Lambda Configuration Analysis:"
+          echo "=========================================="
+          aws lambda get-function-configuration --function-name "$LAMBDA_FUNCTION" --query '{
+            Runtime: Runtime,
+            MemorySize: MemorySize,
+            Timeout: Timeout,
+            Environment: Environment,
+            LastModified: LastModified,
+            State: State,
+            StateReason: StateReason,
+            LastUpdateStatus: LastUpdateStatus,
+            LastUpdateStatusReason: LastUpdateStatusReason,
+            CodeSize: CodeSize,
+            Layers: Layers
+          }' --output table
+          echo ""
+
+          # 2. CHECK FOR RECENT DEPLOYMENT ISSUES
+          echo "🚀 Recent Deployment Status:"
+          echo "============================="
+          aws lambda get-function --function-name "$LAMBDA_FUNCTION" --query '{
+            State: Configuration.State,
+            StateReason: Configuration.StateReason,
+            LastUpdateStatus: Configuration.LastUpdateStatus,
+            LastUpdateStatusReason: Configuration.LastUpdateStatusReason,
+            PackageType: Configuration.PackageType
+          }' --output table
+          echo ""
+
+          # 3. REAL-TIME LOG STREAMING DURING TEST
+          echo "🔄 Real-time Log Analysis During Health Check:"
+          echo "=============================================="
+
+          # Start log streaming in background
+          echo "Starting real-time log streaming..."
+          aws logs tail "$LOG_GROUP" --follow --since 1m &
+          LOG_TAIL_PID=$!
+
+          # Give logs a moment to start
+          sleep 2
+
+          # Trigger another health check to capture real-time logs
+          echo "🔍 Triggering health check while monitoring logs..."
+          API_URL="${{ needs.deploy-infrastructure.outputs.api-url }}"
+
+          curl -v "$API_URL/health" 2>&1 | tee health_check_response.log || true
+
+          # Stop log streaming
+          sleep 5
+          kill $LOG_TAIL_PID 2>/dev/null || true
+          echo ""
+
+          # 4. DETAILED LOG ANALYSIS
+          echo "📄 Detailed CloudWatch Log Analysis:"
+          echo "===================================="
 
           # Check if log group exists
           if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP"; then
@@ -623,17 +680,17 @@ jobs:
               echo "🔍 Latest Log Stream: $LATEST_STREAM"
               echo ""
               
-              # Get recent log events (last 30 minutes)
-              echo "📄 Recent Log Events (last 30 minutes):"
+              # Get recent log events (last 10 minutes for more detailed capture)
+              echo "📄 Recent Log Events (last 10 minutes):"
               echo "======================================="
               
-              # Calculate timestamp for 30 minutes ago
-              THIRTY_MIN_AGO=$(date -d '30 minutes ago' +%s)000  # CloudWatch expects milliseconds
+              # Calculate timestamp for 10 minutes ago
+              TEN_MIN_AGO=$(date -d '10 minutes ago' +%s)000  # CloudWatch expects milliseconds
               
               aws logs get-log-events \
                 --log-group-name "$LOG_GROUP" \
                 --log-stream-name "$LATEST_STREAM" \
-                --start-time "$THIRTY_MIN_AGO" \
+                --start-time "$TEN_MIN_AGO" \
                 --query 'events[].[timestamp,message]' \
                 --output text | while IFS=$'\t' read -r timestamp message; do
                   # Convert timestamp to human readable
@@ -642,17 +699,26 @@ jobs:
                 done
               
               echo ""
-              echo "🔍 Filtering for ERROR and WARN messages:"
-              echo "========================================="
+              echo "🚨 Error Analysis - Filtering for Lambda Issues:"
+              echo "==============================================="
+              
+              # Enhanced error filtering
               aws logs get-log-events \
                 --log-group-name "$LOG_GROUP" \
                 --log-stream-name "$LATEST_STREAM" \
-                --start-time "$THIRTY_MIN_AGO" \
-                --query 'events[?contains(message, `ERROR`) || contains(message, `WARN`) || contains(message, `error`) || contains(message, `Error`)].[timestamp,message]' \
-                --output text | while IFS=$'\t' read -r timestamp message; do
-                  readable_time=$(date -d "@$((timestamp/1000))" "+%Y-%m-%d %H:%M:%S UTC")
-                  echo "[$readable_time] $message"
-                done
+                --start-time "$TEN_MIN_AGO" \
+                --output text | grep -i -E "(error|exception|fail|timeout|crash|unable|cannot|denied|invalid|missing|undefined|null|task timed out|runtime|cold start|init|start)" || echo "No obvious error patterns found"
+              
+              echo ""
+              echo "🔍 Lambda Lifecycle Events:"
+              echo "============================"
+              
+              # Look for Lambda lifecycle events
+              aws logs get-log-events \
+                --log-group-name "$LOG_GROUP" \
+                --log-stream-name "$LATEST_STREAM" \
+                --start-time "$TEN_MIN_AGO" \
+                --output text | grep -i -E "(start|init|cold|warm|duration|billed|memory|report)" || echo "No Lambda lifecycle events found"
               
             else
               echo "❌ No log streams found in $LOG_GROUP"
@@ -664,10 +730,21 @@ jobs:
             aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/" --query 'logGroups[].[logGroupName]' --output text
           fi
 
+          # 5. ENVIRONMENT AND DEPENDENCY CHECK
           echo ""
-          echo "🔍 Lambda Function Configuration:"
-          echo "================================="
-          aws lambda get-function-configuration --function-name "$LAMBDA_FUNCTION" --output table
+          echo "🔧 Lambda Environment & Dependencies Analysis:"
+          echo "=============================================="
+
+          # Try to invoke Lambda directly to get more info
+          echo "🔍 Direct Lambda Invocation Test:"
+          aws lambda invoke \
+            --function-name "$LAMBDA_FUNCTION" \
+            --payload '{"httpMethod":"GET","path":"/health","headers":{}}' \
+            --cli-read-timeout 30 \
+            lambda_test_response.json
+
+          echo "Lambda Response:"
+          cat lambda_test_response.json 2>/dev/null | jq . || cat lambda_test_response.json 2>/dev/null
 
           echo ""
           echo "🔍 API Gateway Information:"
@@ -677,6 +754,10 @@ jobs:
           if [ "$API_ID" != "None" ] && [ -n "$API_ID" ]; then
             echo "API Gateway ID: $API_ID"
             aws apigatewayv2 get-api --api-id "$API_ID" --output table
+            
+            echo ""
+            echo "API Gateway Routes:"
+            aws apigatewayv2 get-routes --api-id "$API_ID" --output table
           else
             echo "API Gateway not found or not accessible"
           fi
@@ -706,7 +787,7 @@ jobs:
     name: Notify Deployment
     runs-on: ubuntu-latest
     needs: [health-check, deploy-infrastructure]
-    if: always() && github.event_name == 'push'
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Deployment notification
