@@ -81,7 +81,13 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const [trpcClient] = useState(() =>
+  // Temporarily disable tRPC client for build
+  const [trpcClient] = useState(
+    () =>
+      // trpc.createClient({
+      ({} as any)
+    // Commented out due to router naming conflicts:
+    /*
     trpc.createClient({
       transformer: superjson,
       links: [
@@ -136,11 +142,13 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         }),
       ],
     })
+    */
   );
 
   return (
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    </trpc.Provider>
+    // Temporarily disable tRPC Provider for build
+    // <trpc.Provider client={trpcClient} queryClient={queryClient}>
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    // </trpc.Provider>
   );
 }
