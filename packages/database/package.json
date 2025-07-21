@@ -17,6 +17,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "type-check": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "clean": "rm -rf dist && rm -rf .turbo",
     "db:push": "drizzle-kit push:pg",
     "db:migrate": "drizzle-kit generate:pg",
