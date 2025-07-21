@@ -19,10 +19,11 @@ resource "aws_apigatewayv2_api" "main" {
     max_age          = var.cors_max_age
   }
 
-  tags = merge(var.common_tags, {
-    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-api"
-    Type = "APIGateway"
-  })
+  # Temporarily disabled tags to resolve AWS permissions issue
+  # tags = merge(var.common_tags, {
+  #   Name = "${var.environment}-${var.sub_environment}-${var.project_name}-api"
+  #   Type = "APIGateway"
+  # })
 }
 
 # API Gateway Stage

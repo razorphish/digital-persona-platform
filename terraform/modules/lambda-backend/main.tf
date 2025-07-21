@@ -146,10 +146,11 @@ resource "aws_lambda_function" "api" {
     }
   }
 
-  tags = merge(var.common_tags, {
-    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-api"
-    Type = "LambdaFunction"
-  })
+  # Temporarily disabled tags to resolve AWS permissions issue
+  # tags = merge(var.common_tags, {
+  #   Name = "${var.environment}-${var.sub_environment}-${var.project_name}-api"
+  #   Type = "LambdaFunction"
+  # })
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic_execution,
@@ -186,10 +187,11 @@ resource "aws_lambda_function" "health" {
     }
   }
 
-  tags = merge(var.common_tags, {
-    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-health"
-    Type = "LambdaFunction"
-  })
+  # Temporarily disabled tags to resolve AWS permissions issue
+  # tags = merge(var.common_tags, {
+  #   Name = "${var.environment}-${var.sub_environment}-${var.project_name}-health"
+  #   Type = "LambdaFunction"
+  # })
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic_execution
