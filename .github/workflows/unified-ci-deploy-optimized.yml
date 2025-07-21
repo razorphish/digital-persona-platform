@@ -754,33 +754,217 @@ jobs:
           name: build-artifacts-${{ needs.detect-environment.outputs.environment }}
           path: build-artifacts/
 
-      - name: Deploy application to ECS
+      - name: Pre-flight Infrastructure Validation
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         run: |
-          echo "🚀 Starting ECS deployment..."
+          echo "🔍 Pre-flight Infrastructure Validation"
+          echo "========================================"
 
-          # Validate required outputs exist
-          CLUSTER_NAME="${{ steps.terraform-outputs.outputs.cluster_name }}"
+          # Get Terraform outputs for validation
+          CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "")
+          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "")
+
+          # 1. Validate ECS Cluster exists and is active
+          echo "🔍 Checking ECS cluster..."
           if [ -z "$CLUSTER_NAME" ]; then
-            echo "❌ Error: ECS cluster name not found in Terraform outputs"
-            echo "Available outputs:"
-            cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
-            terraform output 2>/dev/null || echo "No outputs available"
+            echo "❌ ECS cluster name not found in Terraform outputs"
             exit 1
           fi
 
-          echo "✅ Using ECS cluster: $CLUSTER_NAME"
+          CLUSTER_STATUS=$(aws ecs describe-clusters \
+            --clusters "$CLUSTER_NAME" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'clusters[0].status' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
 
-          # Get the latest backend task definition
-          echo "📋 Retrieving current backend task definition..."
+          if [ "$CLUSTER_STATUS" != "ACTIVE" ]; then
+            echo "❌ ECS cluster $CLUSTER_NAME is not ACTIVE (status: $CLUSTER_STATUS)"
+            exit 1
+          fi
+          echo "✅ ECS cluster $CLUSTER_NAME is ACTIVE"
+
+          # 2. Validate ECS services exist
+          echo "🔍 Checking ECS services..."
+          BACKEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
+          FRONTEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
+
+          # Check backend service
+          BACKEND_STATUS=$(aws ecs describe-services \
+            --cluster "$CLUSTER_NAME" \
+            --services "$BACKEND_SERVICE" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+
+          if [ "$BACKEND_STATUS" != "ACTIVE" ]; then
+            echo "❌ Backend service $BACKEND_SERVICE not found or not ACTIVE (status: $BACKEND_STATUS)"
+            exit 1
+          fi
+          echo "✅ Backend service $BACKEND_SERVICE is ACTIVE"
+
+          # Check frontend service
+          FRONTEND_STATUS=$(aws ecs describe-services \
+            --cluster "$CLUSTER_NAME" \
+            --services "$FRONTEND_SERVICE" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+
+          if [ "$FRONTEND_STATUS" != "ACTIVE" ]; then
+            echo "❌ Frontend service $FRONTEND_SERVICE not found or not ACTIVE (status: $FRONTEND_STATUS)"
+            exit 1
+          fi
+          echo "✅ Frontend service $FRONTEND_SERVICE is ACTIVE"
+
+          # 3. Validate ECR repositories exist
+          echo "🔍 Checking ECR repositories..."
+          ECR_BACKEND_REPO="hibiji-backend"
+          ECR_FRONTEND_REPO="hibiji-frontend"
+
+          # Check backend repository
+          aws ecr describe-repositories \
+            --repository-names "$ECR_BACKEND_REPO" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'repositories[0].repositoryName' \
+            --output text >/dev/null 2>&1
+
+          if [ $? -ne 0 ]; then
+            echo "❌ ECR repository $ECR_BACKEND_REPO not found"
+            exit 1
+          fi
+          echo "✅ ECR repository $ECR_BACKEND_REPO exists"
+
+          # Check frontend repository  
+          aws ecr describe-repositories \
+            --repository-names "$ECR_FRONTEND_REPO" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'repositories[0].repositoryName' \
+            --output text >/dev/null 2>&1
+
+          if [ $? -ne 0 ]; then
+            echo "❌ ECR repository $ECR_FRONTEND_REPO not found"
+            exit 1
+          fi
+          echo "✅ ECR repository $ECR_FRONTEND_REPO exists"
+
+          # 4. Validate ECR images exist (if Build & Package succeeded)
+          echo "🔍 Checking ECR images..."
+          BACKEND_IMAGE_URI="${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}"
+          FRONTEND_IMAGE_URI="${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}"
+
+          # Check backend image
+          aws ecr describe-images \
+            --repository-name "$ECR_BACKEND_REPO" \
+            --image-ids imageTag=${{ github.sha }} \
+            --region ${{ env.AWS_REGION }} >/dev/null 2>&1
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Backend image ${{ github.sha }} exists in ECR"
+            echo "USE_REAL_IMAGES=true" >> $GITHUB_ENV
+            echo "BACKEND_IMAGE_URI=$BACKEND_IMAGE_URI" >> $GITHUB_ENV
+          else
+            echo "⚠️ Backend image ${{ github.sha }} not found in ECR, will use nginx placeholder"
+            echo "USE_REAL_IMAGES=false" >> $GITHUB_ENV
+            echo "BACKEND_IMAGE_URI=nginx:latest" >> $GITHUB_ENV
+          fi
+
+          # Check frontend image
+          aws ecr describe-images \
+            --repository-name "$ECR_FRONTEND_REPO" \
+            --image-ids imageTag=${{ github.sha }} \
+            --region ${{ env.AWS_REGION }} >/dev/null 2>&1
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Frontend image ${{ github.sha }} exists in ECR"
+            echo "FRONTEND_IMAGE_URI=$FRONTEND_IMAGE_URI" >> $GITHUB_ENV
+          else
+            echo "⚠️ Frontend image ${{ github.sha }} not found in ECR, will use nginx placeholder"
+            echo "FRONTEND_IMAGE_URI=nginx:latest" >> $GITHUB_ENV
+          fi
+
+          # 5. Validate CloudWatch Log Groups exist
+          echo "🔍 Checking CloudWatch Log Groups..."
+          BACKEND_LOG_GROUP="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
+          FRONTEND_LOG_GROUP="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
+
+          # Check backend log group
+          aws logs describe-log-groups \
+            --log-group-name-prefix "$BACKEND_LOG_GROUP" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'logGroups[0].logGroupName' \
+            --output text | grep -q "$BACKEND_LOG_GROUP"
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Backend log group exists"
+          else
+            echo "❌ Backend log group $BACKEND_LOG_GROUP not found"
+            exit 1
+          fi
+
+          # Check frontend log group
+          aws logs describe-log-groups \
+            --log-group-name-prefix "$FRONTEND_LOG_GROUP" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'logGroups[0].logGroupName' \
+            --output text | grep -q "$FRONTEND_LOG_GROUP"
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Frontend log group exists"
+          else
+            echo "❌ Frontend log group $FRONTEND_LOG_GROUP not found"
+            exit 1
+          fi
+
+          # 6. Summary
+          echo ""
+          echo "🎯 Pre-flight Validation Summary:"
+          echo "================================="
+          echo "✅ ECS Cluster: $CLUSTER_NAME (ACTIVE)"
+          echo "✅ Backend Service: $BACKEND_SERVICE (ACTIVE)"  
+          echo "✅ Frontend Service: $FRONTEND_SERVICE (ACTIVE)"
+          echo "✅ ECR Repositories: hibiji-backend, hibiji-frontend"
+          echo "✅ CloudWatch Log Groups: backend, frontend"
+          if [ "$USE_REAL_IMAGES" = "true" ]; then
+            echo "✅ Application Images: Available (will deploy real images)"
+          else
+            echo "⚠️ Application Images: Not available (will use nginx placeholders)"
+          fi
+          echo ""
+          echo "🚀 Infrastructure is ready for deployment!"
+
+      - name: Deploy application to ECS
+        run: |
+          echo "🚀 Starting Robust ECS Deployment..."
+          echo "===================================="
+
+          # Use validated cluster name from pre-flight check
+          CLUSTER_NAME="${{ steps.terraform-outputs.outputs.cluster_name }}"
+          BACKEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
+          FRONTEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
+
+          echo "🎯 Deployment Configuration:"
+          echo "  Cluster: $CLUSTER_NAME"
+          echo "  Backend Service: $BACKEND_SERVICE"
+          echo "  Frontend Service: $FRONTEND_SERVICE"
+          echo "  Backend Image: $BACKEND_IMAGE_URI"
+          echo "  Frontend Image: $FRONTEND_IMAGE_URI"
+          echo "  Using Real Images: $USE_REAL_IMAGES"
+          echo ""
+
+          # Deploy Backend Service
+          echo "🔄 Deploying Backend Service..."
+          echo "==============================="
+
+          # Get current backend task definition
           BACKEND_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+            --task-definition "$BACKEND_SERVICE" \
             --region ${{ env.AWS_REGION }} \
             --query 'taskDefinition' \
             --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
 
-          # Update backend image URI (using placeholder until application images are available)
+          # Update backend image URI with validated image
           UPDATED_BACKEND_TASK_DEF=$(echo $BACKEND_TASK_DEF | jq \
-            --arg BACKEND_IMAGE "nginx:latest" \
+            --arg BACKEND_IMAGE "$BACKEND_IMAGE_URI" \
             '.containerDefinitions |= map(
               if .name == "backend" then .image = $BACKEND_IMAGE
               else . end
@@ -794,99 +978,164 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
+          echo "✅ Registered backend task definition: $NEW_BACKEND_TASK_DEF_ARN"
+
           # Update backend service
-          echo "🔄 Updating ECS backend service..."
+          echo "🔄 Updating backend service..."
           aws ecs update-service \
             --cluster "$CLUSTER_NAME" \
-            --service "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+            --service "$BACKEND_SERVICE" \
             --task-definition "$NEW_BACKEND_TASK_DEF_ARN" \
             --region ${{ env.AWS_REGION }}
 
-          # Handle frontend service (if it exists)
-          echo "📋 Checking for frontend service..."
-          if aws ecs describe-services \
-            --cluster "$CLUSTER_NAME" \
-            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
+          echo "✅ Backend service update initiated"
+
+          # Deploy Frontend Service
+          echo ""
+          echo "🔄 Deploying Frontend Service..."
+          echo "================================"
+
+          # Get current frontend task definition
+          FRONTEND_TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$FRONTEND_SERVICE" \
             --region ${{ env.AWS_REGION }} \
-            --query 'services[0].serviceName' \
-            --output text 2>/dev/null | grep -q "frontend"; then
-            
-            echo "📋 Retrieving current frontend task definition..."
-            FRONTEND_TASK_DEF=$(aws ecs describe-task-definition \
-              --task-definition "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
-              --region ${{ env.AWS_REGION }} \
-              --query 'taskDefinition' \
-              --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
+            --query 'taskDefinition' \
+            --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
 
-            # Update frontend image URI (using placeholder until application images are available)
-            UPDATED_FRONTEND_TASK_DEF=$(echo $FRONTEND_TASK_DEF | jq \
-              --arg FRONTEND_IMAGE "nginx:latest" \
-              '.containerDefinitions |= map(
-                if .name == "frontend" then .image = $FRONTEND_IMAGE
-                else . end
-              )')
+          # Update frontend image URI with validated image
+          UPDATED_FRONTEND_TASK_DEF=$(echo $FRONTEND_TASK_DEF | jq \
+            --arg FRONTEND_IMAGE "$FRONTEND_IMAGE_URI" \
+            '.containerDefinitions |= map(
+              if .name == "frontend" then .image = $FRONTEND_IMAGE
+              else . end
+            )')
 
-            # Register new frontend task definition
-            echo $UPDATED_FRONTEND_TASK_DEF > updated-frontend-task-def.json
-            NEW_FRONTEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
-              --cli-input-json file://updated-frontend-task-def.json \
-              --region ${{ env.AWS_REGION }} \
-              --query 'taskDefinition.taskDefinitionArn' \
-              --output text)
+          # Register new frontend task definition
+          echo $UPDATED_FRONTEND_TASK_DEF > updated-frontend-task-def.json
+          NEW_FRONTEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://updated-frontend-task-def.json \
+            --region ${{ env.AWS_REGION }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
 
-            # Update frontend service
-            echo "🔄 Updating ECS frontend service..."
-            aws ecs update-service \
-              --cluster "$CLUSTER_NAME" \
-              --service "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
-              --task-definition "$NEW_FRONTEND_TASK_DEF_ARN" \
-              --region ${{ env.AWS_REGION }}
+          echo "✅ Registered frontend task definition: $NEW_FRONTEND_TASK_DEF_ARN"
+
+          # Update frontend service
+          echo "🔄 Updating frontend service..."
+          aws ecs update-service \
+            --cluster "$CLUSTER_NAME" \
+            --service "$FRONTEND_SERVICE" \
+            --task-definition "$NEW_FRONTEND_TASK_DEF_ARN" \
+            --region ${{ env.AWS_REGION }}
+
+          echo "✅ Frontend service update initiated"
+          echo ""
+          echo "🎯 ECS Deployment Summary:"
+          echo "========================="
+          echo "✅ Backend: Updated to use $BACKEND_IMAGE_URI"
+          echo "✅ Frontend: Updated to use $FRONTEND_IMAGE_URI"
+          if [ "$USE_REAL_IMAGES" = "true" ]; then
+            echo "🚀 Deployed with REAL application images!"
           else
-            echo "⚠️ Frontend service not found, skipping frontend update..."
+            echo "⚠️ Deployed with nginx placeholder images (ECR images not available)"
           fi
 
-          # Wait for backend service deployment to complete
-          echo "⏳ Waiting for backend service to stabilize..."
-          echo "🔍 Checking backend service status before waiting..."
-          aws ecs describe-services \
-            --cluster "$CLUSTER_NAME" \
-            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
-            --region ${{ env.AWS_REGION }} \
-            --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount}' \
-            --output table
+          # Enhanced Service Monitoring and Rollback
+          echo ""
+          echo "⏳ Enhanced Service Stabilization Monitoring..."
+          echo "==============================================="
 
-          # Wait with extended timeout (default is 15 minutes, extending to 20 minutes)
-          timeout 1200 aws ecs wait services-stable \
-            --cluster "$CLUSTER_NAME" \
-            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
-            --region ${{ env.AWS_REGION }} \
-            --cli-read-timeout 1200 \
-            --cli-connect-timeout 60 || {
-              echo "⚠️ Backend service stabilization timed out or failed, checking current status..."
-              aws ecs describe-services \
+          # Function to check service health
+          check_service_health() {
+            local service_name="$1"
+            local service_type="$2"
+            
+            echo "🔍 Monitoring $service_type service: $service_name"
+            
+            # Get current service status
+            local service_info=$(aws ecs describe-services \
+              --cluster "$CLUSTER_NAME" \
+              --services "$service_name" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'services[0]' \
+              --output json)
+            
+            local running_count=$(echo "$service_info" | jq -r '.runningCount')
+            local pending_count=$(echo "$service_info" | jq -r '.pendingCount')
+            local desired_count=$(echo "$service_info" | jq -r '.desiredCount')
+            local deployment_status=$(echo "$service_info" | jq -r '.deployments[0].status')
+            local rollout_state=$(echo "$service_info" | jq -r '.deployments[0].rolloutState')
+            
+            echo "  Status: $deployment_status | Rollout: $rollout_state"
+            echo "  Tasks: $running_count running, $pending_count pending (desired: $desired_count)"
+            
+            # Check for failed tasks if deployment is having issues
+            if [ "$rollout_state" = "FAILED" ] || [ "$pending_count" -gt 0 ]; then
+              echo "🔍 Checking for failed tasks..."
+              local failed_tasks=$(aws ecs list-tasks \
                 --cluster "$CLUSTER_NAME" \
-                --services "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
-                --region ${{ env.AWS_REGION }} \
-                --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount,deployments:deployments[0].{status:status,rolloutState:rolloutState}}' \
-                --output table
-              
-              # Check task status for debugging
-              echo "🔍 Checking task status..."
-              aws ecs list-tasks \
-                --cluster "$CLUSTER_NAME" \
-                --service-name "hibiji-${{ needs.detect-environment.outputs.environment }}-backend" \
+                --service-name "$service_name" \
+                --desired-status STOPPED \
                 --region ${{ env.AWS_REGION }} \
                 --query 'taskArns[0]' \
-                --output text | xargs -I {} aws ecs describe-tasks \
-                --cluster "$CLUSTER_NAME" \
-                --tasks {} \
-                --region ${{ env.AWS_REGION }} \
-                --query 'tasks[0].{taskArn:taskArn,lastStatus:lastStatus,healthStatus:healthStatus,containers:containers[0].{name:name,lastStatus:lastStatus,healthStatus:healthStatus}}' \
-                --output table || echo "No tasks found or task description failed"
+                --output text)
               
-              # Continue with deployment even if stabilization timed out
-              echo "⚠️ Continuing with deployment despite stabilization timeout..."
-            }
+              if [ "$failed_tasks" != "None" ] && [ "$failed_tasks" != "" ]; then
+                echo "🔍 Analyzing failed task: $failed_tasks"
+                aws ecs describe-tasks \
+                  --cluster "$CLUSTER_NAME" \
+                  --tasks "$failed_tasks" \
+                  --region ${{ env.AWS_REGION }} \
+                  --query 'tasks[0].{stopReason:stopReason,stopCode:stopCode,containers:containers[0].{name:name,exitCode:exitCode,reason:reason}}' \
+                  --output table
+              fi
+            fi
+            
+            return 0
+          }
+
+          # Monitor backend service
+          echo "🔍 Initial backend service status:"
+          check_service_health "$BACKEND_SERVICE" "Backend"
+
+          # Wait for backend service with enhanced monitoring
+          echo ""
+          echo "⏳ Waiting for backend service to stabilize (max 20 minutes)..."
+          BACKEND_STABLE=false
+
+          for i in {1..40}; do
+            sleep 30
+            echo "🔍 Check $i/40 - Backend service status:"
+            
+            service_info=$(aws ecs describe-services \
+              --cluster "$CLUSTER_NAME" \
+              --services "$BACKEND_SERVICE" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'services[0]' \
+              --output json)
+            
+            running_count=$(echo "$service_info" | jq -r '.runningCount')
+            desired_count=$(echo "$service_info" | jq -r '.desiredCount')
+            rollout_state=$(echo "$service_info" | jq -r '.deployments[0].rolloutState')
+            
+            echo "  Backend: $running_count/$desired_count running, rollout: $rollout_state"
+            
+            if [ "$rollout_state" = "COMPLETED" ] && [ "$running_count" -eq "$desired_count" ]; then
+              echo "✅ Backend service stabilized successfully!"
+              BACKEND_STABLE=true
+              break
+            elif [ "$rollout_state" = "FAILED" ]; then
+              echo "❌ Backend service deployment failed!"
+              check_service_health "$BACKEND_SERVICE" "Backend"
+              break
+            fi
+          done
+
+          if [ "$BACKEND_STABLE" = "false" ]; then
+            echo "⚠️ Backend service did not stabilize within 20 minutes"
+            check_service_health "$BACKEND_SERVICE" "Backend"
+            echo "⚠️ Continuing with frontend deployment..."
+          fi
 
           # Wait for frontend service deployment to complete (if it exists)
           if aws ecs describe-services \
