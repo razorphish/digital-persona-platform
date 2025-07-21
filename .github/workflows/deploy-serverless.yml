@@ -13,6 +13,13 @@ on:
       - dev01
       - dev02
       - main
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "Force deployment even if tests fail"
+        required: false
+        default: false
+        type: boolean
 
 env:
   AWS_REGION: us-west-1
