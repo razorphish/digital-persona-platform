@@ -449,6 +449,77 @@ module "api_gateway" {
 # }
 
 # =================================
+# ECS Infrastructure
+# =================================
+
+# ECS Cluster
+resource "aws_ecs_cluster" "main" {
+  name = "${local.resource_prefix}-cluster"
+  
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
+  
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-cluster"
+    Type = "ECSCluster"
+  })
+}
+
+# ECS Execution Role
+resource "aws_iam_role" "ecs_execution" {
+  name = "${local.resource_prefix}-ecs-execution"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-ecs-execution"
+    Type = "IAMRole"
+  })
+}
+
+# Attach AWS managed policy for ECS task execution
+resource "aws_iam_role_policy_attachment" "ecs_execution_policy" {
+  role       = aws_iam_role.ecs_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# ECS Task Role (for application permissions)
+resource "aws_iam_role" "ecs_task" {
+  name = "${local.resource_prefix}-ecs-task"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-ecs-task"
+    Type = "IAMRole"
+  })
+}
+
+# =================================
 # Outputs
 # =================================
 
@@ -481,4 +552,9 @@ output "database_endpoint" {
 output "uploads_bucket_name" {
   description = "Name of the uploads S3 bucket"
   value       = aws_s3_bucket.uploads.bucket
+}
+
+output "cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = aws_ecs_cluster.main.name
 } 
