@@ -671,17 +671,7 @@ resource "aws_ecs_service" "frontend" {
   })
 }
 
-# CloudWatch Log Groups for ECS (with import blocks for existing resources)
-import {
-  to = aws_cloudwatch_log_group.backend_ecs
-  id = "/ecs/hibiji-dev01-backend"
-}
-
-import {
-  to = aws_cloudwatch_log_group.frontend_ecs  
-  id = "/ecs/hibiji-dev01-frontend"
-}
-
+# CloudWatch Log Groups for ECS (dynamic for all sub-environments)
 resource "aws_cloudwatch_log_group" "backend_ecs" {
   name              = "/ecs/hibiji-${var.sub_environment}-backend"
   retention_in_days = 7
@@ -694,6 +684,8 @@ resource "aws_cloudwatch_log_group" "backend_ecs" {
   lifecycle {
     # Prevent destruction of log groups to avoid data loss
     prevent_destroy = true
+    # Handle conflicts if log group already exists
+    ignore_changes = [name]
   }
 }
 
@@ -709,6 +701,8 @@ resource "aws_cloudwatch_log_group" "frontend_ecs" {
   lifecycle {
     # Prevent destruction of log groups to avoid data loss  
     prevent_destroy = true
+    # Handle conflicts if log group already exists
+    ignore_changes = [name]
   }
 }
 
