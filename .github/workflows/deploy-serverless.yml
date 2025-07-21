@@ -149,6 +149,9 @@ jobs:
 
       - name: Create Lambda deployment package
         run: |
+          # Install production dependencies at root level (for workspaces)
+          npm ci --omit=dev --ignore-scripts
+
           cd apps/server
           # Create deployment directory
           mkdir -p deployment
@@ -156,12 +159,27 @@ jobs:
           # Copy built files
           cp -r dist/* deployment/
 
-          # Copy package.json and install production dependencies
+          # Copy package.json for Lambda runtime
           cp package.json deployment/
-          cd deployment
-          npm ci --only=production --ignore-scripts
+
+          # Copy production node_modules from workspace root
+          # Only copy the specific dependencies needed by the server package
+          mkdir -p deployment/node_modules
+
+          # Copy workspace packages that server depends on
+          if [ -d "../../node_modules/@digital-persona" ]; then
+            cp -r ../../node_modules/@digital-persona deployment/node_modules/
+          fi
+
+          # Copy other essential dependencies (you can expand this list as needed)
+          for pkg in "@trpc" "zod" "drizzle-orm" "express" "cors" "bcryptjs" "jsonwebtoken" "superjson" "serverless-http" "@aws-sdk"; do
+            if [ -d "../../node_modules/$pkg" ]; then
+              cp -r "../../node_modules/$pkg" deployment/node_modules/
+            fi
+          done
 
           # Create zip file
+          cd deployment
           zip -r ../lambda-deployment.zip .
           cd ..
 
