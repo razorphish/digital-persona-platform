@@ -56,7 +56,6 @@ COPY package*.json ./
 COPY turbo.json ./
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
-COPY apps/server/ ./apps/server/
 
 # Build shared packages first
 RUN npm run build --workspace=@digital-persona/shared

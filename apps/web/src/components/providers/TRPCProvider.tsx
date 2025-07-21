@@ -8,9 +8,8 @@ import { useRouter } from "next/navigation";
 import { AuthUtils } from "@/lib/auth";
 import superjson from "superjson";
 
-import type { AppRouter } from "@server/router";
-
-export const trpc = createTRPCReact<AppRouter>();
+// Temporary: Use any type to avoid server dependencies during build
+export const trpc = createTRPCReact<any>();
 
 function getBaseUrl() {
   if (typeof window !== "undefined") {
