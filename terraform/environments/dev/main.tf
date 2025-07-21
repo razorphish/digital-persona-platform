@@ -431,13 +431,15 @@ resource "aws_route53_record" "website" {
 }
 
 # API CNAME record pointing to API Gateway 
-resource "aws_route53_record" "api" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.api_domain
-  type    = "CNAME"
-  ttl     = 300
-  records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
-}
+# Temporarily commented out due to existing DNS record conflict
+# TODO: Import existing dev01-api.hibiji.com CNAME record into Terraform state
+# resource "aws_route53_record" "api" {
+#   zone_id = data.aws_route53_zone.main.zone_id
+#   name    = local.api_domain
+#   type    = "CNAME"
+#   ttl     = 300
+#   records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
+# }
 
 # =================================
 # Outputs
