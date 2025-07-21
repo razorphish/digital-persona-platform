@@ -743,9 +743,9 @@ jobs:
             --query 'taskDefinition' \
             --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
 
-          # Update backend image URI
+          # Update backend image URI (using placeholder until application images are available)
           UPDATED_BACKEND_TASK_DEF=$(echo $BACKEND_TASK_DEF | jq \
-            --arg BACKEND_IMAGE "${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}" \
+            --arg BACKEND_IMAGE "nginx:latest" \
             '.containerDefinitions |= map(
               if .name == "backend" then .image = $BACKEND_IMAGE
               else . end
@@ -783,9 +783,9 @@ jobs:
               --query 'taskDefinition' \
               --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
 
-            # Update frontend image URI
+            # Update frontend image URI (using placeholder until application images are available)
             UPDATED_FRONTEND_TASK_DEF=$(echo $FRONTEND_TASK_DEF | jq \
-              --arg FRONTEND_IMAGE "${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}" \
+              --arg FRONTEND_IMAGE "nginx:latest" \
               '.containerDefinitions |= map(
                 if .name == "frontend" then .image = $FRONTEND_IMAGE
                 else . end
