@@ -519,6 +519,149 @@ resource "aws_iam_role" "ecs_task" {
   })
 }
 
+# ECS Task Definitions
+resource "aws_ecs_task_definition" "backend" {
+  family                   = "hibiji-${var.sub_environment}-backend"
+  requires_compatibilities = ["FARGATE"]
+  network_mode            = "awsvpc"
+  cpu                     = "256"
+  memory                  = "512"
+  execution_role_arn      = aws_iam_role.ecs_execution.arn
+  task_role_arn           = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "backend"
+      image = "570827307849.dkr.ecr.us-west-1.amazonaws.com/hibiji-backend:latest"
+      
+      portMappings = [
+        {
+          containerPort = 8000
+          hostPort      = 8000
+          protocol      = "tcp"
+        }
+      ]
+      
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = "/ecs/hibiji-${var.sub_environment}-backend"
+          "awslogs-region"        = data.aws_region.current.name
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+      
+      essential = true
+    }
+  ])
+
+  tags = merge(local.common_tags, {
+    Name = "hibiji-${var.sub_environment}-backend"
+    Type = "ECSTaskDefinition"
+  })
+}
+
+resource "aws_ecs_task_definition" "frontend" {
+  family                   = "hibiji-${var.sub_environment}-frontend"
+  requires_compatibilities = ["FARGATE"]
+  network_mode            = "awsvpc"
+  cpu                     = "256"
+  memory                  = "512"
+  execution_role_arn      = aws_iam_role.ecs_execution.arn
+  task_role_arn           = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "frontend"
+      image = "570827307849.dkr.ecr.us-west-1.amazonaws.com/hibiji-frontend:latest"
+      
+      portMappings = [
+        {
+          containerPort = 3000
+          hostPort      = 3000
+          protocol      = "tcp"
+        }
+      ]
+      
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = "/ecs/hibiji-${var.sub_environment}-frontend"
+          "awslogs-region"        = data.aws_region.current.name
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+      
+      essential = true
+    }
+  ])
+
+  tags = merge(local.common_tags, {
+    Name = "hibiji-${var.sub_environment}-frontend"
+    Type = "ECSTaskDefinition"
+  })
+}
+
+# ECS Services
+resource "aws_ecs_service" "backend" {
+  name            = "hibiji-${var.sub_environment}-backend"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.backend.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = [aws_subnet.private[0].id, aws_subnet.private[1].id]
+    security_groups  = [aws_security_group.lambda.id]
+    assign_public_ip = false
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "hibiji-${var.sub_environment}-backend"
+    Type = "ECSService"
+  })
+}
+
+resource "aws_ecs_service" "frontend" {
+  name            = "hibiji-${var.sub_environment}-frontend"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.frontend.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = [aws_subnet.private[0].id, aws_subnet.private[1].id]
+    security_groups  = [aws_security_group.lambda.id]
+    assign_public_ip = false
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "hibiji-${var.sub_environment}-frontend"
+    Type = "ECSService"
+  })
+}
+
+# CloudWatch Log Groups for ECS
+resource "aws_cloudwatch_log_group" "backend_ecs" {
+  name              = "/ecs/hibiji-${var.sub_environment}-backend"
+  retention_in_days = 7
+
+  tags = merge(local.common_tags, {
+    Name = "/ecs/hibiji-${var.sub_environment}-backend"
+    Type = "CloudWatchLogGroup"
+  })
+}
+
+resource "aws_cloudwatch_log_group" "frontend_ecs" {
+  name              = "/ecs/hibiji-${var.sub_environment}-frontend"
+  retention_in_days = 7
+
+  tags = merge(local.common_tags, {
+    Name = "/ecs/hibiji-${var.sub_environment}-frontend"
+    Type = "CloudWatchLogGroup"
+  })
+}
+
 # =================================
 # Outputs
 # =================================
