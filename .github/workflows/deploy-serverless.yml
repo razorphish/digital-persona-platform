@@ -270,6 +270,13 @@ jobs:
             if [ -d "../../node_modules/$pkg" ]; then
               echo "📦 Copying $pkg..."
               cp -r "../../node_modules/$pkg" deployment/node_modules/
+              
+              # Remove TypeScript declaration files that cause Lambda runtime errors
+              echo "  🧹 Cleaning TypeScript files from: $pkg"
+              find "deployment/node_modules/$pkg" -name "*.d.ts" -delete 2>/dev/null || true
+              find "deployment/node_modules/$pkg" -name "*.d.mts" -delete 2>/dev/null || true
+              find "deployment/node_modules/$pkg" -name "*.d.cts" -delete 2>/dev/null || true
+              find "deployment/node_modules/$pkg" -name "*.map" -delete 2>/dev/null || true
             else
               echo "⚠️ Warning: $pkg not found in node_modules"
             fi
@@ -283,6 +290,13 @@ jobs:
             if [ -d "../../node_modules/$pkg" ]; then
               echo "📦 Copying critical dependency $pkg..."
               cp -r "../../node_modules/$pkg" deployment/node_modules/
+              
+              # Remove TypeScript declaration files from critical deps too
+              echo "  🧹 Cleaning TypeScript files from critical: $pkg"
+              find "deployment/node_modules/$pkg" -name "*.d.ts" -delete 2>/dev/null || true
+              find "deployment/node_modules/$pkg" -name "*.d.mts" -delete 2>/dev/null || true
+              find "deployment/node_modules/$pkg" -name "*.d.cts" -delete 2>/dev/null || true
+              find "deployment/node_modules/$pkg" -name "*.map" -delete 2>/dev/null || true
             fi
           done
 
