@@ -214,10 +214,55 @@ jobs:
 
           echo "📋 Server dependencies to copy: $SERVER_DEPS"
 
-          # Copy workspace packages
-          if [ -d "../../node_modules/@digital-persona" ]; then
-            echo "📦 Copying workspace packages..."
-            cp -r ../../node_modules/@digital-persona deployment/node_modules/
+          # Build and copy workspace packages properly
+          echo "📦 Building and copying workspace packages..."
+
+          # Ensure workspace packages are built
+          cd ../..
+          echo "🔧 Building workspace packages..."
+          npm run build --workspace=@digital-persona/shared --if-present
+          npm run build --workspace=@digital-persona/database --if-present
+
+          cd apps/server
+
+          # Create @digital-persona directory in deployment
+          mkdir -p deployment/node_modules/@digital-persona
+
+          # Copy @digital-persona/shared
+          if [ -d "../../packages/shared" ]; then
+            echo "📦 Copying @digital-persona/shared..."
+            mkdir -p deployment/node_modules/@digital-persona/shared
+            cp -r ../../packages/shared/dist deployment/node_modules/@digital-persona/shared/
+            cp ../../packages/shared/package.json deployment/node_modules/@digital-persona/shared/
+            echo "✅ @digital-persona/shared copied with dist folder"
+          else
+            echo "❌ @digital-persona/shared source not found"
+          fi
+
+          # Copy @digital-persona/database  
+          if [ -d "../../packages/database" ]; then
+            echo "📦 Copying @digital-persona/database..."
+            mkdir -p deployment/node_modules/@digital-persona/database
+            cp -r ../../packages/database/dist deployment/node_modules/@digital-persona/database/
+            cp ../../packages/database/package.json deployment/node_modules/@digital-persona/database/
+            echo "✅ @digital-persona/database copied with dist folder"
+          else
+            echo "❌ @digital-persona/database source not found"
+          fi
+
+          # Verify workspace packages were copied correctly
+          echo "🔍 Verifying workspace packages..."
+          if [ -f "deployment/node_modules/@digital-persona/database/package.json" ]; then
+            echo "✅ @digital-persona/database package.json found"
+          else
+            echo "❌ @digital-persona/database package.json missing"
+          fi
+
+          if [ -d "deployment/node_modules/@digital-persona/database/dist" ]; then
+            echo "✅ @digital-persona/database dist folder found"
+            ls -la deployment/node_modules/@digital-persona/database/dist/
+          else
+            echo "❌ @digital-persona/database dist folder missing"
           fi
 
           # Copy ALL server dependencies and their transitive dependencies
