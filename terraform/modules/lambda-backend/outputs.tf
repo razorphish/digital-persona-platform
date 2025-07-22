@@ -17,21 +17,6 @@ output "lambda_function_invoke_arn" {
   value       = aws_lambda_function.api.invoke_arn
 }
 
-output "health_lambda_function_name" {
-  description = "Name of the health check Lambda function"
-  value       = aws_lambda_function.health.function_name
-}
-
-output "health_lambda_function_arn" {
-  description = "ARN of the health check Lambda function"
-  value       = aws_lambda_function.health.arn
-}
-
-output "health_lambda_function_invoke_arn" {
-  description = "Invoke ARN of the health check Lambda function"
-  value       = aws_lambda_function.health.invoke_arn
-}
-
 output "lambda_execution_role_arn" {
   description = "ARN of the Lambda execution role"
   value       = aws_iam_role.lambda_execution.arn

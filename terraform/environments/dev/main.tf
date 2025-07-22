@@ -401,10 +401,8 @@ module "api_gateway" {
   common_tags     = local.common_tags
 
   # Lambda function configuration
-  lambda_function_name             = module.lambda_backend.lambda_function_name
-  lambda_function_invoke_arn       = module.lambda_backend.lambda_function_invoke_arn
-  health_lambda_function_name      = module.lambda_backend.health_lambda_function_name
-  health_lambda_function_invoke_arn = module.lambda_backend.health_lambda_function_invoke_arn
+  lambda_function_name       = module.lambda_backend.lambda_function_name
+  lambda_function_invoke_arn = module.lambda_backend.lambda_function_invoke_arn
 
   # CORS configuration
   cors_allow_origins = [

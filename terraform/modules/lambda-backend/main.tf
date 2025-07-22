@@ -171,46 +171,6 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   })
 }
 
-# Lambda function for health checks
-resource "aws_lambda_function" "health" {
-  function_name = "${var.environment}-${var.sub_environment}-${var.project_name}-health"
-  role         = aws_iam_role.lambda_execution.arn
-  handler      = "health.handler"
-  runtime      = var.lambda_runtime
-  timeout      = 30
-  memory_size  = 128
-
-  # Simple health check function
-  filename = "${path.module}/health-function.zip"
-
-  environment {
-    variables = {
-      NODE_ENV = var.environment
-    }
-  }
-
-  # Temporarily disabled tags to resolve AWS permissions issue
-  # tags = merge(var.common_tags, {
-  #   Name = "${var.environment}-${var.sub_environment}-${var.project_name}-health"
-  #   Type = "LambdaFunction"
-  # })
-
-  depends_on = [
-    aws_iam_role_policy_attachment.lambda_basic_execution
-  ]
-}
-
-# CloudWatch log group for health Lambda
-resource "aws_cloudwatch_log_group" "health_lambda_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.health.function_name}"
-  retention_in_days = var.log_retention_days
-
-  tags = merge(var.common_tags, {
-    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-health-logs"
-    Type = "LogGroup"
-  })
-}
-
 # Lambda Layer for shared dependencies (optional)
 resource "aws_lambda_layer_version" "dependencies" {
   count           = var.create_dependencies_layer ? 1 : 0

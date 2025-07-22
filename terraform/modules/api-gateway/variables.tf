@@ -48,15 +48,7 @@ variable "lambda_function_invoke_arn" {
   type        = string
 }
 
-variable "health_lambda_function_name" {
-  description = "Name of the health check Lambda function"
-  type        = string
-}
 
-variable "health_lambda_function_invoke_arn" {
-  description = "Invoke ARN of the health check Lambda function"
-  type        = string
-}
 
 # CORS Configuration
 variable "cors_allow_credentials" {
