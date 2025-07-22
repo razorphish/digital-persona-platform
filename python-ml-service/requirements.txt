@@ -1,5 +1,5 @@
 # Core FastAPI and web framework
-fastapi==0.115.6
+fastapi>=0.115.14  # Updated for starlette 0.47.2+ compatibility
 uvicorn[standard]==0.32.1
 python-multipart==0.0.18
 pydantic[email]>=2.9.0,<3.0.0
