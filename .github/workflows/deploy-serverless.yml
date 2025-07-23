@@ -314,6 +314,48 @@ jobs:
             fi
           done
 
+          # COMPREHENSIVE TYPESCRIPT FILE CLEANUP (FINAL PASS)
+          echo "🧹 COMPREHENSIVE TYPESCRIPT CLEANUP - FINAL PASS"
+          echo "==============================================="
+          echo "🎯 Removing ALL TypeScript declaration files from Lambda package..."
+
+          # Count files before cleanup
+          BEFORE_COUNT=$(find deployment/node_modules -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts" | wc -l)
+          echo "📊 TypeScript files found: $BEFORE_COUNT"
+
+          # Remove all TypeScript declaration files from entire deployment
+          echo "🗑️ Removing .d.ts files..."
+          find deployment/node_modules -name "*.d.ts" -type f -delete 2>/dev/null || true
+
+          echo "🗑️ Removing .d.mts files..."
+          find deployment/node_modules -name "*.d.mts" -type f -delete 2>/dev/null || true
+
+          echo "🗑️ Removing .d.cts files..."
+          find deployment/node_modules -name "*.d.cts" -type f -delete 2>/dev/null || true
+
+          echo "🗑️ Removing .map files..."
+          find deployment/node_modules -name "*.map" -type f -delete 2>/dev/null || true
+
+          # Count files after cleanup
+          AFTER_COUNT=$(find deployment/node_modules -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts" | wc -l)
+          echo "📊 TypeScript files remaining: $AFTER_COUNT"
+          echo "✅ Removed $((BEFORE_COUNT - AFTER_COUNT)) TypeScript declaration files"
+
+          # Specifically verify pg package is clean
+          if [ -d "deployment/node_modules/pg" ]; then
+            PG_TS_FILES=$(find deployment/node_modules/pg -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts" | wc -l)
+            echo "🔍 pg package TypeScript files remaining: $PG_TS_FILES"
+            if [ "$PG_TS_FILES" -gt 0 ]; then
+              echo "🚨 WARNING: pg package still contains TypeScript files:"
+              find deployment/node_modules/pg -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts"
+            else
+              echo "✅ pg package is clean of TypeScript files"
+            fi
+          fi
+
+          echo "🧹 COMPREHENSIVE CLEANUP COMPLETED"
+          echo ""
+
           # Create zip file
           echo "📦 Creating Lambda deployment zip..."
           cd deployment
