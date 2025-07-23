@@ -558,16 +558,83 @@ jobs:
           name: backend-build-${{ needs.build-backend.outputs.backend-hash }}
           path: backend-build/
 
-      - name: Update Lambda function
+      - name: Update Lambda function with conflict resolution
         run: |
-          aws lambda update-function-code \
-            --function-name ${{ needs.deploy-infrastructure.outputs.lambda-function }} \
-            --zip-file fileb://backend-build/lambda-deployment.zip
+          FUNCTION_NAME="${{ needs.deploy-infrastructure.outputs.lambda-function }}"
+          ZIP_FILE="fileb://backend-build/lambda-deployment.zip"
+
+          echo "🔍 Checking Lambda function state before update..."
+
+          # Function to check if Lambda is ready for updates
+          check_lambda_ready() {
+            local state=$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Configuration.State' --output text)
+            local update_status=$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Configuration.LastUpdateStatus' --output text)
+            
+            echo "📊 Lambda State: $state | Update Status: $update_status"
+            
+            if [ "$state" = "Active" ] && [ "$update_status" = "Successful" ]; then
+              return 0  # Ready for update
+            else
+              return 1  # Not ready
+            fi
+          }
+
+          # Wait for any existing updates to complete
+          echo "⏳ Waiting for any existing Lambda updates to complete..."
+          WAIT_COUNT=0
+          MAX_WAIT=20
+
+          while ! check_lambda_ready; do
+            WAIT_COUNT=$((WAIT_COUNT + 1))
+            if [ $WAIT_COUNT -gt $MAX_WAIT ]; then
+              echo "❌ Timeout waiting for Lambda to become ready for updates"
+              aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Configuration.{State:State,UpdateStatus:LastUpdateStatus,StateReason:StateReason,UpdateReason:LastUpdateStatusReason}' --output table
+              exit 1
+            fi
+            
+            echo "⏳ Lambda not ready, waiting 30 seconds... (attempt $WAIT_COUNT/$MAX_WAIT)"
+            sleep 30
+          done
+
+          echo "✅ Lambda is ready for update"
+
+          # Update with retry logic
+          echo "🚀 Updating Lambda function code..."
+          RETRY_COUNT=0
+          MAX_RETRIES=5
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if aws lambda update-function-code \
+              --function-name "$FUNCTION_NAME" \
+              --zip-file "$ZIP_FILE"; then
+              echo "✅ Lambda function code updated successfully"
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                WAIT_TIME=$((RETRY_COUNT * 30))
+                echo "⚠️ Update failed, retrying in ${WAIT_TIME}s... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+                sleep $WAIT_TIME
+              else
+                echo "❌ Failed to update Lambda function after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
 
       - name: Wait for Lambda update to complete
         run: |
+          echo "⏳ Waiting for Lambda update to complete..."
           aws lambda wait function-updated \
             --function-name ${{ needs.deploy-infrastructure.outputs.lambda-function }}
+
+          echo "✅ Lambda update completed successfully"
+
+          # Verify final state
+          aws lambda get-function \
+            --function-name ${{ needs.deploy-infrastructure.outputs.lambda-function }} \
+            --query 'Configuration.{State:State,UpdateStatus:LastUpdateStatus,Runtime:Runtime,LastModified:LastModified}' \
+            --output table
 
   # =================================
   # Health Check and Smoke Tests
