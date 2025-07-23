@@ -223,6 +223,14 @@ jobs:
           npm run build --workspace=@digital-persona/shared --if-present
           npm run build --workspace=@digital-persona/database --if-present
 
+          # Clean TypeScript files from workspace packages IMMEDIATELY after build
+          echo "🧹 Cleaning TypeScript files from workspace packages..."
+          find packages/*/dist -name "*.d.mts" -delete 2>/dev/null || true
+          find packages/*/dist -name "*.d.ts" -delete 2>/dev/null || true 
+          find packages/*/dist -name "*.d.cts" -delete 2>/dev/null || true
+          find packages/*/dist -name "*.map" -delete 2>/dev/null || true
+          echo "✅ Workspace packages cleaned"
+
           cd apps/server
 
           # Create @digital-persona directory in deployment
