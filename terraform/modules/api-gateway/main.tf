@@ -86,6 +86,11 @@ resource "aws_apigatewayv2_integration" "lambda_api" {
   integration_method     = "POST"
   payload_format_version = "2.0"
   timeout_milliseconds   = 30000
+  
+  # Ensure this integration is stable before routes reference it
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # API Routes
@@ -95,6 +100,15 @@ resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "GET /health"
   target    = "integrations/${aws_apigatewayv2_integration.lambda_api.id}"
+  
+  # Ensure this route update happens before any integration deletion
+  lifecycle {
+    create_before_destroy = true
+  }
+  
+  depends_on = [
+    aws_apigatewayv2_integration.lambda_api
+  ]
 }
 
 # Main API routes (catch-all for tRPC)
