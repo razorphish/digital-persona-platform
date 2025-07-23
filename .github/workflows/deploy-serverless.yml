@@ -547,7 +547,7 @@ jobs:
           # Function to perform detailed health check
           perform_health_check() {
             local attempt=$1
-            echo "🔍 Health Check Attempt $attempt/10"
+            echo "🔍 Health Check Attempt $attempt/5"
             echo "============================="
             
             # Create temporary files for response capture
@@ -665,13 +665,13 @@ jobs:
 
           # Retry logic with detailed reporting
           HEALTH_CHECK_PASSED=false
-          for i in {1..10}; do
+          for i in {1..5}; do
             echo ""
             if perform_health_check $i; then
               HEALTH_CHECK_PASSED=true
               break
             else
-              if [ $i -lt 10 ]; then
+              if [ $i -lt 5 ]; then
                 echo "⏳ Waiting 30 seconds before next attempt..."
                 sleep 30
               fi
@@ -684,7 +684,7 @@ jobs:
           if [ "$HEALTH_CHECK_PASSED" = "true" ]; then
                        echo "✅ API health check PASSED after $i attempts"
            else
-             echo "❌ API health check FAILED after 10 attempts"
+             echo "❌ API health check FAILED after 5 attempts"
              echo "💡 Next steps for debugging:"
              echo "  1. Check Lambda function logs in CloudWatch"
              echo "  2. Verify Lambda function configuration"
