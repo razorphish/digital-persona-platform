@@ -214,22 +214,38 @@ jobs:
 
           echo "📋 Server dependencies to copy: $SERVER_DEPS"
 
-          # Build and copy workspace packages properly
+                    # Build and copy workspace packages properly
           echo "📦 Building and copying workspace packages..."
 
           # Ensure workspace packages are built
           cd ../..
-          echo "🔧 Building workspace packages..."
+
+          # FORCE CLEAN REBUILD of workspace packages
+          echo "🧹 FORCE CLEANING workspace package builds..."
+          rm -rf packages/*/dist packages/*/.turbo
+          echo "✅ Old workspace builds removed"
+
+          echo "🔧 Building workspace packages with NEW TypeScript configs..."
           npm run build --workspace=@digital-persona/shared --if-present
           npm run build --workspace=@digital-persona/database --if-present
 
-          # Clean TypeScript files from workspace packages IMMEDIATELY after build
-          echo "🧹 Cleaning TypeScript files from workspace packages..."
+          # Verify the builds are clean (should be no .d.mts files with new config)
+          echo "🔍 Verifying workspace package builds..."
+          WORKSPACE_MTS_COUNT=$(find packages/*/dist -name "*.d.mts" 2>/dev/null | wc -l)
+          if [ "$WORKSPACE_MTS_COUNT" -gt 0 ]; then
+            echo "🚨 WARNING: Found .d.mts files in workspace packages:"
+            find packages/*/dist -name "*.d.mts" 2>/dev/null || true
+          else
+            echo "✅ Workspace packages clean - no .d.mts files generated"
+          fi
+
+          # Additional cleanup (belt and suspenders)
+          echo "🧹 Additional TypeScript file cleanup from workspace packages..."
           find packages/*/dist -name "*.d.mts" -delete 2>/dev/null || true
           find packages/*/dist -name "*.d.ts" -delete 2>/dev/null || true 
           find packages/*/dist -name "*.d.cts" -delete 2>/dev/null || true
           find packages/*/dist -name "*.map" -delete 2>/dev/null || true
-          echo "✅ Workspace packages cleaned"
+          echo "✅ Workspace packages comprehensively cleaned"
 
           cd apps/server
 
