@@ -103,6 +103,13 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
   })
 }
 
+# Create placeholder zip file for initial Lambda deployment
+data "archive_file" "placeholder" {
+  type        = "zip"
+  source_file = "${path.module}/placeholder-function.js"
+  output_path = "${path.module}/placeholder-function.zip"
+}
+
 # Main Lambda function for tRPC API
 resource "aws_lambda_function" "api" {
   function_name = "${var.environment}-${var.sub_environment}-${var.project_name}-api"
@@ -112,11 +119,9 @@ resource "aws_lambda_function" "api" {
   timeout      = var.lambda_timeout
   memory_size  = var.lambda_memory_size
 
-  # Temporary: Use local zip file for testing infrastructure deployment
-  # TODO: Switch back to S3 deployment when CI/CD pipeline is ready
-  filename = "${path.module}/health-function.zip"
-  # s3_bucket = aws_s3_bucket.lambda_deployments.bucket
-  # s3_key    = var.lambda_deployment_key
+  # Placeholder zip for initial Terraform deployment
+  # Actual code will be updated by CI/CD pipeline via aws lambda update-function-code
+  filename = data.archive_file.placeholder.output_path
 
   environment {
     variables = merge({
