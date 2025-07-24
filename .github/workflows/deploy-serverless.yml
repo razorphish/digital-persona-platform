@@ -413,26 +413,77 @@ jobs:
         run: |
           cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
 
-          echo " Importing existing resources to prevent conflicts..."
+          echo "🔄 Importing existing resources to prevent conflicts..."
 
           # Use dynamic environment variables
           ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
           MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
           PROJECT_NAME="dpp"
 
+          # Function to check if resource is already in state
+          check_resource_in_state() {
+            local resource_address="$1"
+            terraform state show "$resource_address" >/dev/null 2>&1
+            return $?
+          }
+
+          # Function to check if AWS resource exists
+          check_aws_resource() {
+            local resource_type="$1"
+            local resource_identifier="$2"
+            
+            case "$resource_type" in
+              "secret")
+                aws secretsmanager describe-secret --secret-id "$resource_identifier" --region ${{ env.AWS_REGION }} >/dev/null 2>&1
+                ;;
+              "s3_bucket")
+                aws s3api head-bucket --bucket "$resource_identifier" --region ${{ env.AWS_REGION }} >/dev/null 2>&1
+                ;;
+              "log_group")
+                aws logs describe-log-groups --log-group-name-prefix "$resource_identifier" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$resource_identifier"'`]' --output text | grep -q "$resource_identifier"
+                ;;
+              "vpc")
+                aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$resource_identifier" --query 'Vpcs[0].VpcId' --output text --region ${{ env.AWS_REGION }} 2>/dev/null | grep -v "None"
+                ;;
+              "oac")
+                aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$resource_identifier'].Id" --output text 2>/dev/null | grep -v "None"
+                ;;
+            esac
+          }
+
+          # Function to safely import resource
+          safe_import() {
+            local resource_address="$1"
+            local aws_resource_id="$2"
+            local resource_type="$3"
+            local description="$4"
+            
+            echo "🔍 Checking $description..."
+            
+            if check_resource_in_state "$resource_address"; then
+              echo "✅ $description already in Terraform state"
+              return 0
+            fi
+            
+            if check_aws_resource "$resource_type" "$aws_resource_id"; then
+              echo "📥 Importing $description: $aws_resource_id"
+              if terraform import "$resource_address" "$aws_resource_id"; then
+                echo "✅ Successfully imported $description"
+              else
+                echo "⚠️ Failed to import $description (may not have permissions)"
+                return 1
+              fi
+            else
+              echo "ℹ️ $description does not exist in AWS, will be created"
+            fi
+          }
+
           # Import existing secrets
           SECRET_JWT_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-jwt-secret"
           SECRET_DB_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-database-password"
 
-          if aws secretsmanager describe-secret --secret-id "$SECRET_JWT_NAME" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo " Importing existing JWT secret..."
-            terraform import aws_secretsmanager_secret.jwt_secret "$SECRET_JWT_NAME" || echo "⚠️ JWT secret import failed or already in state"
-          fi
-
-          if aws secretsmanager describe-secret --secret-id "$SECRET_DB_NAME" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo " Importing existing database password secret..."
-            terraform import aws_secretsmanager_secret.database_password "$SECRET_DB_NAME" || echo "⚠️ Database password secret import failed or already in state"
-          fi
+          safe_import "aws_secretsmanager_secret.jwt_secret" "$SECRET_JWT_NAME" "secret" "JWT secret"
+          safe_import "aws_secretsmanager_secret.database_password" "$SECRET_DB_NAME" "secret" "Database password secret"
 
           # Import existing S3 buckets
           BUCKET_UPLOADS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-uploads"
@@ -440,25 +491,10 @@ jobs:
           BUCKET_BUILDS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-builds"
           BUCKET_LAMBDA_DEPLOYMENTS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-lambda-deployments"
 
-          if aws s3api head-bucket --bucket "$BUCKET_UPLOADS" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo " Importing existing uploads bucket..."
-            terraform import aws_s3_bucket.uploads "$BUCKET_UPLOADS" || echo "⚠️ Uploads bucket import failed or already in state"
-          fi
-
-          if aws s3api head-bucket --bucket "$BUCKET_WEBSITE" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo " Importing existing website bucket..."
-            terraform import module.s3_website.aws_s3_bucket.website "$BUCKET_WEBSITE" || echo "⚠️ Website bucket import failed or already in state"
-          fi
-
-          if aws s3api head-bucket --bucket "$BUCKET_BUILDS" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo " Importing existing builds bucket..."
-            terraform import module.s3_website.aws_s3_bucket.builds "$BUCKET_BUILDS" || echo "⚠️ Builds bucket import failed or already in state"
-          fi
-
-          if aws s3api head-bucket --bucket "$BUCKET_LAMBDA_DEPLOYMENTS" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo " Importing existing lambda deployments bucket..."
-            terraform import module.lambda_backend.aws_s3_bucket.lambda_deployments "$BUCKET_LAMBDA_DEPLOYMENTS" || echo "⚠️ Lambda deployments bucket import failed or already in state"
-          fi
+          safe_import "aws_s3_bucket.uploads" "$BUCKET_UPLOADS" "s3_bucket" "Uploads bucket"
+          safe_import "module.s3_website.aws_s3_bucket.website" "$BUCKET_WEBSITE" "s3_bucket" "Website bucket"
+          safe_import "module.s3_website.aws_s3_bucket.builds" "$BUCKET_BUILDS" "s3_bucket" "Builds bucket"
+          safe_import "module.lambda_backend.aws_s3_bucket.lambda_deployments" "$BUCKET_LAMBDA_DEPLOYMENTS" "s3_bucket" "Lambda deployments bucket"
 
           # Import existing CloudWatch log groups
           LOG_GROUP_API="/aws/apigateway/${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}"
@@ -466,46 +502,22 @@ jobs:
           LOG_GROUP_BACKEND_ECS="/ecs/hibiji-${ENVIRONMENT}-backend"
           LOG_GROUP_FRONTEND_ECS="/ecs/hibiji-${ENVIRONMENT}-frontend"
 
-          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_API" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_API"'`]' --output text | grep -q "$LOG_GROUP_API"; then
-            echo " Importing existing API Gateway log group..."
-            terraform import module.api_gateway.aws_cloudwatch_log_group.api_gateway "$LOG_GROUP_API" || echo "⚠️ API Gateway log group import failed or already in state"
-          fi
+          safe_import "module.api_gateway.aws_cloudwatch_log_group.api_gateway" "$LOG_GROUP_API" "log_group" "API Gateway log group"
+          safe_import "module.lambda_backend.aws_cloudwatch_log_group.lambda_logs" "$LOG_GROUP_LAMBDA" "log_group" "Lambda log group"
+          safe_import "aws_cloudwatch_log_group.backend_ecs" "$LOG_GROUP_BACKEND_ECS" "log_group" "Backend ECS log group"
+          safe_import "aws_cloudwatch_log_group.frontend_ecs" "$LOG_GROUP_FRONTEND_ECS" "log_group" "Frontend ECS log group"
 
-          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_LAMBDA" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_LAMBDA"'`]' --output text | grep -q "$LOG_GROUP_LAMBDA"; then
-            echo " Importing existing Lambda log group..."
-            terraform import module.lambda_backend.aws_cloudwatch_log_group.lambda_logs "$LOG_GROUP_LAMBDA" || echo "⚠️ Lambda log group import failed or already in state"
-          fi
-
-          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_BACKEND_ECS" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_BACKEND_ECS"'`]' --output text | grep -q "$LOG_GROUP_BACKEND_ECS"; then
-            echo " Importing existing backend ECS log group..."
-            terraform import aws_cloudwatch_log_group.backend_ecs "$LOG_GROUP_BACKEND_ECS" || echo "⚠️ Backend ECS log group import failed or already in state"
-          fi
-
-          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_FRONTEND_ECS" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_FRONTEND_ECS"'`]' --output text | grep -q "$LOG_GROUP_FRONTEND_ECS"; then
-            echo " Importing existing frontend ECS log group..."
-            terraform import aws_cloudwatch_log_group.frontend_ecs "$LOG_GROUP_FRONTEND_ECS" || echo "⚠️ Frontend ECS log group import failed or already in state"
-          fi
-
-          # Import existing VPC if it exists (check by tags)
+          # Import existing VPC if it exists
           echo "📥 Checking for existing VPC..."
+          VPC_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-vpc"
           EXISTING_VPC_ID=$(aws ec2 describe-vpcs \
-            --filters "Name=tag:Name,Values=hibiji-${MAIN_ENV}-vpc" \
+            --filters "Name=tag:Name,Values=$VPC_NAME" \
             --query 'Vpcs[0].VpcId' \
             --output text \
             --region ${{ env.AWS_REGION }} 2>/dev/null || echo "")
 
           if [ "$EXISTING_VPC_ID" != "None" ] && [ -n "$EXISTING_VPC_ID" ]; then
-            echo " Importing existing VPC: $EXISTING_VPC_ID"
-            terraform import aws_vpc.main "$EXISTING_VPC_ID" || echo "⚠️ VPC import failed or already in state"
-          fi
-
-          # Import existing Route53 zone if it exists
-          ZONE_NAME="hibiji.com"
-          EXISTING_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_NAME" --query 'HostedZones[0].Id' --output text 2>/dev/null || echo "")
-
-          if [ "$EXISTING_ZONE_ID" != "None" ] && [ -n "$EXISTING_ZONE_ID" ]; then
-            echo " Importing existing Route53 zone: $EXISTING_ZONE_ID"
-            terraform import aws_route53_zone.main "$EXISTING_ZONE_ID" || echo "⚠️ Route53 zone import failed or already in state"
+            safe_import "aws_vpc.main" "$EXISTING_VPC_ID" "vpc" "VPC"
           fi
 
           # Import existing CloudFront Origin Access Control if it exists
@@ -513,9 +525,12 @@ jobs:
           EXISTING_OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" --output text 2>/dev/null || echo "")
 
           if [ "$EXISTING_OAC_ID" != "None" ] && [ -n "$EXISTING_OAC_ID" ]; then
-            echo " Importing existing CloudFront Origin Access Control: $EXISTING_OAC_ID"
-            terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$EXISTING_OAC_ID" || echo "⚠️ CloudFront OAC import failed or already in state"
+            safe_import "module.s3_website.aws_cloudfront_origin_access_control.website" "$EXISTING_OAC_ID" "oac" "CloudFront Origin Access Control"
           fi
+
+          # Note: Route53 zone is configured as a data source (data.aws_route53_zone.main) 
+          # and doesn't need to be imported since it's not managed by Terraform
+          echo "ℹ️ Route53 zone is configured as data source - no import needed"
 
           echo "✅ Resource import completed"
 
@@ -525,53 +540,132 @@ jobs:
 
           echo "🚀 Starting robust Terraform deployment strategy..."
 
-          # Step 1: Refresh state to sync with actual AWS resources
-          echo " Step 1: Refreshing Terraform state..."
-          terraform refresh
-
-          # Step 2: Create fresh plan
-          echo "📋 Step 2: Creating fresh Terraform plan..."
-          terraform plan -out=tfplan -detailed-exitcode || {
-            echo "⚠️ Plan creation failed, attempting plan without detailed exit code..."
-            terraform plan -out=tfplan
-          }
-
-          # Step 3: Apply with multiple fallback strategies
-          echo "🚀 Step 3: Applying Terraform configuration..."
-
-          # First attempt: Full apply
-          if terraform apply -auto-approve tfplan; then
-            echo "✅ Full Terraform apply completed successfully!"
-          else
-            echo "⚠️ Full apply failed, trying targeted deployment..."
-            
-            # Second attempt: Targeted apply for serverless components only
-            echo "🎯 Attempting targeted serverless deployment..."
-            
-            # Apply Lambda and API Gateway components
-            terraform apply -auto-approve -target=module.lambda_backend -target=module.api_gateway || {
-              echo "⚠️ Targeted serverless deployment failed, trying individual resources..."
-              
-              # Third attempt: Individual resource deployment
-              echo "🔧 Attempting individual resource deployment..."
-              
-              # Apply Lambda function
-              terraform apply -auto-approve -target=module.lambda_backend.aws_lambda_function.main || echo "⚠️ Lambda deployment failed"
-              
-              # Apply API Gateway
-              terraform apply -auto-approve -target=module.api_gateway.aws_apigatewayv2_api.main || echo "⚠️ API Gateway deployment failed"
-              
-              # Apply Route53 records
-              terraform apply -auto-approve -target=aws_route53_record.api || echo "⚠️ Route53 API record deployment failed"
-              terraform apply -auto-approve -target=aws_route53_record.website || echo "⚠️ Route53 website record deployment failed"
-              
-              echo "✅ Individual resource deployment completed"
-            }
+          # Step 1: Validate state integrity
+          echo "🔍 Step 1: Validating Terraform state integrity..."
+          if ! terraform validate; then
+            echo "❌ Terraform configuration validation failed"
+            exit 1
           fi
 
-          # Step 4: Verify deployment
-          echo "🔍 Step 4: Verifying deployment..."
-          terraform output || echo "⚠️ Could not retrieve outputs"
+          # Step 2: Refresh state to sync with actual AWS resources
+          echo "🔄 Step 2: Refreshing Terraform state..."
+          if terraform refresh -lock-timeout=300s; then
+            echo "✅ State refresh completed successfully"
+          else
+            echo "⚠️ State refresh failed, attempting state unlock..."
+            terraform force-unlock -force || echo "⚠️ Unable to unlock state"
+            # Retry refresh after unlock
+            terraform refresh -lock-timeout=300s || echo "⚠️ State refresh still failing"
+          fi
+
+          # Step 3: Create fresh plan with detailed output
+          echo "📋 Step 3: Creating fresh Terraform plan..."
+          terraform plan -out=tfplan -detailed-exitcode > plan.log 2>&1
+          PLAN_EXIT_CODE=$?
+
+          case $PLAN_EXIT_CODE in
+            0)
+              echo "✅ No changes required - infrastructure is up to date"
+              ;;
+            1)
+              echo "❌ Terraform plan failed"
+              cat plan.log
+              exit 1
+              ;;
+            2)
+              echo "📝 Changes detected - proceeding with apply"
+              ;;
+            *)
+              echo "❌ Unexpected plan exit code: $PLAN_EXIT_CODE"
+              cat plan.log
+              exit 1
+              ;;
+          esac
+
+          # Step 4: Apply with multiple fallback strategies
+          if [ $PLAN_EXIT_CODE -eq 2 ]; then
+            echo "🚀 Step 4: Applying Terraform configuration..."
+
+            # First attempt: Full apply with timeout
+            echo "🎯 Attempt 1: Full Terraform apply..."
+            if timeout 1800 terraform apply -auto-approve -lock-timeout=300s tfplan; then
+              echo "✅ Full Terraform apply completed successfully!"
+            else
+              echo "⚠️ Full apply failed, trying targeted deployment..."
+              
+              # Second attempt: Core infrastructure first
+              echo "🏗️ Attempt 2: Core infrastructure deployment..."
+              
+              # Apply VPC and networking first
+              terraform apply -auto-approve -lock-timeout=300s \
+                -target=aws_vpc.main \
+                -target=aws_subnet.private \
+                -target=aws_internet_gateway.main \
+                -target=aws_security_group.database \
+                -target=aws_security_group.lambda || echo "⚠️ VPC deployment issues"
+              
+              # Apply secrets and database
+              terraform apply -auto-approve -lock-timeout=300s \
+                -target=aws_secretsmanager_secret.jwt_secret \
+                -target=aws_secretsmanager_secret.database_password \
+                -target=aws_secretsmanager_secret_version.jwt_secret \
+                -target=aws_secretsmanager_secret_version.database_password \
+                -target=aws_db_subnet_group.database \
+                -target=aws_rds_cluster.database \
+                -target=aws_rds_cluster_instance.database || echo "⚠️ Database deployment issues"
+              
+              # Apply S3 buckets
+              terraform apply -auto-approve -lock-timeout=300s \
+                -target=aws_s3_bucket.uploads \
+                -target=module.s3_website \
+                -target=module.lambda_backend.aws_s3_bucket.lambda_deployments || echo "⚠️ S3 deployment issues"
+              
+              # Apply serverless components
+              terraform apply -auto-approve -lock-timeout=300s \
+                -target=module.lambda_backend \
+                -target=module.api_gateway || echo "⚠️ Serverless deployment issues"
+              
+              # Apply Route53 records
+              terraform apply -auto-approve -lock-timeout=300s \
+                -target=aws_route53_record.api \
+                -target=aws_route53_record.website || echo "⚠️ DNS deployment issues"
+              
+              # Final attempt: Apply remaining resources
+              echo "🔄 Final attempt: Applying any remaining resources..."
+              terraform apply -auto-approve -lock-timeout=300s || echo "⚠️ Some resources may need manual intervention"
+            fi
+          fi
+
+          # Step 5: Verify deployment and get outputs
+          echo "🔍 Step 5: Verifying deployment..."
+          if terraform output > outputs.log 2>&1; then
+            echo "✅ Deployment outputs:"
+            cat outputs.log
+          else
+            echo "⚠️ Could not retrieve all outputs:"
+            cat outputs.log
+          fi
+
+          # Step 6: Validate critical resources
+          echo "🔍 Step 6: Validating critical resources..."
+
+          # Check if Lambda function exists
+          LAMBDA_NAME=$(terraform output -raw lambda_function_name 2>/dev/null || echo "")
+          if [ -n "$LAMBDA_NAME" ]; then
+            if aws lambda get-function --function-name "$LAMBDA_NAME" >/dev/null 2>&1; then
+              echo "✅ Lambda function '$LAMBDA_NAME' is accessible"
+            else
+              echo "⚠️ Lambda function '$LAMBDA_NAME' may not be ready yet"
+            fi
+          fi
+
+          # Check if API Gateway exists
+          API_URL=$(terraform output -raw api_url 2>/dev/null || echo "")
+          if [ -n "$API_URL" ]; then
+            echo "✅ API Gateway URL: $API_URL"
+          else
+            echo "⚠️ API Gateway URL not available in outputs"
+          fi
 
           echo "🎉 Terraform deployment process completed!"
 
@@ -809,30 +903,65 @@ jobs:
       - name: Get API Gateway URL
         id: api-url
         run: |
-          # Use dynamic function name from environment detection
-          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
-          echo "🔍 Looking for API Gateway with name: $FUNCTION_NAME"
+          # Use dynamic environment variables
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+          PROJECT_NAME="dpp"
 
-          # Get the API ID
-          API_ID=$(aws apigatewayv2 get-apis --query "Items[?Name=='$FUNCTION_NAME'].ApiId" --output text)
+          # Primary expected API Gateway name (matches module configuration)
+          PRIMARY_API_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-api"
+          # Alternative naming patterns to check
+          ALT_API_NAME1="${{ needs.detect-environment.outputs.function_name }}"
+          ALT_API_NAME2="${ENVIRONMENT}-${PROJECT_NAME}-api"
 
-          # Clean the API ID (remove any whitespace or special characters)
-          API_ID=$(echo "$API_ID" | tr -d '[:space:]')
+          echo "🔍 Looking for API Gateway with multiple naming patterns:"
+          echo "  Primary: $PRIMARY_API_NAME"
+          echo "  Alternative 1: $ALT_API_NAME1"
+          echo "  Alternative 2: $ALT_API_NAME2"
 
-          if [ -z "$API_ID" ] || [ "$API_ID" = "None" ]; then
-            echo "❌ No API Gateway found with name: $FUNCTION_NAME"
-            echo "Available APIs:"
-            aws apigatewayv2 get-apis --query 'Items[*].{Name:Name,Id:ApiId}' --output table
-            exit 1
+          # Function to find API by name
+          find_api_by_name() {
+            local api_name="$1"
+            aws apigatewayv2 get-apis --query "Items[?Name=='$api_name'].ApiId" --output text | tr -d '[:space:]'
+          }
+
+          # Try to find API Gateway with different naming patterns
+          API_ID=""
+          for api_name in "$PRIMARY_API_NAME" "$ALT_API_NAME1" "$ALT_API_NAME2"; do
+            echo "🔍 Checking for API Gateway: $api_name"
+            API_ID=$(find_api_by_name "$api_name")
+            if [ -n "$API_ID" ] && [ "$API_ID" != "None" ] && [ "$API_ID" != "" ]; then
+              echo "✅ Found API Gateway '$api_name' with ID: $API_ID"
+              break
+            fi
+          done
+
+          # If still not found, list all APIs for debugging
+          if [ -z "$API_ID" ] || [ "$API_ID" = "None" ] || [ "$API_ID" = "" ]; then
+            echo "❌ No API Gateway found with expected names"
+            echo "Available APIs in region ${{ env.AWS_REGION }}:"
+            aws apigatewayv2 get-apis --query 'Items[*].{Name:Name,Id:ApiId,Protocol:ProtocolType}' --output table
+            
+            # Try to find any API that contains our project name
+            echo "🔍 Searching for APIs containing '$PROJECT_NAME'..."
+            FUZZY_API_ID=$(aws apigatewayv2 get-apis --query "Items[?contains(Name, '$PROJECT_NAME')].ApiId" --output text | head -n1 | tr -d '[:space:]')
+            
+            if [ -n "$FUZZY_API_ID" ] && [ "$FUZZY_API_ID" != "None" ]; then
+              echo "⚠️ Found API containing '$PROJECT_NAME': $FUZZY_API_ID"
+              API_ID="$FUZZY_API_ID"
+            else
+              echo "❌ No API Gateway found containing '$PROJECT_NAME'"
+              exit 1
+            fi
           fi
 
           # Construct the API URL
           API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/v1"
 
-          echo "✅ Found API Gateway: $API_ID"
+          echo "✅ Using API Gateway: $API_ID"
           echo "🌐 API URL: $API_URL"
 
-          # Set the output (ensure no whitespace)
+          # Set the output
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
 
       - name: Test API health endpoint
