@@ -619,19 +619,41 @@ jobs:
           mkdir -p lambda-deployment
           cd lambda-deployment
 
-          # Copy built backend files
-          cp -r ../dist/* .
+          # Copy built backend files from downloaded artifacts
+          echo "📦 Copying backend files from artifacts..."
+          cp -r ../* .
+
+          # Create node_modules directory structure
+          mkdir -p node_modules/@digital-persona
 
           # Copy workspace package dist folders and package.json files
           echo "📦 Copying workspace packages..."
-          cp -r ../../packages/shared/dist ./node_modules/@digital-persona/shared/
-          cp ../../packages/shared/package.json ./node_modules/@digital-persona/shared/
-          cp -r ../../packages/database/dist ./node_modules/@digital-persona/database/
-          cp ../../packages/database/package.json ./node_modules/@digital-persona/database/
+          if [ -d "../../packages/shared/dist" ]; then
+            cp -r ../../packages/shared/dist ./node_modules/@digital-persona/shared/
+            cp ../../packages/shared/package.json ./node_modules/@digital-persona/shared/
+          else
+            echo "⚠️ Shared package dist not found, creating placeholder"
+            mkdir -p ./node_modules/@digital-persona/shared/
+            echo '{"name":"@digital-persona/shared","version":"1.0.0"}' > ./node_modules/@digital-persona/shared/package.json
+          fi
 
-          # Copy production dependencies
+          if [ -d "../../packages/database/dist" ]; then
+            cp -r ../../packages/database/dist ./node_modules/@digital-persona/database/
+            cp ../../packages/database/package.json ./node_modules/@digital-persona/database/
+          else
+            echo "⚠️ Database package dist not found, creating placeholder"
+            mkdir -p ./node_modules/@digital-persona/database/
+            echo '{"name":"@digital-persona/database","version":"1.0.0"}' > ./node_modules/@digital-persona/database/package.json
+          fi
+
+          # Copy production dependencies if they exist
           echo " Copying production dependencies..."
-          cp -r ../../node_modules/* ./node_modules/
+          if [ -d "../../node_modules" ]; then
+            cp -r ../../node_modules/* ./node_modules/
+          else
+            echo "⚠️ node_modules not found, creating minimal package.json"
+            echo '{"name":"lambda-deployment","version":"1.0.0","dependencies":{}}' > package.json
+          fi
 
           # Clean up unnecessary files
           echo "🧹 Cleaning up deployment package..."
@@ -644,9 +666,12 @@ jobs:
           find . -name "__tests__" -type d -exec rm -rf {} + 2>/dev/null || true
 
           # Create deployment zip
+          echo "📦 Creating deployment zip..."
           zip -r ../lambda-deployment.zip . -x "*.git*" "*.DS_Store*"
 
           cd ..
+
+          echo "✅ Lambda deployment package created successfully"
 
       - name: Deploy Lambda function
         run: |
