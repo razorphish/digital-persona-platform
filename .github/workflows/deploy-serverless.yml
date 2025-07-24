@@ -310,11 +310,34 @@ jobs:
             --bucket "hibiji-terraform-state" \
             --versioning-configuration Status=Enabled
 
+          # Check if corrupted state exists and backup/remove it
+          echo "🔍 Checking for corrupted state file..."
+          STATE_KEY="${{ needs.detect-environment.outputs.main_env }}/serverless/terraform.tfstate"
+
+          if aws s3api head-object --bucket "hibiji-terraform-state" --key "$STATE_KEY" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo "⚠️ Found existing state file, backing up and removing corrupted state..."
+            aws s3api copy-object \
+              --bucket "hibiji-terraform-state" \
+              --copy-source "hibiji-terraform-state/$STATE_KEY" \
+              --key "${STATE_KEY}.backup.$(date +%Y%m%d-%H%M%S)" \
+              --region ${{ env.AWS_REGION }}
+            
+            # Remove the corrupted state file
+            aws s3api delete-object \
+              --bucket "hibiji-terraform-state" \
+              --key "$STATE_KEY" \
+              --region ${{ env.AWS_REGION }}
+            
+            echo "✅ Corrupted state file backed up and removed"
+          else
+            echo "✅ No existing state file found"
+          fi
+
           # Initialize with explicit backend configuration
           echo " Initializing Terraform..."
           terraform init \
             -backend-config="bucket=hibiji-terraform-state" \
-            -backend-config="key=${{ needs.detect-environment.outputs.main_env }}/serverless/terraform.tfstate" \
+            -backend-config="key=$STATE_KEY" \
             -backend-config="region=${{ env.AWS_REGION }}" \
             -reconfigure
 
