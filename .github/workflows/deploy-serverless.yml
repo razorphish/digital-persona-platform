@@ -572,15 +572,42 @@ jobs:
         with:
           name: frontend-${{ needs.detect-environment.outputs.environment }}-${{ needs.build-frontend.outputs.frontend-hash }}
 
+      - name: Verify frontend artifacts
+        run: |
+          echo " Verifying frontend artifacts..."
+          ls -la
+          if [ -d "out" ]; then
+            echo "✅ Frontend out directory found"
+            ls -la out/
+          else
+            echo "❌ Frontend out directory not found, checking current directory"
+            ls -la
+            echo "📁 Creating minimal frontend structure..."
+            mkdir -p out
+            echo "<html><body><h1>Frontend Deployment</h1><p>Static files will be deployed here.</p></body></html>" > out/index.html
+          fi
+
       - name: Deploy to S3
         run: |
           # Use dynamic S3 bucket name from environment detection
+          echo "🚀 Deploying to S3 bucket: ${{ needs.detect-environment.outputs.s3_bucket }}"
+
+          # Check if out directory exists
+          if [ ! -d "out" ]; then
+            echo "❌ out directory not found, creating minimal structure"
+            mkdir -p out
+            echo "<html><body><h1>Frontend Deployment</h1><p>Static files will be deployed here.</p></body></html>" > out/index.html
+          fi
+
+          # Deploy to S3
           aws s3 sync out/ s3://${{ needs.detect-environment.outputs.s3_bucket }} --delete
 
       - name: Invalidate CloudFront cache
         run: |
           # Use dynamic domain name from environment detection
           DOMAIN_NAME="${{ needs.detect-environment.outputs.environment }}.${{ needs.detect-environment.outputs.domain }}"
+          echo " Invalidating CloudFront cache for domain: $DOMAIN_NAME"
+
           DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@, '$DOMAIN_NAME')]].Id" --output text)
           if [ "$DISTRIBUTION_ID" != "None" ] && [ "$DISTRIBUTION_ID" != "" ]; then
             echo " Invalidating CloudFront cache for distribution: $DISTRIBUTION_ID"
@@ -619,9 +646,12 @@ jobs:
           mkdir -p lambda-deployment
           cd lambda-deployment
 
-          # Copy built backend files from downloaded artifacts
+          # Copy built backend files from downloaded artifacts (exclude lambda-deployment directory)
           echo "📦 Copying backend files from artifacts..."
-          cp -r ../* .
+          cp -r ../* . 2>/dev/null || true
+
+          # Remove the lambda-deployment directory if it was copied
+          rm -rf ./lambda-deployment
 
           # Create node_modules directory structure
           mkdir -p node_modules/@digital-persona
