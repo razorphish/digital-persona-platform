@@ -438,6 +438,7 @@ jobs:
           BUCKET_UPLOADS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-uploads"
           BUCKET_WEBSITE="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-website"
           BUCKET_BUILDS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-builds"
+          BUCKET_LAMBDA_DEPLOYMENTS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-lambda-deployments"
 
           if aws s3api head-bucket --bucket "$BUCKET_UPLOADS" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
             echo " Importing existing uploads bucket..."
@@ -454,9 +455,16 @@ jobs:
             terraform import module.s3_website.aws_s3_bucket.builds "$BUCKET_BUILDS" || echo "⚠️ Builds bucket import failed or already in state"
           fi
 
+          if aws s3api head-bucket --bucket "$BUCKET_LAMBDA_DEPLOYMENTS" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing lambda deployments bucket..."
+            terraform import module.lambda_backend.aws_s3_bucket.lambda_deployments "$BUCKET_LAMBDA_DEPLOYMENTS" || echo "⚠️ Lambda deployments bucket import failed or already in state"
+          fi
+
           # Import existing CloudWatch log groups
           LOG_GROUP_API="/aws/apigateway/${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}"
           LOG_GROUP_LAMBDA="/aws/lambda/${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-api"
+          LOG_GROUP_BACKEND_ECS="/ecs/hibiji-${ENVIRONMENT}-backend"
+          LOG_GROUP_FRONTEND_ECS="/ecs/hibiji-${ENVIRONMENT}-frontend"
 
           if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_API" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_API"'`]' --output text | grep -q "$LOG_GROUP_API"; then
             echo " Importing existing API Gateway log group..."
@@ -468,7 +476,17 @@ jobs:
             terraform import module.lambda_backend.aws_cloudwatch_log_group.lambda_logs "$LOG_GROUP_LAMBDA" || echo "⚠️ Lambda log group import failed or already in state"
           fi
 
-          # Import existing VPC if it exists
+          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_BACKEND_ECS" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_BACKEND_ECS"'`]' --output text | grep -q "$LOG_GROUP_BACKEND_ECS"; then
+            echo " Importing existing backend ECS log group..."
+            terraform import aws_cloudwatch_log_group.backend_ecs "$LOG_GROUP_BACKEND_ECS" || echo "⚠️ Backend ECS log group import failed or already in state"
+          fi
+
+          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_FRONTEND_ECS" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_FRONTEND_ECS"'`]' --output text | grep -q "$LOG_GROUP_FRONTEND_ECS"; then
+            echo " Importing existing frontend ECS log group..."
+            terraform import aws_cloudwatch_log_group.frontend_ecs "$LOG_GROUP_FRONTEND_ECS" || echo "⚠️ Frontend ECS log group import failed or already in state"
+          fi
+
+          # Import existing VPC if it exists (check by tags)
           echo "📥 Checking for existing VPC..."
           EXISTING_VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=hibiji-${MAIN_ENV}-vpc" \
@@ -488,6 +506,15 @@ jobs:
           if [ "$EXISTING_ZONE_ID" != "None" ] && [ -n "$EXISTING_ZONE_ID" ]; then
             echo " Importing existing Route53 zone: $EXISTING_ZONE_ID"
             terraform import aws_route53_zone.main "$EXISTING_ZONE_ID" || echo "⚠️ Route53 zone import failed or already in state"
+          fi
+
+          # Import existing CloudFront Origin Access Control if it exists
+          OAC_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-oac"
+          EXISTING_OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" --output text 2>/dev/null || echo "")
+
+          if [ "$EXISTING_OAC_ID" != "None" ] && [ -n "$EXISTING_OAC_ID" ]; then
+            echo " Importing existing CloudFront Origin Access Control: $EXISTING_OAC_ID"
+            terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$EXISTING_OAC_ID" || echo "⚠️ CloudFront OAC import failed or already in state"
           fi
 
           echo "✅ Resource import completed"
