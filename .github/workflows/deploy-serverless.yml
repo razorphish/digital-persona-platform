@@ -811,13 +811,40 @@ jobs:
         run: |
           # Use dynamic function name from environment detection
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
+          echo "🔍 Looking for API Gateway with name: $FUNCTION_NAME"
+
+          # Get the API ID
           API_ID=$(aws apigatewayv2 get-apis --query "Items[?Name=='$FUNCTION_NAME'].ApiId" --output text)
-          echo "api_url=https://$API_ID.execute-api.${{ env.AWS_REGION }}.amazonaws.com/v1" >> $GITHUB_OUTPUT
+
+          # Clean the API ID (remove any whitespace or special characters)
+          API_ID=$(echo "$API_ID" | tr -d '[:space:]')
+
+          if [ -z "$API_ID" ] || [ "$API_ID" = "None" ]; then
+            echo "❌ No API Gateway found with name: $FUNCTION_NAME"
+            echo "Available APIs:"
+            aws apigatewayv2 get-apis --query 'Items[*].{Name:Name,Id:ApiId}' --output table
+            exit 1
+          fi
+
+          # Construct the API URL
+          API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/v1"
+
+          echo "✅ Found API Gateway: $API_ID"
+          echo "🌐 API URL: $API_URL"
+
+          # Set the output (ensure no whitespace)
+          echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
 
       - name: Test API health endpoint
         run: |
+          # Use the dynamically generated API URL from the previous step
           API_URL="${{ steps.api-url.outputs.api_url }}/health"
+
+          # Clean the URL to remove any whitespace or special characters
+          API_URL=$(echo "$API_URL" | tr -d '[:space:]')
+
           echo "Testing API health endpoint: $API_URL"
+          echo "URL length: ${#API_URL} characters"
 
           # Test with detailed error capture
           for attempt in {1..5}; do
