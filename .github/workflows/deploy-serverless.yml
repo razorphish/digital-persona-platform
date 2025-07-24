@@ -291,7 +291,32 @@ jobs:
       - name: Terraform Init
         run: |
           cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
-          terraform init
+
+          # Clean up any existing state issues
+          echo "🧹 Cleaning up potential state issues..."
+          rm -f .terraform.lock.hcl
+          rm -rf .terraform/
+
+          # Create S3 backend bucket if it doesn't exist
+          echo "📦 Ensuring S3 backend bucket exists..."
+          aws s3api head-bucket --bucket "hibiji-terraform-state" --region ${{ env.AWS_REGION }} || \
+          aws s3api create-bucket \
+            --bucket "hibiji-terraform-state" \
+            --region ${{ env.AWS_REGION }} \
+            --create-bucket-configuration LocationConstraint=${{ env.AWS_REGION }}
+
+          # Enable versioning on the bucket
+          aws s3api put-bucket-versioning \
+            --bucket "hibiji-terraform-state" \
+            --versioning-configuration Status=Enabled
+
+          # Initialize with explicit backend configuration
+          echo " Initializing Terraform..."
+          terraform init \
+            -backend-config="bucket=hibiji-terraform-state" \
+            -backend-config="key=${{ needs.detect-environment.outputs.main_env }}/serverless/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -reconfigure
 
       - name: Terraform Plan
         run: |
