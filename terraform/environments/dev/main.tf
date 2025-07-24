@@ -114,15 +114,12 @@ locals {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-# Route53 hosted zone (create for dev environment)
-# TODO: In production, this should be managed in a shared/global environment
-resource "aws_route53_zone" "main" {
-  name = var.domain_name
+# Replace the Route53 zone resource with a data source
+# This will use an existing hosted zone instead of creating a new one
 
-  tags = merge(local.common_tags, {
-    Name = "Primary DNS Zone"
-    Type = "Route53HostedZone"
-  })
+# Data source for existing Route53 hosted zone
+data "aws_route53_zone" "main" {
+  name = var.domain_name
 }
 
 # =================================
@@ -458,19 +455,29 @@ module "api_gateway" {
 
 # DNS Records for this sub-environment
 resource "aws_route53_record" "website" {
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = local.website_domain  # dev01.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [module.s3_website.cloudfront_domain_name]
+  
+  # Add lifecycle to prevent conflicts
+  lifecycle {
+    ignore_changes = [records]
+  }
 }
 
 resource "aws_route53_record" "api" {
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = local.api_domain  # dev01-api.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
+  
+  # Add lifecycle to prevent conflicts
+  lifecycle {
+    ignore_changes = [records]
+  }
 }
 
 # =================================
