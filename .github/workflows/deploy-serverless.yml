@@ -3,20 +3,27 @@ name: Deploy Serverless Architecture
 on:
   push:
     branches:
-      - dev01
-      - dev02
       - main
-      - staging
-      - prod
+      - "dev[0-9][0-9]"
+      - "qa[0-9][0-9]"
+      - "staging[0-9][0-9]"
+      - "hotfix[0-9][0-9]"
   pull_request:
     branches:
-      - dev01
-      - dev02
       - main
+      - "dev[0-9][0-9]"
+      - "qa[0-9][0-9]"
+      - "staging[0-9][0-9]"
+      - "hotfix[0-9][0-9]"
   workflow_dispatch:
     inputs:
       force_deploy:
         description: "Force deployment even if tests fail"
+        required: false
+        default: false
+        type: boolean
+      skip_tests:
+        description: "Skip test execution for emergency deployments"
         required: false
         default: false
         type: boolean
@@ -30,14 +37,86 @@ permissions:
 env:
   AWS_REGION: us-west-1
   NODE_VERSION: 20
+  DOMAIN: hibiji.com
+
+# Prevent multiple runs from conflicting
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # ===========================================
+  # ENVIRONMENT DETECTION
+  # ===========================================
+  detect-environment:
+    name: 🔍 Environment Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      main_env: ${{ steps.env.outputs.main_env }}
+      should_deploy: ${{ steps.env.outputs.should_deploy }}
+      is_numbered_env: ${{ steps.env.outputs.is_numbered_env }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Determine Environment
+        id: env
+        run: |
+          # Determine environment based on branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENVIRONMENT="prod"
+            MAIN_ENV="prod"
+            SHOULD_DEPLOY="false"  # Main branch requires manual deployment
+            IS_NUMBERED_ENV="false"
+          elif [[ "${{ github.ref_name }}" =~ ^dev[0-9][0-9]$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
+            MAIN_ENV="dev"
+            SHOULD_DEPLOY="true"
+            IS_NUMBERED_ENV="true"
+          elif [[ "${{ github.ref_name }}" =~ ^qa[0-9][0-9]$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
+            MAIN_ENV="qa"
+            SHOULD_DEPLOY="true"
+            IS_NUMBERED_ENV="true"
+          elif [[ "${{ github.ref_name }}" =~ ^staging[0-9][0-9]$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
+            MAIN_ENV="staging"
+            SHOULD_DEPLOY="true"
+            IS_NUMBERED_ENV="true"
+          elif [[ "${{ github.ref_name }}" =~ ^hotfix[0-9][0-9]$ ]]; then
+            ENVIRONMENT="${{ github.ref_name }}"
+            MAIN_ENV="hotfix"
+            SHOULD_DEPLOY="true"
+            IS_NUMBERED_ENV="true"
+          else
+            echo "❌ Invalid branch name: ${{ github.ref_name }}"
+            echo "Valid branches: main, dev01-dev99, qa01-qa99, staging01-staging99, hotfix01-hotfix99"
+            exit 1
+          fi
+
+          echo "Environment: $ENVIRONMENT"
+          echo "Main Environment: $MAIN_ENV"
+          echo "Should Deploy: $SHOULD_DEPLOY"
+          echo "Is Numbered Environment: $IS_NUMBERED_ENV"
+
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
+          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          echo "is_numbered_env=$IS_NUMBERED_ENV" >> $GITHUB_OUTPUT
+
   # =================================
   # Build and Test
   # =================================
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
+    needs: detect-environment
+    if: ${{ needs.detect-environment.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Checkout code
@@ -67,7 +146,8 @@ jobs:
   build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [detect-environment, build-and-test]
+    if: ${{ needs.detect-environment.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
 
     outputs:
       frontend-hash: ${{ steps.frontend-hash.outputs.hash }}
@@ -94,66 +174,42 @@ jobs:
         env:
           NODE_ENV: production
           NEXT_BUILD_EXPORT: true
-          # Set API URL based on branch
+          # Set API URL based on environment
           NEXT_PUBLIC_API_URL: >-
             ${{ 
-              github.ref == 'refs/heads/main' && secrets.API_URL_MAIN ||
-              github.ref == 'refs/heads/staging' && secrets.API_URL_STAGING ||
-              github.ref == 'refs/heads/prod' && secrets.API_URL_PROD ||
-              secrets.API_URL_DEV 
+              needs.detect-environment.outputs.environment == 'prod' && secrets.API_URL_MAIN ||
+              needs.detect-environment.outputs.environment == 'dev01' && secrets.API_URL_DEV01 ||
+              needs.detect-environment.outputs.environment == 'dev02' && secrets.API_URL_DEV02 ||
+              needs.detect-environment.outputs.environment == 'qa01' && secrets.API_URL_QA01 ||
+              needs.detect-environment.outputs.environment == 'staging01' && secrets.API_URL_STAGING01 ||
+              secrets.API_URL_DEV01
             }}
         run: |
-          cd apps/web
-          echo "🏗️ Building frontend for static export..."
-          npm run build
-          echo "✅ Frontend build completed"
-
-      - name: Validate build output
-        run: |
-          cd apps/web
-          if [ ! -d "out" ]; then
-            echo "❌ Error: 'out' directory not found after build"
-            echo "📁 Available directories:"
-            ls -la
-            exit 1
-          fi
-
-          if [ -z "$(ls -A out)" ]; then
-            echo "❌ Error: 'out' directory is empty"
-            exit 1
-          fi
-
-          echo "✅ Build output validation passed"
-          echo "📁 Files in out directory:"
-          ls -la out/
+          npm run build --workspace=apps/web
+          npm run export --workspace=apps/web
 
       - name: Generate frontend hash
         id: frontend-hash
         run: |
-          cd apps/web
-          if [ ! -d "out" ] || [ -z "$(ls -A out)" ]; then
-            echo "❌ Frontend build output is empty! Failing the job."
-            exit 1
-          fi
+          cd apps/web/out
+          HASH=$(find . -type f -name "*.html" -o -name "*.js" -o -name "*.css" | xargs sha256sum | sort | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
 
-          hash=$(find out -type f -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
-          echo "hash=${hash:0:8}" >> $GITHUB_OUTPUT
-          echo "✅ Generated frontend hash: ${hash:0:8}"
-
-      - name: Upload frontend build artifacts
+      - name: Upload frontend artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build-${{ steps.frontend-hash.outputs.hash }}
+          name: frontend-${{ needs.detect-environment.outputs.environment }}-${{ steps.frontend-hash.outputs.hash }}
           path: apps/web/out/
           retention-days: 7
 
   # =================================
-  # Build Backend Lambda Package
+  # Build Backend for Lambda
   # =================================
   build-backend:
-    name: Build Backend Lambda
+    name: Build Backend
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [detect-environment, build-and-test]
+    if: ${{ needs.detect-environment.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
 
     outputs:
       backend-hash: ${{ steps.backend-hash.outputs.hash }}
@@ -176,244 +232,21 @@ jobs:
           npm run build --workspace=@digital-persona/shared
           npm run build --workspace=@digital-persona/database
 
-      - name: Build backend for Lambda
-        run: |
-          cd apps/server
-          npm run build
-
-      - name: Create Lambda deployment package
-        run: |
-          echo "🏗️ Creating comprehensive Lambda deployment package..."
-
-          # Install production dependencies at root level (for workspaces)
-          npm ci --omit=dev --ignore-scripts
-
-          cd apps/server
-          # Create deployment directory
-          mkdir -p deployment
-
-          # Copy built files
-          echo "📦 Copying built JavaScript files..."
-          cp -r dist/* deployment/
-
-          # Copy package.json for Lambda runtime
-          cp package.json deployment/
-
-          echo "📦 Creating comprehensive node_modules for Lambda..."
-          mkdir -p deployment/node_modules
-
-          # Copy ALL production dependencies for server
-          echo "📦 Copying all server dependencies..."
-
-          # Get all dependencies from package.json
-          SERVER_DEPS=$(node -e "
-            const pkg = require('./package.json');
-            const deps = Object.keys(pkg.dependencies || {});
-            console.log(deps.join(' '));
-          ")
-
-          echo "📋 Server dependencies to copy: $SERVER_DEPS"
-
-                    # Build and copy workspace packages properly
-          echo "📦 Building and copying workspace packages..."
-
-          # Ensure workspace packages are built
-          cd ../..
-
-          # FORCE CLEAN REBUILD of workspace packages
-          echo "🧹 FORCE CLEANING workspace package builds..."
-          rm -rf packages/*/dist packages/*/.turbo
-          echo "✅ Old workspace builds removed"
-
-          echo "🔧 Building workspace packages with NEW TypeScript configs..."
-          npm run build --workspace=@digital-persona/shared --if-present
-          npm run build --workspace=@digital-persona/database --if-present
-
-          # Verify the builds are clean (should be no .d.mts files with new config)
-          echo "🔍 Verifying workspace package builds..."
-          WORKSPACE_MTS_COUNT=$(find packages/*/dist -name "*.d.mts" 2>/dev/null | wc -l)
-          if [ "$WORKSPACE_MTS_COUNT" -gt 0 ]; then
-            echo "🚨 WARNING: Found .d.mts files in workspace packages:"
-            find packages/*/dist -name "*.d.mts" 2>/dev/null || true
-          else
-            echo "✅ Workspace packages clean - no .d.mts files generated"
-          fi
-
-          # Additional cleanup (belt and suspenders)
-          echo "🧹 Additional TypeScript file cleanup from workspace packages..."
-          find packages/*/dist -name "*.d.mts" -delete 2>/dev/null || true
-          find packages/*/dist -name "*.d.ts" -delete 2>/dev/null || true 
-          find packages/*/dist -name "*.d.cts" -delete 2>/dev/null || true
-          find packages/*/dist -name "*.map" -delete 2>/dev/null || true
-          echo "✅ Workspace packages comprehensively cleaned"
-
-          cd apps/server
-
-          # Create @digital-persona directory in deployment
-          mkdir -p deployment/node_modules/@digital-persona
-
-          # Copy @digital-persona/shared
-          if [ -d "../../packages/shared" ]; then
-            echo "📦 Copying @digital-persona/shared..."
-            mkdir -p deployment/node_modules/@digital-persona/shared
-            cp -r ../../packages/shared/dist deployment/node_modules/@digital-persona/shared/
-            cp ../../packages/shared/package.json deployment/node_modules/@digital-persona/shared/
-            echo "✅ @digital-persona/shared copied with dist folder"
-          else
-            echo "❌ @digital-persona/shared source not found"
-          fi
-
-          # Copy @digital-persona/database  
-          if [ -d "../../packages/database" ]; then
-            echo "📦 Copying @digital-persona/database..."
-            mkdir -p deployment/node_modules/@digital-persona/database
-            cp -r ../../packages/database/dist deployment/node_modules/@digital-persona/database/
-            cp ../../packages/database/package.json deployment/node_modules/@digital-persona/database/
-            echo "✅ @digital-persona/database copied with dist folder"
-          else
-            echo "❌ @digital-persona/database source not found"
-          fi
-
-          # Verify workspace packages were copied correctly
-          echo "🔍 Verifying workspace packages..."
-          if [ -f "deployment/node_modules/@digital-persona/database/package.json" ]; then
-            echo "✅ @digital-persona/database package.json found"
-          else
-            echo "❌ @digital-persona/database package.json missing"
-          fi
-
-          if [ -d "deployment/node_modules/@digital-persona/database/dist" ]; then
-            echo "✅ @digital-persona/database dist folder found"
-            ls -la deployment/node_modules/@digital-persona/database/dist/
-          else
-            echo "❌ @digital-persona/database dist folder missing"
-          fi
-
-          # Copy ALL server dependencies and their transitive dependencies
-          for pkg in $SERVER_DEPS; do
-            if [ -d "../../node_modules/$pkg" ]; then
-              echo "📦 Copying $pkg..."
-              cp -r "../../node_modules/$pkg" deployment/node_modules/
-              
-              # Remove TypeScript declaration files that cause Lambda runtime errors
-              echo "  🧹 Cleaning TypeScript files from: $pkg"
-              find "deployment/node_modules/$pkg" -name "*.d.ts" -delete 2>/dev/null || true
-              find "deployment/node_modules/$pkg" -name "*.d.mts" -delete 2>/dev/null || true
-              find "deployment/node_modules/$pkg" -name "*.d.cts" -delete 2>/dev/null || true
-              find "deployment/node_modules/$pkg" -name "*.map" -delete 2>/dev/null || true
-            else
-              echo "⚠️ Warning: $pkg not found in node_modules"
-            fi
-          done
-
-          # Copy critical transitive dependencies that might be missing
-          echo "📦 Copying critical transitive dependencies..."
-          CRITICAL_DEPS="pg-pool pg-connection-string pg-types pg-int8 pg-protocol postgres-array postgres-bytea postgres-date postgres-interval @types/pg drizzle-kit"
-
-          for pkg in $CRITICAL_DEPS; do
-            if [ -d "../../node_modules/$pkg" ]; then
-              echo "📦 Copying critical dependency $pkg..."
-              cp -r "../../node_modules/$pkg" deployment/node_modules/
-              
-              # Remove TypeScript declaration files from critical deps too
-              echo "  🧹 Cleaning TypeScript files from critical: $pkg"
-              find "deployment/node_modules/$pkg" -name "*.d.ts" -delete 2>/dev/null || true
-              find "deployment/node_modules/$pkg" -name "*.d.mts" -delete 2>/dev/null || true
-              find "deployment/node_modules/$pkg" -name "*.d.cts" -delete 2>/dev/null || true
-              find "deployment/node_modules/$pkg" -name "*.map" -delete 2>/dev/null || true
-            fi
-          done
-
-          # Ensure essential runtime dependencies exist
-          echo "🔍 Verifying critical dependencies..."
-          REQUIRED_PACKAGES="pg express cors serverless-http drizzle-orm @trpc/server zod superjson jsonwebtoken bcryptjs uuid better-auth dotenv"
-
-          for pkg in $REQUIRED_PACKAGES; do
-            if [ ! -d "deployment/node_modules/$pkg" ]; then
-              echo "❌ CRITICAL: Missing required package $pkg"
-              # Try to find it with different path patterns
-              find ../../node_modules -name "*$pkg*" -type d | head -5
-            else
-              echo "✅ Found required package $pkg"
-            fi
-          done
-
-          # COMPREHENSIVE TYPESCRIPT FILE CLEANUP (FINAL PASS)
-          echo "🧹 COMPREHENSIVE TYPESCRIPT CLEANUP - FINAL PASS"
-          echo "==============================================="
-          echo "🎯 Removing ALL TypeScript declaration files from Lambda package..."
-
-          # Count files before cleanup
-          BEFORE_COUNT=$(find deployment/node_modules -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts" | wc -l)
-          echo "📊 TypeScript files found: $BEFORE_COUNT"
-
-          # Remove all TypeScript declaration files from entire deployment
-          echo "🗑️ Removing .d.ts files..."
-          find deployment/node_modules -name "*.d.ts" -type f -delete 2>/dev/null || true
-
-          echo "🗑️ Removing .d.mts files..."
-          find deployment/node_modules -name "*.d.mts" -type f -delete 2>/dev/null || true
-
-          echo "🗑️ Removing .d.cts files..."
-          find deployment/node_modules -name "*.d.cts" -type f -delete 2>/dev/null || true
-
-          echo "🗑️ Removing .map files..."
-          find deployment/node_modules -name "*.map" -type f -delete 2>/dev/null || true
-
-          # Count files after cleanup
-          AFTER_COUNT=$(find deployment/node_modules -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts" | wc -l)
-          echo "📊 TypeScript files remaining: $AFTER_COUNT"
-          echo "✅ Removed $((BEFORE_COUNT - AFTER_COUNT)) TypeScript declaration files"
-
-          # Specifically verify pg package is clean
-          if [ -d "deployment/node_modules/pg" ]; then
-            PG_TS_FILES=$(find deployment/node_modules/pg -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts" | wc -l)
-            echo "🔍 pg package TypeScript files remaining: $PG_TS_FILES"
-            if [ "$PG_TS_FILES" -gt 0 ]; then
-              echo "🚨 WARNING: pg package still contains TypeScript files:"
-              find deployment/node_modules/pg -name "*.d.mts" -o -name "*.d.ts" -o -name "*.d.cts"
-            else
-              echo "✅ pg package is clean of TypeScript files"
-            fi
-          fi
-
-          echo "🧹 COMPREHENSIVE CLEANUP COMPLETED"
-          echo ""
-
-          # Create zip file
-          echo "📦 Creating Lambda deployment zip..."
-          cd deployment
-
-          # Show package size info
-          echo "📊 Package contents summary:"
-          du -sh . 2>/dev/null || echo "Size calculation failed"
-          echo "📁 Files in package:"
-          ls -la
-          echo "📦 Node modules included:"
-          ls node_modules/ | head -20
-
-          zip -r ../lambda-deployment.zip . -q
-          cd ..
-
-          # Show final package info
-          PACKAGE_SIZE=$(du -sh lambda-deployment.zip | cut -f1)
-          echo "✅ Lambda deployment package created: $PACKAGE_SIZE"
-
-          # Clean up
-          rm -rf deployment
+      - name: Build backend
+        run: npm run build --workspace=apps/server
 
       - name: Generate backend hash
         id: backend-hash
         run: |
-          cd apps/server
-          hash=$(sha256sum lambda-deployment.zip | cut -d' ' -f1)
-          echo "hash=${hash:0:8}" >> $GITHUB_OUTPUT
+          cd apps/server/dist
+          HASH=$(find . -type f | xargs sha256sum | sort | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
 
-      - name: Upload backend build artifacts
+      - name: Upload backend artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: backend-build-${{ steps.backend-hash.outputs.hash }}
-          path: apps/server/lambda-deployment.zip
+          name: backend-${{ needs.detect-environment.outputs.environment }}-${{ steps.backend-hash.outputs.hash }}
+          path: apps/server/dist/
           retention-days: 7
 
   # =================================
@@ -422,21 +255,8 @@ jobs:
   deploy-infrastructure:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
-    needs: [build-frontend, build-backend]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-
-    environment: >-
-      ${{ 
-        github.ref == 'refs/heads/main' && 'main' ||
-        github.ref == 'refs/heads/staging' && 'staging' ||
-        github.ref == 'refs/heads/prod' && 'prod' ||
-        'dev'
-      }}
-
-    outputs:
-      website-bucket: ${{ steps.terraform-output.outputs.website-bucket }}
-      api-url: ${{ steps.terraform-output.outputs.api-url }}
-      lambda-function: ${{ steps.terraform-output.outputs.lambda-function }}
+    needs: [detect-environment, build-frontend, build-backend]
+    if: ${{ needs.detect-environment.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Checkout code
@@ -447,81 +267,75 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-ServerlessDeploy
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.6.0
-          terraform_wrapper: false
-
-      - name: Determine environment and sub-environment
-        id: env
-        run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "environment=main" >> $GITHUB_OUTPUT
-            echo "sub_environment=main" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
-            echo "environment=staging" >> $GITHUB_OUTPUT
-            echo "sub_environment=staging" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
-            echo "environment=prod" >> $GITHUB_OUTPUT
-            echo "sub_environment=prod" >> $GITHUB_OUTPUT
-          else
-            # Extract sub-environment from branch name (e.g., dev01, dev02)
-            branch_name="${{ github.ref_name }}"
-            echo "environment=dev" >> $GITHUB_OUTPUT
-            echo "sub_environment=${branch_name}" >> $GITHUB_OUTPUT
-          fi
+          terraform_version: "1.5.0"
 
       - name: Terraform Init
         run: |
-          cd terraform/environments/${{ steps.env.outputs.environment }}
+          cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
           terraform init
 
       - name: Terraform Plan
         run: |
-          cd terraform/environments/${{ steps.env.outputs.environment }}
-          terraform plan \
-            -var="sub_environment=${{ steps.env.outputs.sub_environment }}" \
-            -input=false \
-            -out=tfplan
+          cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+          terraform plan -out=tfplan
 
-      - name: Import Existing IAM Roles (if needed)
+      - name: Import Existing Resources (IAM Roles & CloudWatch Log Groups)
         run: |
-          cd terraform/environments/${{ steps.env.outputs.environment }}
+          cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
 
-          echo "🔍 Checking and importing existing IAM roles..."
+          echo "🔍 Checking and importing existing resources..."
 
           # Import ECS execution role if it exists in AWS but not in state
-          if aws iam get-role --role-name "dev-dev01-dpp-ecs-execution" >/dev/null 2>&1; then
+          if aws iam get-role --role-name "${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-execution" >/dev/null 2>&1; then
             if ! terraform state show aws_iam_role.ecs_execution >/dev/null 2>&1; then
               echo "📥 Importing ECS execution role..."
-              terraform import aws_iam_role.ecs_execution dev-dev01-dpp-ecs-execution || echo "⚠️ Import failed (may not have permissions)"
+              terraform import aws_iam_role.ecs_execution ${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-execution || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
 
           # Import ECS task role if it exists in AWS but not in state  
-          if aws iam get-role --role-name "dev-dev01-dpp-ecs-task" >/dev/null 2>&1; then
+          if aws iam get-role --role-name "${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-task" >/dev/null 2>&1; then
             if ! terraform state show aws_iam_role.ecs_task >/dev/null 2>&1; then
               echo "📥 Importing ECS task role..."
-              terraform import aws_iam_role.ecs_task dev-dev01-dpp-ecs-task || echo "⚠️ Import failed (may not have permissions)"
+              terraform import aws_iam_role.ecs_task ${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-task || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
 
           # Import Lambda execution role if it exists in AWS but not in state
-          if aws iam get-role --role-name "dev-dev01-dpp-lambda-execution" >/dev/null 2>&1; then
+          if aws iam get-role --role-name "${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-lambda-execution" >/dev/null 2>&1; then
             if ! terraform state show module.lambda_backend.aws_iam_role.lambda_execution >/dev/null 2>&1; then
               echo "📥 Importing Lambda execution role..."
-              terraform import module.lambda_backend.aws_iam_role.lambda_execution dev-dev01-dpp-lambda-execution || echo "⚠️ Import failed (may not have permissions)"
+              terraform import module.lambda_backend.aws_iam_role.lambda_execution ${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-lambda-execution || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
 
-          echo "✅ IAM role import step completed"
+          # Import CloudWatch Log Group if it exists in AWS but not in state
+          LAMBDA_LOG_GROUP="/aws/lambda/${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+          if aws logs describe-log-groups --log-group-name-prefix "$LAMBDA_LOG_GROUP" --query 'logGroups[?logGroupName==`'"$LAMBDA_LOG_GROUP"'`]' --output text | grep -q "$LAMBDA_LOG_GROUP"; then
+            if ! terraform state show module.lambda_backend.aws_cloudwatch_log_group.lambda_logs >/dev/null 2>&1; then
+              echo "📥 Importing CloudWatch Log Group..."
+              terraform import module.lambda_backend.aws_cloudwatch_log_group.lambda_logs "$LAMBDA_LOG_GROUP" || echo "⚠️ Import failed (may not have permissions)"
+            fi
+          fi
+
+          # Import API Gateway Log Group if it exists in AWS but not in state
+          API_LOG_GROUP="/aws/apigateway/${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+          if aws logs describe-log-groups --log-group-name-prefix "$API_LOG_GROUP" --query 'logGroups[?logGroupName==`'"$API_LOG_GROUP"'`]' --output text | grep -q "$API_LOG_GROUP"; then
+            if ! terraform state show module.api_gateway.aws_cloudwatch_log_group.api_gateway >/dev/null 2>&1; then
+              echo "📥 Importing API Gateway Log Group..."
+              terraform import module.api_gateway.aws_cloudwatch_log_group.api_gateway "$API_LOG_GROUP" || echo "⚠️ Import failed (may not have permissions)"
+            fi
+          fi
+
+          echo "✅ Resource import step completed"
 
       - name: Terraform Apply with Fallback Strategy
         run: |
-          cd terraform/environments/${{ steps.env.outputs.environment }}
+          cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
 
           echo "🚀 Attempting full Terraform apply..."
 
@@ -567,174 +381,166 @@ jobs:
             fi
           fi
 
-      - name: Get Terraform outputs
-        id: terraform-output
-        run: |
-          cd terraform/environments/${{ steps.env.outputs.environment }}
-          echo "website-bucket=$(terraform output -raw website_bucket_name)" >> $GITHUB_OUTPUT
-          echo "api-url=$(terraform output -raw api_url)" >> $GITHUB_OUTPUT
-          echo "lambda-function=$(terraform output -raw lambda_function_name)" >> $GITHUB_OUTPUT
-
   # =================================
-  # Deploy Frontend to S3
+  # Deploy Frontend
   # =================================
   deploy-frontend:
     name: Deploy Frontend
     runs-on: ubuntu-latest
-    needs: [build-frontend, deploy-infrastructure]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [detect-environment, deploy-infrastructure, build-frontend]
+    if: ${{ needs.detect-environment.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-FrontendDeploy
 
-      - name: Download frontend build artifacts
+      - name: Download frontend artifacts
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build-${{ needs.build-frontend.outputs.frontend-hash }}
-          path: frontend-build/
+          name: frontend-${{ needs.detect-environment.outputs.environment }}-${{ needs.build-frontend.outputs.frontend-hash }}
 
       - name: Deploy to S3
         run: |
-          aws s3 sync frontend-build/ s3://${{ needs.deploy-infrastructure.outputs.website-bucket }}/ \
-            --delete \
-            --cache-control "public, max-age=31536000" \
-            --exclude "*.html" \
-            --exclude "*.json"
-
-          # Deploy HTML files with shorter cache
-          aws s3 sync frontend-build/ s3://${{ needs.deploy-infrastructure.outputs.website-bucket }}/ \
-            --delete \
-            --cache-control "public, max-age=3600" \
-            --include "*.html" \
-            --include "*.json"
+          aws s3 sync out/ s3://${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-website --delete
 
       - name: Invalidate CloudFront cache
         run: |
-          # Get CloudFront distribution ID
-          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
-            --query "DistributionList.Items[?Comment=='${{ needs.deploy-infrastructure.outputs.website-bucket }}'].Id" \
-            --output text)
-
-          if [ ! -z "$DISTRIBUTION_ID" ]; then
-            aws cloudfront create-invalidation \
-              --distribution-id $DISTRIBUTION_ID \
-              --paths "/*"
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@, '${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}')]].Id" --output text)
+          if [ "$DISTRIBUTION_ID" != "None" ] && [ "$DISTRIBUTION_ID" != "" ]; then
+            aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
           fi
 
   # =================================
-  # Deploy Backend Lambda
+  # Deploy Backend
   # =================================
   deploy-backend:
     name: Deploy Backend
     runs-on: ubuntu-latest
-    needs: [build-backend, deploy-infrastructure]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [detect-environment, deploy-infrastructure, build-backend]
+    if: ${{ needs.detect-environment.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-BackendDeploy
 
-      - name: Download backend build artifacts
+      - name: Download backend artifacts
         uses: actions/download-artifact@v4
         with:
-          name: backend-build-${{ needs.build-backend.outputs.backend-hash }}
-          path: backend-build/
+          name: backend-${{ needs.detect-environment.outputs.environment }}-${{ needs.build-backend.outputs.backend-hash }}
 
-      - name: Update Lambda function with conflict resolution
+      - name: Create Lambda deployment package
         run: |
-          FUNCTION_NAME="${{ needs.deploy-infrastructure.outputs.lambda-function }}"
-          ZIP_FILE="fileb://backend-build/lambda-deployment.zip"
+          # Create deployment directory
+          mkdir -p lambda-deployment
+          cd lambda-deployment
 
-          echo "🔍 Checking Lambda function state before update..."
+          # Copy built backend files
+          cp -r ../dist/* .
 
-          # Function to check if Lambda is ready for updates
+          # Copy workspace package dist folders and package.json files
+          echo "📦 Copying workspace packages..."
+          cp -r ../../packages/shared/dist ./node_modules/@digital-persona/shared/
+          cp ../../packages/shared/package.json ./node_modules/@digital-persona/shared/
+          cp -r ../../packages/database/dist ./node_modules/@digital-persona/database/
+          cp ../../packages/database/package.json ./node_modules/@digital-persona/database/
+
+          # Copy production dependencies
+          echo "📦 Copying production dependencies..."
+          cp -r ../../node_modules/* ./node_modules/
+
+          # Clean up unnecessary files
+          echo "🧹 Cleaning up deployment package..."
+          find . -name "*.d.ts" -delete
+          find . -name "*.d.mts" -delete
+          find . -name "*.d.cts" -delete
+          find . -name "*.map" -delete
+          find . -name "*.test.js" -delete
+          find . -name "*.spec.js" -delete
+          find . -name "__tests__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+          # Create deployment zip
+          zip -r ../lambda-deployment.zip . -x "*.git*" "*.DS_Store*"
+
+          cd ..
+
+      - name: Deploy Lambda function
+        run: |
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+
+          echo "🔄 Updating Lambda function: $FUNCTION_NAME"
+
+          # Wait for Lambda to be ready
           check_lambda_ready() {
-            local state=$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Configuration.State' --output text)
-            local update_status=$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Configuration.LastUpdateStatus' --output text)
-            
-            echo "📊 Lambda State: $state | Update Status: $update_status"
-            
-            if [ "$state" = "Active" ] && [ "$update_status" = "Successful" ]; then
-              return 0  # Ready for update
-            else
-              return 1  # Not ready
-            fi
+            local status=$(aws lambda get-function --function-name $FUNCTION_NAME --query 'Configuration.State' --output text 2>/dev/null)
+            echo "Lambda status: $status"
+            [[ "$status" == "Active" ]]
           }
 
-          # Wait for any existing updates to complete
-          echo "⏳ Waiting for any existing Lambda updates to complete..."
-          WAIT_COUNT=0
-          MAX_WAIT=20
-
-          while ! check_lambda_ready; do
-            WAIT_COUNT=$((WAIT_COUNT + 1))
-            if [ $WAIT_COUNT -gt $MAX_WAIT ]; then
-              echo "❌ Timeout waiting for Lambda to become ready for updates"
-              aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Configuration.{State:State,UpdateStatus:LastUpdateStatus,StateReason:StateReason,UpdateReason:LastUpdateStatusReason}' --output table
-              exit 1
-            fi
-            
-            echo "⏳ Lambda not ready, waiting 30 seconds... (attempt $WAIT_COUNT/$MAX_WAIT)"
-            sleep 30
-          done
-
-          echo "✅ Lambda is ready for update"
-
-          # Update with retry logic
-          echo "🚀 Updating Lambda function code..."
-          RETRY_COUNT=0
-          MAX_RETRIES=5
-
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if aws lambda update-function-code \
-              --function-name "$FUNCTION_NAME" \
-              --zip-file "$ZIP_FILE"; then
-              echo "✅ Lambda function code updated successfully"
+          # Wait for Lambda to be ready before updating
+          echo "⏳ Waiting for Lambda to be ready..."
+          for i in {1..30}; do
+            if check_lambda_ready; then
+              echo "✅ Lambda is ready for update"
               break
-            else
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                WAIT_TIME=$((RETRY_COUNT * 30))
-                echo "⚠️ Update failed, retrying in ${WAIT_TIME}s... (attempt $RETRY_COUNT/$MAX_RETRIES)"
-                sleep $WAIT_TIME
-              else
-                echo "❌ Failed to update Lambda function after $MAX_RETRIES attempts"
-                exit 1
-              fi
             fi
+            echo "⏳ Waiting... (attempt $i/30)"
+            sleep 10
           done
 
-      - name: Wait for Lambda update to complete
+          # Update Lambda with retry logic
+          update_lambda() {
+            local max_attempts=5
+            local attempt=1
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "🔄 Attempting Lambda update (attempt $attempt/$max_attempts)..."
+              
+              if aws lambda update-function-code --function-name $FUNCTION_NAME --zip-file fileb://lambda-deployment.zip; then
+                echo "✅ Lambda update successful"
+                return 0
+              else
+                echo "❌ Lambda update failed (attempt $attempt/$max_attempts)"
+                
+                if [ $attempt -lt $max_attempts ]; then
+                  echo "⏳ Waiting before retry..."
+                  sleep $((attempt * 10))
+                fi
+                
+                attempt=$((attempt + 1))
+              fi
+            done
+            
+            echo "❌ All Lambda update attempts failed"
+            return 1
+          }
+
+          update_lambda
+
+      - name: Wait for Lambda update
         run: |
-          echo "⏳ Waiting for Lambda update to complete..."
-          aws lambda wait function-updated \
-            --function-name ${{ needs.deploy-infrastructure.outputs.lambda-function }}
-
-          echo "✅ Lambda update completed successfully"
-
-          # Verify final state
-          aws lambda get-function \
-            --function-name ${{ needs.deploy-infrastructure.outputs.lambda-function }} \
-            --query 'Configuration.{State:State,UpdateStatus:LastUpdateStatus,Runtime:Runtime,LastModified:LastModified}' \
-            --output table
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+          aws lambda wait function-updated --function-name $FUNCTION_NAME
 
   # =================================
-  # Health Check and Smoke Tests
+  # Health Check
   # =================================
   health-check:
     name: Health Check
     runs-on: ubuntu-latest
-    needs: [deploy-frontend, deploy-backend, deploy-infrastructure]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [detect-environment, deploy-frontend, deploy-backend]
+    if: ${{ needs.detect-environment.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Configure AWS credentials
@@ -742,388 +548,68 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActions-HealthCheck
 
-      - name: Test API health endpoint with detailed error capture
+      - name: Get API Gateway URL
+        id: api-url
         run: |
-          API_URL="${{ needs.deploy-infrastructure.outputs.api-url }}"
-          echo "🔍 Testing API health endpoint with detailed error capture"
-          echo "================================================"
-          echo "API URL: $API_URL/health"
-          echo ""
+          API_ID=$(aws apigatewayv2 get-apis --query "Items[?Name=='${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api'].ApiId" --output text)
+          echo "api_url=https://$API_ID.execute-api.${{ env.AWS_REGION }}.amazonaws.com/v1" >> $GITHUB_OUTPUT
 
-          # Function to perform detailed health check
-          perform_health_check() {
-            local attempt=$1
-            echo "🔍 Health Check Attempt $attempt/5"
-            echo "============================="
-            
-            # Create temporary files for response capture
-            local response_body=$(mktemp)
-            local response_headers=$(mktemp)
-            
-            # Perform request with full details capture
-            local http_status=$(curl -s -w "%{http_code}" \
-              --connect-timeout 10 \
-              --max-time 30 \
-              --dump-header "$response_headers" \
-              --output "$response_body" \
-              "$API_URL/health" 2>&1)
-            
-            local curl_exit_code=$?
-            
-            echo "📊 Request Details:"
-            echo "  URL: $API_URL/health"
-            echo "  HTTP Status: $http_status"
-            echo "  Curl Exit Code: $curl_exit_code"
-            echo "  Timestamp: $(date -u)"
-            echo ""
-            
-            # Display response headers
-            echo "📋 Response Headers:"
-            echo "==================="
-            if [ -f "$response_headers" ] && [ -s "$response_headers" ]; then
-              cat "$response_headers"
-            else
-              echo "  (No headers captured)"
-            fi
-            echo ""
-            
-            # Display response body
-            echo "📄 Response Body:"
-            echo "================="
-            if [ -f "$response_body" ] && [ -s "$response_body" ]; then
-              echo "  Content Length: $(wc -c < "$response_body") bytes"
-              echo "  Raw Response:"
-              echo "  ============="
-              cat "$response_body" | head -100  # Limit to first 100 lines
-              echo ""
-              
-              # Try to pretty-print JSON if it's JSON
-              if cat "$response_body" | jq . >/dev/null 2>&1; then
-                echo "  Pretty-printed JSON:"
-                echo "  ==================="
-                cat "$response_body" | jq .
-              fi
-            else
-              echo "  (No response body captured)"
-            fi
-            echo ""
-            
-            # Analyze the result
-            if [ "$curl_exit_code" -eq 0 ] && [ "$http_status" = "200" ]; then
-              echo "✅ SUCCESS: API health check passed!"
-              cleanup_temp_files "$response_body" "$response_headers"
-              return 0
-            elif [ "$curl_exit_code" -ne 0 ]; then
-              echo "❌ CURL ERROR: Network/connection issue (exit code: $curl_exit_code)"
-              if [ "$curl_exit_code" -eq 7 ]; then
-                echo "   Failed to connect to host"
-              elif [ "$curl_exit_code" -eq 28 ]; then
-                echo "   Operation timeout"
-              elif [ "$curl_exit_code" -eq 6 ]; then
-                echo "   Couldn't resolve host"
-              fi
-            elif [ "$http_status" = "500" ]; then
-              echo "❌ HTTP 500 ERROR: Internal Server Error"
-              echo "🔍 DEBUGGING INFORMATION:"
-              echo "========================"
-              
-              # Check if it's a Lambda error
-              if grep -q "errorType\|errorMessage" "$response_body" 2>/dev/null; then
-                echo "🚨 Lambda Function Error Detected:"
-                cat "$response_body" | jq -r '.errorType // "Unknown"' 2>/dev/null || echo "  Could not parse error type"
-                echo "Error Message:"
-                cat "$response_body" | jq -r '.errorMessage // "Unknown"' 2>/dev/null || cat "$response_body"
-                echo ""
-                echo "Stack Trace:"
-                cat "$response_body" | jq -r '.trace[]? // empty' 2>/dev/null || echo "  No stack trace available"
-              fi
-              
-              # Check for common Lambda issues
-              if grep -q "Task timed out" "$response_body" 2>/dev/null; then
-                echo "⏱️ Lambda Timeout Detected"
-              elif grep -q "Runtime exited with error" "$response_body" 2>/dev/null; then
-                echo "🔥 Lambda Runtime Error Detected"
-              elif grep -q "Cannot find module" "$response_body" 2>/dev/null; then
-                echo "📦 Missing Node.js Module Detected"
-              elif grep -q "Permission denied" "$response_body" 2>/dev/null; then
-                echo "🔒 Permission Error Detected"
-              fi
-              
-            elif [ "$http_status" = "502" ]; then
-              echo "❌ HTTP 502 ERROR: Bad Gateway (API Gateway issue)"
-            elif [ "$http_status" = "503" ]; then
-              echo "❌ HTTP 503 ERROR: Service Unavailable"
-            elif [ "$http_status" = "504" ]; then
-              echo "❌ HTTP 504 ERROR: Gateway Timeout"
-            else
-              echo "❌ HTTP $http_status ERROR: Unexpected status code"
-            fi
-            
-            cleanup_temp_files "$response_body" "$response_headers"
-            return 1
-          }
+      - name: Test API health endpoint
+        run: |
+          API_URL="${{ steps.api-url.outputs.api_url }}/health"
+          echo "Testing API health endpoint: $API_URL"
 
-          # Function to cleanup temporary files
-          cleanup_temp_files() {
-            [ -f "$1" ] && rm -f "$1"
-            [ -f "$2" ] && rm -f "$2"
-          }
-
-          # Retry logic with detailed reporting
-          HEALTH_CHECK_PASSED=false
-          for i in {1..5}; do
-            echo ""
-            if perform_health_check $i; then
-              HEALTH_CHECK_PASSED=true
+          # Test with detailed error capture
+          for attempt in {1..5}; do
+            echo "🔄 Health check attempt $attempt/5..."
+            
+            # Capture full response
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME:%{time_total}" "$API_URL" 2>&1)
+            HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+            RESPONSE_TIME=$(echo "$RESPONSE" | grep "TIME:" | cut -d: -f2)
+            RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d' | sed '/TIME:/d')
+            
+            echo "Status: $HTTP_STATUS"
+            echo "Response Time: $RESPONSE_TIME seconds"
+            echo "Response Body: $RESPONSE_BODY"
+            
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Health check passed!"
               break
             else
-              if [ $i -lt 5 ]; then
-                echo "⏳ Waiting 30 seconds before next attempt..."
+              echo "❌ Health check failed (attempt $attempt/5)"
+              
+              if [ $attempt -lt 5 ]; then
+                echo "⏳ Waiting 30 seconds before retry..."
                 sleep 30
+              else
+                echo "❌ All health check attempts failed"
+                
+                # Capture CloudWatch logs for debugging
+                echo "📋 Capturing CloudWatch logs for debugging..."
+                FUNCTION_NAME="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+                
+                # Get the latest log stream
+                LOG_STREAM=$(aws logs describe-log-streams \
+                  --log-group-name "/aws/lambda/$FUNCTION_NAME" \
+                  --order-by LastEventTime \
+                  --descending \
+                  --max-items 1 \
+                  --query 'logStreams[0].logStreamName' \
+                  --output text 2>/dev/null || echo "No log streams found")
+                
+                if [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "" ]; then
+                  echo " Latest log stream: $LOG_STREAM"
+                  aws logs get-log-events \
+                    --log-group-name "/aws/lambda/$FUNCTION_NAME" \
+                    --log-stream-name "$LOG_STREAM" \
+                    --start-time $(date -d '10 minutes ago' +%s)000 \
+                    --query 'events[*].message' \
+                    --output text
+                fi
+                
+                exit 1
               fi
             fi
           done
-
-          echo ""
-          echo "🎯 Final Health Check Result:"
-          echo "============================="
-          if [ "$HEALTH_CHECK_PASSED" = "true" ]; then
-                       echo "✅ API health check PASSED after $i attempts"
-           else
-             echo "❌ API health check FAILED after 5 attempts"
-             echo "💡 Next steps for debugging:"
-             echo "  1. Check Lambda function logs in CloudWatch"
-             echo "  2. Verify Lambda function configuration"
-             echo "  3. Check API Gateway configuration"
-             echo "  4. Review Lambda deployment package"
-             exit 1
-           fi
-
-      - name: Capture Lambda function logs for debugging
-        if: failure()
-        run: |
-          echo "🔍 Capturing Comprehensive Lambda Function Analysis"
-          echo "=================================================="
-
-          LAMBDA_FUNCTION="${{ needs.deploy-infrastructure.outputs.lambda-function }}"
-          echo "Lambda Function: $LAMBDA_FUNCTION"
-          echo ""
-
-          # Get the log group name for the Lambda function
-          LOG_GROUP="/aws/lambda/$LAMBDA_FUNCTION"
-          echo "Log Group: $LOG_GROUP"
-          echo ""
-
-          # 1. ENHANCED LAMBDA CONFIGURATION ANALYSIS
-          echo "🔧 Enhanced Lambda Configuration Analysis:"
-          echo "=========================================="
-          aws lambda get-function-configuration --function-name "$LAMBDA_FUNCTION" --query '{
-            Runtime: Runtime,
-            MemorySize: MemorySize,
-            Timeout: Timeout,
-            Environment: Environment,
-            LastModified: LastModified,
-            State: State,
-            StateReason: StateReason,
-            LastUpdateStatus: LastUpdateStatus,
-            LastUpdateStatusReason: LastUpdateStatusReason,
-            CodeSize: CodeSize,
-            Layers: Layers
-          }' --output table
-          echo ""
-
-          # 2. CHECK FOR RECENT DEPLOYMENT ISSUES
-          echo "🚀 Recent Deployment Status:"
-          echo "============================="
-          aws lambda get-function --function-name "$LAMBDA_FUNCTION" --query '{
-            State: Configuration.State,
-            StateReason: Configuration.StateReason,
-            LastUpdateStatus: Configuration.LastUpdateStatus,
-            LastUpdateStatusReason: Configuration.LastUpdateStatusReason,
-            PackageType: Configuration.PackageType
-          }' --output table
-          echo ""
-
-          # 3. REAL-TIME LOG STREAMING DURING TEST
-          echo "🔄 Real-time Log Analysis During Health Check:"
-          echo "=============================================="
-
-          # Start log streaming in background
-          echo "Starting real-time log streaming..."
-          aws logs tail "$LOG_GROUP" --follow --since 1m &
-          LOG_TAIL_PID=$!
-
-          # Give logs a moment to start
-          sleep 2
-
-          # Trigger another health check to capture real-time logs
-          echo "🔍 Triggering health check while monitoring logs..."
-          API_URL="${{ needs.deploy-infrastructure.outputs.api-url }}"
-
-          curl -v "$API_URL/health" 2>&1 | tee health_check_response.log || true
-
-          # Stop log streaming
-          sleep 5
-          kill $LOG_TAIL_PID 2>/dev/null || true
-          echo ""
-
-          # 4. DETAILED LOG ANALYSIS
-          echo "📄 Detailed CloudWatch Log Analysis:"
-          echo "===================================="
-
-          # Check if log group exists
-          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP"; then
-            echo "✅ Log group found: $LOG_GROUP"
-            echo ""
-            
-            # Get recent log streams (last 1 hour)
-            echo "📋 Recent Log Streams:"
-            echo "====================="
-            RECENT_STREAMS=$(aws logs describe-log-streams \
-              --log-group-name "$LOG_GROUP" \
-              --order-by LastEventTime \
-              --descending \
-              --max-items 5 \
-              --query 'logStreams[].{streamName:logStreamName,lastEvent:lastEventTime}' \
-              --output table)
-            echo "$RECENT_STREAMS"
-            echo ""
-            
-            # Get the most recent log stream
-            LATEST_STREAM=$(aws logs describe-log-streams \
-              --log-group-name "$LOG_GROUP" \
-              --order-by LastEventTime \
-              --descending \
-              --max-items 1 \
-              --query 'logStreams[0].logStreamName' \
-              --output text)
-            
-            if [ "$LATEST_STREAM" != "None" ] && [ -n "$LATEST_STREAM" ]; then
-              echo "🔍 Latest Log Stream: $LATEST_STREAM"
-              echo ""
-              
-              # Get recent log events (last 10 minutes for more detailed capture)
-              echo "📄 Recent Log Events (last 10 minutes):"
-              echo "======================================="
-              
-              # Calculate timestamp for 10 minutes ago
-              TEN_MIN_AGO=$(date -d '10 minutes ago' +%s)000  # CloudWatch expects milliseconds
-              
-              aws logs get-log-events \
-                --log-group-name "$LOG_GROUP" \
-                --log-stream-name "$LATEST_STREAM" \
-                --start-time "$TEN_MIN_AGO" \
-                --query 'events[].[timestamp,message]' \
-                --output text | while IFS=$'\t' read -r timestamp message; do
-                  # Convert timestamp to human readable
-                  readable_time=$(date -d "@$((timestamp/1000))" "+%Y-%m-%d %H:%M:%S UTC")
-                  echo "[$readable_time] $message"
-                done
-              
-              echo ""
-              echo "🚨 Error Analysis - Filtering for Lambda Issues:"
-              echo "==============================================="
-              
-              # Enhanced error filtering
-              aws logs get-log-events \
-                --log-group-name "$LOG_GROUP" \
-                --log-stream-name "$LATEST_STREAM" \
-                --start-time "$TEN_MIN_AGO" \
-                --output text | grep -i -E "(error|exception|fail|timeout|crash|unable|cannot|denied|invalid|missing|undefined|null|task timed out|runtime|cold start|init|start)" || echo "No obvious error patterns found"
-              
-              echo ""
-              echo "🔍 Lambda Lifecycle Events:"
-              echo "============================"
-              
-              # Look for Lambda lifecycle events
-              aws logs get-log-events \
-                --log-group-name "$LOG_GROUP" \
-                --log-stream-name "$LATEST_STREAM" \
-                --start-time "$TEN_MIN_AGO" \
-                --output text | grep -i -E "(start|init|cold|warm|duration|billed|memory|report)" || echo "No Lambda lifecycle events found"
-              
-            else
-              echo "❌ No log streams found in $LOG_GROUP"
-            fi
-            
-          else
-            echo "❌ Log group not found: $LOG_GROUP"
-            echo "🔍 Available log groups matching pattern:"
-            aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/" --query 'logGroups[].[logGroupName]' --output text
-          fi
-
-          # 5. ENVIRONMENT AND DEPENDENCY CHECK
-          echo ""
-          echo "🔧 Lambda Environment & Dependencies Analysis:"
-          echo "=============================================="
-
-          # Try to invoke Lambda directly to get more info
-          echo "🔍 Direct Lambda Invocation Test:"
-
-          # Create simple test payload (skip complex JSON to avoid YAML issues)
-          echo "Testing Lambda function directly with minimal payload..."
-          aws lambda invoke \
-            --function-name "$LAMBDA_FUNCTION" \
-            --payload '{}' \
-            --cli-read-timeout 30 \
-            lambda_test_response.json
-
-          echo "Lambda Response:"
-          cat lambda_test_response.json 2>/dev/null | jq . || cat lambda_test_response.json 2>/dev/null
-
-          echo ""
-          echo "🔍 API Gateway Information:"
-          echo "=========================="
-          # Try to find the API Gateway associated with the Lambda
-          API_ID=$(aws apigatewayv2 get-apis --query 'Items[?Name==`hibiji-api`].ApiId' --output text)
-          if [ "$API_ID" != "None" ] && [ -n "$API_ID" ]; then
-            echo "API Gateway ID: $API_ID"
-            aws apigatewayv2 get-api --api-id "$API_ID" --output table
-            
-            echo ""
-            echo "API Gateway Routes:"
-            aws apigatewayv2 get-routes --api-id "$API_ID" --output table
-          else
-            echo "API Gateway not found or not accessible"
-          fi
-
-      - name: Test website availability
-        run: |
-          # Get website URL from CloudFront distribution
-          BUCKET_NAME="${{ needs.deploy-infrastructure.outputs.website-bucket }}"
-          WEBSITE_URL=$(aws cloudfront list-distributions \
-            --query "DistributionList.Items[?Comment=='$BUCKET_NAME'].DomainName" \
-            --output text)
-
-          if [ ! -z "$WEBSITE_URL" ]; then
-            echo "Testing website at: https://$WEBSITE_URL"
-            if curl -f "https://$WEBSITE_URL"; then
-              echo "✅ Website health check passed"
-            else
-              echo "❌ Website health check failed"
-              exit 1
-            fi
-          fi
-
-  # =================================
-  # Notification
-  # =================================
-  notify-deployment:
-    name: Notify Deployment
-    runs-on: ubuntu-latest
-    needs: [health-check, deploy-infrastructure]
-    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-    steps:
-      - name: Deployment notification
-        run: |
-          if [[ "${{ needs.health-check.result }}" == "success" ]]; then
-            echo "🎉 Serverless deployment completed successfully!"
-            echo "Frontend: Available via CloudFront"
-            echo "API: ${{ needs.deploy-infrastructure.outputs.api-url }}"
-          else
-            echo "❌ Deployment failed or health checks did not pass"
-            exit 1
-          fi
