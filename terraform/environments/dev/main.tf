@@ -83,14 +83,12 @@ locals {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-# Route53 hosted zone (create if doesn't exist)
-resource "aws_route53_zone" "main" {
-  name = var.domain_name
-
-  tags = merge(local.common_tags, {
-    Name = "Primary DNS Zone"
-    Type = "Route53HostedZone"
-  })
+# Route53 hosted zone (reference existing shared zone)
+# NOTE: Use data source to reference the shared hosted zone
+# The actual hosted zone should be managed separately or in a shared environment
+data "aws_route53_zone" "main" {
+  name         = var.domain_name
+  private_zone = false
 }
 
 # =================================
@@ -424,27 +422,32 @@ module "api_gateway" {
 # Route53 Records (Custom Domains)
 # =================================
 
-# Website CNAME record pointing to CloudFront
-# Temporarily commented out since hosted zone was deleted
-# TODO: Recreate hosted zone or use alternative DNS management
-# resource "aws_route53_record" "website" {
-#   zone_id = data.aws_route53_zone.main.zone_id
-#   name    = local.website_domain
-#   type    = "CNAME"
-#   ttl     = 300
-#   records = [module.s3_website.cloudfront_domain_name]
-# }
+# DNS Records for this sub-environment
+resource "aws_route53_record" "website" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = local.website_domain  # dev01.hibiji.com
+  type    = "CNAME"
+  ttl     = 300
+  records = [module.s3_website.cloudfront_domain_name]
 
-# API CNAME record pointing to API Gateway 
-# Temporarily commented out due to existing DNS record conflict
-# TODO: Import existing dev01-api.hibiji.com CNAME record into Terraform state
-# resource "aws_route53_record" "api" {
-#   zone_id = data.aws_route53_zone.main.zone_id
-#   name    = local.api_domain
-#   type    = "CNAME"
-#   ttl     = 300
-#   records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
-# }
+  tags = merge(local.common_tags, {
+    Name = "Website DNS Record"
+    Type = "Route53Record"
+  })
+}
+
+resource "aws_route53_record" "api" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = local.api_domain  # dev01-api.hibiji.com
+  type    = "CNAME"
+  ttl     = 300
+  records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
+
+  tags = merge(local.common_tags, {
+    Name = "API DNS Record"
+    Type = "Route53Record"
+  })
+}
 
 # =================================
 # ECS Infrastructure
