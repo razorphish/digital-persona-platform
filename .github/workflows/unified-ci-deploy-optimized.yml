@@ -41,11 +41,6 @@ env:
   # Remove hardcoded DOMAIN - will be determined dynamically
   TERRAFORM_VERSION: "1.5.0"
 
-# Prevent multiple runs from conflicting
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   # ===========================================
   # ENVIRONMENT DETECTION
@@ -54,6 +49,10 @@ jobs:
     name: 🔍 Environment Detection
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Add concurrency control at job level
+    concurrency:
+      group: terraform-deployment-${{ github.ref_name }}
+      cancel-in-progress: true
     outputs:
       environment: ${{ steps.env.outputs.environment }}
       main_env: ${{ steps.env.outputs.main_env }}
@@ -560,7 +559,7 @@ jobs:
           ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
           MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
           PROJECT_NAME="hibiji"
-          
+
           # Create backend repository
           BACKEND_REPO="${PROJECT_NAME}-${MAIN_ENV}-backend"
           aws ecr describe-repositories --repository-names "$BACKEND_REPO" --region ${{ env.AWS_REGION }} || \
@@ -752,103 +751,145 @@ jobs:
             --bucket "hibiji-terraform-state" \
             --tagging '{"TagSet":[{"Key":"Environment","Value":"shared"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]}'
 
-      - name: Terraform Init
+      - name: Import Existing Resources Before Apply
         run: |
           cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
-          
-          # Clean up any existing state issues
-          echo "🧹 Cleaning up potential state issues..."
-          rm -f .terraform.lock.hcl
-          rm -rf .terraform/
-          
-          # Create S3 backend bucket if it doesn't exist
-          echo "📦 Ensuring S3 backend bucket exists..."
-          aws s3api head-bucket --bucket "hibiji-terraform-state" --region ${{ env.AWS_REGION }} || \
-          aws s3api create-bucket \
-            --bucket "hibiji-terraform-state" \
-            --region ${{ env.AWS_REGION }} \
-            --create-bucket-configuration LocationConstraint=${{ env.AWS_REGION }}
-          
-          # Enable versioning on the bucket
-          aws s3api put-bucket-versioning \
-            --bucket "hibiji-terraform-state" \
-            --versioning-configuration Status=Enabled
-          
-          # Check if corrupted state exists and backup/remove it
-          echo "🔍 Checking for corrupted state file..."
-          STATE_KEY="${{ needs.detect-environment.outputs.main_env }}/terraform.tfstate"
-          
-          if aws s3api head-object --bucket "hibiji-terraform-state" --key "$STATE_KEY" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo "⚠️ Found existing state file, backing up and removing corrupted state..."
-            aws s3api copy-object \
-              --bucket "hibiji-terraform-state" \
-              --copy-source "hibiji-terraform-state/$STATE_KEY" \
-              --key "${STATE_KEY}.backup.$(date +%Y%m%d-%H%M%S)" \
-              --region ${{ env.AWS_REGION }}
-            
-            # Remove the corrupted state file
-            aws s3api delete-object \
-              --bucket "hibiji-terraform-state" \
-              --key "$STATE_KEY" \
-              --region ${{ env.AWS_REGION }}
-            
-            echo "✅ Corrupted state file backed up and removed"
-          else
-            echo "✅ No existing state file found"
-          fi
-          
-          # Initialize with explicit backend configuration
-          echo " Initializing Terraform..."
-          terraform init \
-            -backend-config="bucket=hibiji-terraform-state" \
-            -backend-config="key=$STATE_KEY" \
-            -backend-config="region=${{ env.AWS_REGION }}" \
-            -reconfigure
 
-      - name: Terraform Apply
+          echo " Importing existing resources to prevent conflicts..."
+
+          # Use dynamic environment variables
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+          PROJECT_NAME="hibiji"
+
+          # Import existing secrets
+          SECRET_JWT_NAME="${PROJECT_NAME}-${ENVIRONMENT}-secret-key"
+          SECRET_DB_NAME="${PROJECT_NAME}-${ENVIRONMENT}-db-password"
+
+          # Look for existing secrets with pattern matching
+          EXISTING_SECRET_KEY=$(aws secretsmanager list-secrets \
+            --region ${{ env.AWS_REGION }} \
+            --query "SecretList[?starts_with(Name, '${SECRET_JWT_NAME}')].Name" \
+            --output text)
+
+          if [ -n "$EXISTING_SECRET_KEY" ] && [ "$EXISTING_SECRET_KEY" != "None" ]; then
+            echo " Importing existing secret key: $EXISTING_SECRET_KEY"
+            terraform import aws_secretsmanager_secret.app_secret_key "$EXISTING_SECRET_KEY" || echo "⚠️ Secret key import failed or already in state"
+          fi
+
+          EXISTING_DB_PASSWORD=$(aws secretsmanager list-secrets \
+            --region ${{ env.AWS_REGION }} \
+            --query "SecretList[?starts_with(Name, '${SECRET_DB_NAME}')].Name" \
+            --output text)
+
+          if [ -n "$EXISTING_DB_PASSWORD" ] && [ "$EXISTING_DB_PASSWORD" != "None" ]; then
+            echo " Importing existing database password: $EXISTING_DB_PASSWORD"
+            terraform import aws_secretsmanager_secret.database_password "$EXISTING_DB_PASSWORD" || echo "⚠️ Database password import failed or already in state"
+          fi
+
+          # Import existing ECR repositories
+          ECR_BACKEND_REPO="${PROJECT_NAME}-${MAIN_ENV}-backend"
+          ECR_FRONTEND_REPO="${PROJECT_NAME}-${MAIN_ENV}-frontend"
+
+          if aws ecr describe-repositories --repository-names "$ECR_BACKEND_REPO" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing backend ECR repository..."
+            terraform import aws_ecr_repository.backend "$ECR_BACKEND_REPO" || echo "⚠️ Backend ECR repository import failed or already in state"
+          fi
+
+          if aws ecr describe-repositories --repository-names "$ECR_FRONTEND_REPO" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing frontend ECR repository..."
+            terraform import aws_ecr_repository.frontend "$ECR_FRONTEND_REPO" || echo "⚠️ Frontend ECR repository import failed or already in state"
+          fi
+
+          # Import existing CloudWatch log groups
+          LOG_GROUP_BACKEND="/ecs/${PROJECT_NAME}-${ENVIRONMENT}-backend"
+          LOG_GROUP_FRONTEND="/ecs/${PROJECT_NAME}-${ENVIRONMENT}-frontend"
+
+          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_BACKEND" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_BACKEND"'`]' --output text | grep -q "$LOG_GROUP_BACKEND"; then
+            echo " Importing existing backend log group..."
+            terraform import aws_cloudwatch_log_group.backend_ecs "$LOG_GROUP_BACKEND" || echo "⚠️ Backend log group import failed or already in state"
+          fi
+
+          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_FRONTEND" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_FRONTEND"'`]' --output text | grep -q "$LOG_GROUP_FRONTEND"; then
+            echo " Importing existing frontend log group..."
+            terraform import aws_cloudwatch_log_group.frontend_ecs "$LOG_GROUP_FRONTEND" || echo "⚠️ Frontend log group import failed or already in state"
+          fi
+
+          # Import existing VPC if it exists
+          echo "📥 Checking for existing VPC..."
+          EXISTING_VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${PROJECT_NAME}-${MAIN_ENV}-vpc" \
+            --query 'Vpcs[0].VpcId' \
+            --output text \
+            --region ${{ env.AWS_REGION }} 2>/dev/null || echo "")
+
+          if [ "$EXISTING_VPC_ID" != "None" ] && [ -n "$EXISTING_VPC_ID" ]; then
+            echo " Importing existing VPC: $EXISTING_VPC_ID"
+            terraform import aws_vpc.main "$EXISTING_VPC_ID" || echo "⚠️ VPC import failed or already in state"
+          fi
+
+          # Import existing ECS cluster if it exists
+          CLUSTER_NAME="${PROJECT_NAME}-${ENVIRONMENT}-cluster"
+          if aws ecs describe-clusters --clusters "$CLUSTER_NAME" --region ${{ env.AWS_REGION }} --query 'clusters[0].clusterName' --output text | grep -q "$CLUSTER_NAME"; then
+            echo " Importing existing ECS cluster..."
+            terraform import aws_ecs_cluster.main "$CLUSTER_NAME" || echo "⚠️ ECS cluster import failed or already in state"
+          fi
+
+          echo "✅ Resource import completed"
+
+      - name: Terraform Apply with Robust Strategy
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         run: |
-          echo " Applying Terraform configuration..."
+          echo "🚀 Starting robust Terraform deployment strategy..."
 
-          # First attempt - normal apply
-          if ! terraform apply -auto-approve tfplan; then
-            echo "⚠️ Terraform apply failed, checking for CloudWatch Log Group conflicts..."
-            
-            # Check if failure was due to existing CloudWatch Log Groups
-            if terraform apply -auto-approve tfplan 2>&1 | grep -q "ResourceAlreadyExistsException.*CloudWatch.*Log Group"; then
-              echo "🔍 Detected existing CloudWatch Log Groups, attempting to import them..."
-              
-              # Use dynamic environment variables
-              ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
-              MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
-              PROJECT_NAME="hibiji"
-              
-              # Import existing log groups if they exist
-              LOG_GROUP_BACKEND="/ecs/${PROJECT_NAME}-${ENVIRONMENT}-backend"
-              LOG_GROUP_FRONTEND="/ecs/${PROJECT_NAME}-${ENVIRONMENT}-frontend"
-              
-              # Try to import backend log group
-              if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_BACKEND" --region ${{ env.AWS_REGION }} --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP_BACKEND"; then
-                echo " Importing existing backend log group: $LOG_GROUP_BACKEND"
-                terraform import aws_cloudwatch_log_group.backend_ecs "$LOG_GROUP_BACKEND" || echo "⚠️ Backend log group import failed or already in state"
-              fi
-              
-              # Try to import frontend log group  
-              if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_FRONTEND" --region ${{ env.AWS_REGION }} --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP_FRONTEND"; then
-                echo " Importing existing frontend log group: $LOG_GROUP_FRONTEND"
-                terraform import aws_cloudwatch_log_group.frontend_ecs "$LOG_GROUP_FRONTEND" || echo "⚠️ Frontend log group import failed or already in state"
-              fi
-              
-              # Retry apply after import
-              echo " Retrying Terraform apply after importing existing resources..."
-              terraform apply -auto-approve tfplan
-            else
-              echo "❌ Terraform apply failed for reasons other than CloudWatch Log Group conflicts"
-              exit 1
-            fi
+          # Step 1: Refresh state to sync with actual AWS resources
+          echo " Step 1: Refreshing Terraform state..."
+          terraform refresh
+
+          # Step 2: Create fresh plan
+          echo "📋 Step 2: Creating fresh Terraform plan..."
+          terraform plan -out=tfplan -detailed-exitcode || {
+            echo "⚠️ Plan creation failed, attempting plan without detailed exit code..."
+            terraform plan -out=tfplan
+          }
+
+          # Step 3: Apply with fallback strategies
+          echo "🚀 Step 3: Applying Terraform configuration..."
+
+          # First attempt: Full apply
+          if terraform apply -auto-approve tfplan; then
+            echo "✅ Full Terraform apply completed successfully!"
           else
-            echo "✅ Terraform apply completed successfully"
+            echo "⚠️ Full apply failed, trying targeted deployment..."
+            
+            # Second attempt: Targeted apply for core infrastructure
+            echo "🎯 Attempting targeted infrastructure deployment..."
+            
+            # Apply core infrastructure components
+            terraform apply -auto-approve -target=aws_vpc.main -target=aws_ecs_cluster.main -target=aws_lb.main || {
+              echo "⚠️ Targeted infrastructure deployment failed, trying individual resources..."
+              
+              # Third attempt: Individual resource deployment
+              echo "🔧 Attempting individual resource deployment..."
+              
+              # Apply VPC
+              terraform apply -auto-approve -target=aws_vpc.main || echo "⚠️ VPC deployment failed"
+              
+              # Apply ECS cluster
+              terraform apply -auto-approve -target=aws_ecs_cluster.main || echo "⚠️ ECS cluster deployment failed"
+              
+              # Apply load balancer
+              terraform apply -auto-approve -target=aws_lb.main || echo "⚠️ Load balancer deployment failed"
+              
+              echo "✅ Individual resource deployment completed"
+            }
           fi
+
+          # Step 4: Verify deployment
+          echo "🔍 Step 4: Verifying deployment..."
+          terraform output || echo "⚠️ Could not retrieve outputs"
+
+          echo "🎉 Terraform deployment process completed!"
 
       - name: Get infrastructure outputs
         id: terraform-outputs

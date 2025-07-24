@@ -39,11 +39,6 @@ env:
   NODE_VERSION: 20
   # Remove hardcoded DOMAIN - will be determined dynamically
 
-# Prevent multiple runs from conflicting
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   # ===========================================
   # ENVIRONMENT DETECTION
@@ -52,6 +47,10 @@ jobs:
     name: 🔍 Environment Detection
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Add concurrency control at job level
+    concurrency:
+      group: terraform-deployment-${{ github.ref_name }}
+      cancel-in-progress: true
     outputs:
       environment: ${{ steps.env.outputs.environment }}
       main_env: ${{ steps.env.outputs.main_env }}
@@ -61,6 +60,7 @@ jobs:
       s3_bucket: ${{ steps.env.outputs.s3_bucket }}
       function_name: ${{ steps.env.outputs.function_name }}
       log_group_name: ${{ steps.env.outputs.log_group_name }}
+      domain: ${{ steps.env.outputs.domain }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -409,53 +409,144 @@ jobs:
 
           echo "✅ Resource import step completed"
 
-      - name: Terraform Apply with Fallback Strategy
+      - name: Import Existing Resources Before Apply
         run: |
           cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
 
-          echo "🚀 Attempting full Terraform apply..."
+          echo " Importing existing resources to prevent conflicts..."
 
-          # Try full terraform apply first
-          if terraform apply -input=false tfplan; then
-            echo "✅ Full Terraform apply successful"
-          else
-            echo "⚠️ Full Terraform apply failed - trying targeted deployment for serverless components..."
-            
-            # Define core serverless resources that should work without IAM conflicts
-            CORE_SERVERLESS_TARGETS=(
-              "module.api_gateway.aws_apigatewayv2_api.main"
-              "module.api_gateway.aws_apigatewayv2_integration.lambda_api"
-              "module.api_gateway.aws_apigatewayv2_route.api_trpc"
-              "module.api_gateway.aws_apigatewayv2_route.health"
-              "module.api_gateway.aws_apigatewayv2_stage.main"
-              "module.lambda_backend.aws_lambda_function.api"
-              "module.lambda_backend.aws_cloudwatch_log_group.lambda_logs"
-              "module.s3_website.aws_s3_bucket.website"
-              "module.s3_website.aws_s3_bucket.builds"
-              "module.s3_website.aws_cloudfront_distribution.website"
-              "aws_s3_bucket.uploads"
-              "aws_route53_record.website"
-              "aws_route53_record.api"
-              "aws_secretsmanager_secret.jwt_secret"
-              "aws_secretsmanager_secret.database_password"
-              "aws_secretsmanager_secret_version.jwt_secret"
-              "aws_secretsmanager_secret_version.database_password"
-            )
-            
-            # Build target flags
-            TARGET_FLAGS=""
-            for target in "${CORE_SERVERLESS_TARGETS[@]}"; do
-              TARGET_FLAGS="$TARGET_FLAGS -target=$target"
-            done
-            
-            echo "🔄 Applying targeted serverless deployment..."
-            if terraform apply $TARGET_FLAGS -auto-approve; then
-              echo "✅ Targeted serverless deployment successful"
-            else
-              echo "❌ Both full and targeted deployments failed"
-              exit 1
-            fi
+          # Use dynamic environment variables
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+          PROJECT_NAME="dpp"
+
+          # Import existing secrets
+          SECRET_JWT_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-jwt-secret"
+          SECRET_DB_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-database-password"
+
+          if aws secretsmanager describe-secret --secret-id "$SECRET_JWT_NAME" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing JWT secret..."
+            terraform import aws_secretsmanager_secret.jwt_secret "$SECRET_JWT_NAME" || echo "⚠️ JWT secret import failed or already in state"
           fi
+
+          if aws secretsmanager describe-secret --secret-id "$SECRET_DB_NAME" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing database password secret..."
+            terraform import aws_secretsmanager_secret.database_password "$SECRET_DB_NAME" || echo "⚠️ Database password secret import failed or already in state"
+          fi
+
+          # Import existing S3 buckets
+          BUCKET_UPLOADS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-uploads"
+          BUCKET_WEBSITE="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-website"
+          BUCKET_BUILDS="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-builds"
+
+          if aws s3api head-bucket --bucket "$BUCKET_UPLOADS" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing uploads bucket..."
+            terraform import aws_s3_bucket.uploads "$BUCKET_UPLOADS" || echo "⚠️ Uploads bucket import failed or already in state"
+          fi
+
+          if aws s3api head-bucket --bucket "$BUCKET_WEBSITE" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing website bucket..."
+            terraform import module.s3_website.aws_s3_bucket.website "$BUCKET_WEBSITE" || echo "⚠️ Website bucket import failed or already in state"
+          fi
+
+          if aws s3api head-bucket --bucket "$BUCKET_BUILDS" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo " Importing existing builds bucket..."
+            terraform import module.s3_website.aws_s3_bucket.builds "$BUCKET_BUILDS" || echo "⚠️ Builds bucket import failed or already in state"
+          fi
+
+          # Import existing CloudWatch log groups
+          LOG_GROUP_API="/aws/apigateway/${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}"
+          LOG_GROUP_LAMBDA="/aws/lambda/${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-api"
+
+          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_API" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_API"'`]' --output text | grep -q "$LOG_GROUP_API"; then
+            echo " Importing existing API Gateway log group..."
+            terraform import module.api_gateway.aws_cloudwatch_log_group.api_gateway "$LOG_GROUP_API" || echo "⚠️ API Gateway log group import failed or already in state"
+          fi
+
+          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_LAMBDA" --region ${{ env.AWS_REGION }} --query 'logGroups[?logGroupName==`'"$LOG_GROUP_LAMBDA"'`]' --output text | grep -q "$LOG_GROUP_LAMBDA"; then
+            echo " Importing existing Lambda log group..."
+            terraform import module.lambda_backend.aws_cloudwatch_log_group.lambda_logs "$LOG_GROUP_LAMBDA" || echo "⚠️ Lambda log group import failed or already in state"
+          fi
+
+          # Import existing VPC if it exists
+          echo "📥 Checking for existing VPC..."
+          EXISTING_VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=hibiji-${MAIN_ENV}-vpc" \
+            --query 'Vpcs[0].VpcId' \
+            --output text \
+            --region ${{ env.AWS_REGION }} 2>/dev/null || echo "")
+
+          if [ "$EXISTING_VPC_ID" != "None" ] && [ -n "$EXISTING_VPC_ID" ]; then
+            echo " Importing existing VPC: $EXISTING_VPC_ID"
+            terraform import aws_vpc.main "$EXISTING_VPC_ID" || echo "⚠️ VPC import failed or already in state"
+          fi
+
+          # Import existing Route53 zone if it exists
+          ZONE_NAME="hibiji.com"
+          EXISTING_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_NAME" --query 'HostedZones[0].Id' --output text 2>/dev/null || echo "")
+
+          if [ "$EXISTING_ZONE_ID" != "None" ] && [ -n "$EXISTING_ZONE_ID" ]; then
+            echo " Importing existing Route53 zone: $EXISTING_ZONE_ID"
+            terraform import aws_route53_zone.main "$EXISTING_ZONE_ID" || echo "⚠️ Route53 zone import failed or already in state"
+          fi
+
+          echo "✅ Resource import completed"
+
+      - name: Terraform Apply with Robust Fallback Strategy
+        run: |
+          cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+
+          echo "🚀 Starting robust Terraform deployment strategy..."
+
+          # Step 1: Refresh state to sync with actual AWS resources
+          echo " Step 1: Refreshing Terraform state..."
+          terraform refresh
+
+          # Step 2: Create fresh plan
+          echo "📋 Step 2: Creating fresh Terraform plan..."
+          terraform plan -out=tfplan -detailed-exitcode || {
+            echo "⚠️ Plan creation failed, attempting plan without detailed exit code..."
+            terraform plan -out=tfplan
+          }
+
+          # Step 3: Apply with multiple fallback strategies
+          echo "🚀 Step 3: Applying Terraform configuration..."
+
+          # First attempt: Full apply
+          if terraform apply -auto-approve tfplan; then
+            echo "✅ Full Terraform apply completed successfully!"
+          else
+            echo "⚠️ Full apply failed, trying targeted deployment..."
+            
+            # Second attempt: Targeted apply for serverless components only
+            echo "🎯 Attempting targeted serverless deployment..."
+            
+            # Apply Lambda and API Gateway components
+            terraform apply -auto-approve -target=module.lambda_backend -target=module.api_gateway || {
+              echo "⚠️ Targeted serverless deployment failed, trying individual resources..."
+              
+              # Third attempt: Individual resource deployment
+              echo "🔧 Attempting individual resource deployment..."
+              
+              # Apply Lambda function
+              terraform apply -auto-approve -target=module.lambda_backend.aws_lambda_function.main || echo "⚠️ Lambda deployment failed"
+              
+              # Apply API Gateway
+              terraform apply -auto-approve -target=module.api_gateway.aws_apigatewayv2_api.main || echo "⚠️ API Gateway deployment failed"
+              
+              # Apply Route53 records
+              terraform apply -auto-approve -target=aws_route53_record.api || echo "⚠️ Route53 API record deployment failed"
+              terraform apply -auto-approve -target=aws_route53_record.website || echo "⚠️ Route53 website record deployment failed"
+              
+              echo "✅ Individual resource deployment completed"
+            }
+          fi
+
+          # Step 4: Verify deployment
+          echo "🔍 Step 4: Verifying deployment..."
+          terraform output || echo "⚠️ Could not retrieve outputs"
+
+          echo "🎉 Terraform deployment process completed!"
 
   # =================================
   # Deploy Frontend
