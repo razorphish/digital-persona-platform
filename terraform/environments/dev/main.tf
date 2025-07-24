@@ -61,6 +61,37 @@ variable "project_name" {
   default     = "dpp"
 }
 
+# Legacy variables (not used in serverless architecture but kept for compatibility)
+variable "ecr_repository_url" {
+  description = "ECR repository URL for backend (legacy - not used in serverless)"
+  type        = string
+  default     = ""
+}
+
+variable "frontend_ecr_repository_url" {
+  description = "ECR repository URL for frontend (legacy - not used in serverless)"
+  type        = string
+  default     = ""
+}
+
+variable "image_tag" {
+  description = "Image tag (legacy - not used in serverless)"
+  type        = string
+  default     = "latest"
+}
+
+variable "frontend_image_tag" {
+  description = "Frontend image tag (legacy - not used in serverless)"
+  type        = string
+  default     = "latest"
+}
+
+variable "alert_emails" {
+  description = "Email addresses for cost monitoring alerts"
+  type        = list(string)
+  default     = []
+}
+
 # Local values
 locals {
   resource_prefix = "${var.environment}-${var.sub_environment}-${var.project_name}"
@@ -83,12 +114,15 @@ locals {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-# Route53 hosted zone (reference existing shared zone)
-# NOTE: Use data source to reference the shared hosted zone
-# The actual hosted zone should be managed separately or in a shared environment
-data "aws_route53_zone" "main" {
-  name         = var.domain_name
-  private_zone = false
+# Route53 hosted zone (create for dev environment)
+# TODO: In production, this should be managed in a shared/global environment
+resource "aws_route53_zone" "main" {
+  name = var.domain_name
+
+  tags = merge(local.common_tags, {
+    Name = "Primary DNS Zone"
+    Type = "Route53HostedZone"
+  })
 }
 
 # =================================
@@ -424,29 +458,19 @@ module "api_gateway" {
 
 # DNS Records for this sub-environment
 resource "aws_route53_record" "website" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = aws_route53_zone.main.zone_id
   name    = local.website_domain  # dev01.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [module.s3_website.cloudfront_domain_name]
-
-  tags = merge(local.common_tags, {
-    Name = "Website DNS Record"
-    Type = "Route53Record"
-  })
 }
 
 resource "aws_route53_record" "api" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = aws_route53_zone.main.zone_id
   name    = local.api_domain  # dev01-api.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
-
-  tags = merge(local.common_tags, {
-    Name = "API DNS Record"
-    Type = "Route53Record"
-  })
 }
 
 # =================================
