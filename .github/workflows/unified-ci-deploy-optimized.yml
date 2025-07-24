@@ -98,7 +98,7 @@ jobs:
             IS_NUMBERED_ENV="true"
           else
             echo "❌ Invalid branch name: ${{ github.ref_name }}"
-            echo "❌ Only these formats are allowed: dev##, qa##, staging##, hotfix##, main"
+            echo "Valid branches: main, dev01-dev99, qa01-qa99, staging01-staging99, hotfix01-hotfix99"
             exit 1
           fi
 
@@ -115,16 +115,16 @@ jobs:
           echo "ecr_registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
 
           echo "🎯 Environment: $ENVIRONMENT"
-          echo "🏗️  Main Environment: $MAIN_ENV"
-          echo "🚀 Should Deploy: $SHOULD_DEPLOY"
-          echo "🔗 ECR Registry: $ECR_REGISTRY"
+          echo "️  Main Environment: $MAIN_ENV"
+          echo " Should Deploy: $SHOULD_DEPLOY"
+          echo " ECR Registry: $ECR_REGISTRY"
 
   # ===========================================
   # PARALLEL CI PHASE (All run simultaneously)
   # ===========================================
 
   security-scan:
-    name: 🛡️ Security Scan
+    name: ️ Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event.inputs.skip_tests != 'true'
@@ -214,7 +214,7 @@ jobs:
           echo "   - Job logs: Expand steps above for details"
 
   backend-tests:
-    name: 🐍 Backend Tests (${{ matrix.python-version }})
+    name: Backend Tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event.inputs.skip_tests != 'true'
@@ -254,14 +254,72 @@ jobs:
         run: |
           python -m pytest tests/ -v --cov=app --cov-report=xml
 
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+      - name: Upload coverage reports (with retry)
         if: always()
-        with:
-          file: ./coverage.xml
-          flags: backend
-          name: backend-coverage
-          fail_ci_if_error: false
+        run: |
+          echo "📊 Attempting to upload coverage reports to Codecov..."
+
+          # Function to upload with retry logic
+          upload_coverage() {
+            local max_attempts=3
+            local attempt=1
+            local wait_time=10
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "🔄 Upload attempt $attempt/$max_attempts..."
+              
+              # Check if coverage file exists
+              if [ ! -f "./coverage.xml" ]; then
+                echo "⚠️ Coverage file not found, skipping upload"
+                return 0
+              fi
+              
+              # Try to upload using curl with timeout and retry
+              if curl --max-time 60 --retry 3 --retry-delay 5 \
+                --retry-max-time 300 \
+                --data-binary @./coverage.xml \
+                -H "Content-Type: text/xml" \
+                -H "X-Codecov-Token: ${{ secrets.CODECOV_TOKEN }}" \
+                -H "X-Reduced-Redundancy: false" \
+                -H "X-Reported-Job-Id: ${{ github.run_id }}" \
+                -H "X-Reported-Build-Id: ${{ github.run_id }}" \
+                -H "X-Reported-Build-Number: ${{ github.run_number }}" \
+                -H "X-Reported-Branch: ${{ github.ref_name }}" \
+                -H "X-Reported-Commit-Sha: ${{ github.sha }}" \
+                -H "X-Reported-Pull-Request: ${{ github.event.pull_request.number || '' }}" \
+                -H "X-Reported-Job-Name: backend-coverage" \
+                -H "X-Reported-Flags: backend" \
+                "https://codecov.io/upload/v2" > /tmp/codecov_response.json 2>/tmp/codecov_error.log; then
+                
+                echo "✅ Coverage upload successful!"
+                cat /tmp/codecov_response.json
+                return 0
+              else
+                echo "❌ Upload failed (attempt $attempt/$max_attempts)"
+                echo "Error log:"
+                cat /tmp/codecov_error.log
+                
+                if [ $attempt -lt $max_attempts ]; then
+                  echo "⏳ Waiting $wait_time seconds before retry..."
+                  sleep $wait_time
+                  wait_time=$((wait_time * 2))  # Exponential backoff
+                fi
+                
+                attempt=$((attempt + 1))
+              fi
+            done
+            
+            echo "❌ All upload attempts failed"
+            return 1
+          }
+
+          # Attempt upload
+          if upload_coverage; then
+            echo "✅ Coverage upload completed successfully"
+          else
+            echo "⚠️ Coverage upload failed, but continuing workflow"
+            echo "This is a non-critical failure and won't block the deployment"
+          fi
 
   frontend-tests:
     name: ⚛️ Frontend Tests
@@ -311,14 +369,77 @@ jobs:
           echo "🔧 Running isolated type checking on src directory only..."
           npx tsc --noEmit --skipLibCheck src/**/*.ts src/**/*.tsx || echo "⚠️ Type checking failed, continuing..."
 
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+      - name: Upload coverage reports (with retry)
         if: always() && steps.check-tests.outputs.has_tests == 'true'
-        with:
-          directory: ./apps/web/coverage
-          flags: frontend
-          name: frontend-coverage
-          fail_ci_if_error: false
+        run: |
+          echo "📊 Attempting to upload frontend coverage reports to Codecov..."
+
+          # Function to upload with retry logic
+          upload_coverage() {
+            local max_attempts=3
+            local attempt=1
+            local wait_time=10
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "🔄 Upload attempt $attempt/$max_attempts..."
+              
+              # Check if coverage directory exists
+              if [ ! -d "./coverage" ]; then
+                echo "⚠️ Coverage directory not found, skipping upload"
+                return 0
+              fi
+              
+              # Check if lcov.info exists
+              if [ ! -f "./coverage/lcov.info" ]; then
+                echo "⚠️ lcov.info file not found, skipping upload"
+                return 0
+              fi
+              
+              # Try to upload using curl with timeout and retry
+              if curl --max-time 60 --retry 3 --retry-delay 5 \
+                --retry-max-time 300 \
+                --form "file=@./coverage/lcov.info" \
+                -H "X-Codecov-Token: ${{ secrets.CODECOV_TOKEN }}" \
+                -H "X-Reduced-Redundancy: false" \
+                -H "X-Reported-Job-Id: ${{ github.run_id }}" \
+                -H "X-Reported-Build-Id: ${{ github.run_id }}" \
+                -H "X-Reported-Build-Number: ${{ github.run_number }}" \
+                -H "X-Reported-Branch: ${{ github.ref_name }}" \
+                -H "X-Reported-Commit-Sha: ${{ github.sha }}" \
+                -H "X-Reported-Pull-Request: ${{ github.event.pull_request.number || '' }}" \
+                -H "X-Reported-Job-Name: frontend-coverage" \
+                -H "X-Reported-Flags: frontend" \
+                "https://codecov.io/upload/v2" > /tmp/codecov_response.json 2>/tmp/codecov_error.log; then
+                
+                echo "✅ Frontend coverage upload successful!"
+                cat /tmp/codecov_response.json
+                return 0
+              else
+                echo "❌ Upload failed (attempt $attempt/$max_attempts)"
+                echo "Error log:"
+                cat /tmp/codecov_error.log
+                
+                if [ $attempt -lt $max_attempts ]; then
+                  echo "⏳ Waiting $wait_time seconds before retry..."
+                  sleep $wait_time
+                  wait_time=$((wait_time * 2))  # Exponential backoff
+                fi
+                
+                attempt=$((attempt + 1))
+              fi
+            done
+            
+            echo "❌ All upload attempts failed"
+            return 1
+          }
+
+          # Attempt upload
+          if upload_coverage; then
+            echo "✅ Frontend coverage upload completed successfully"
+          else
+            echo "⚠️ Frontend coverage upload failed, but continuing workflow"
+            echo "This is a non-critical failure and won't block the deployment"
+          fi
 
   dependency-scan:
     name: 📦 Dependency Scan
@@ -357,45 +478,17 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Cache Terraform
-        uses: actions/cache@v4
-        with:
-          path: |
-            .terraform
-            .terraform.lock.hcl
-          key: ${{ runner.os }}-terraform-${{ hashFiles('**/terraform/**/*.tf') }}
-          restore-keys: |
-            ${{ runner.os }}-terraform-
-
       - name: Terraform Init
-        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         run: |
-          terraform init \
-            -backend-config="bucket=hibiji-terraform-state" \
-            -backend-config="key=${{ needs.detect-environment.outputs.environment }}/terraform.tfstate" \
-            -backend-config="region=${{ env.AWS_REGION }}"
+          cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+          terraform init
 
       - name: Terraform Plan
         id: plan
-        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         run: |
-          terraform plan \
-            -var="environment=${{ needs.detect-environment.outputs.environment }}" \
-            -var="domain_name=${{ env.DOMAIN }}" \
-            -var="aws_region=${{ env.AWS_REGION }}" \
-            -out=tfplan
-
-          # Generate readable plan
-          terraform show -no-color tfplan > plan.txt
+          cd terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+          terraform plan -out=tfplan -detailed-exitcode
           echo "plan_id=tfplan" >> $GITHUB_OUTPUT
-
-      - name: Upload Terraform Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-${{ needs.detect-environment.outputs.environment }}
-          path: |
-            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/tfplan
-            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/plan.txt
 
   # ===========================================
   # BUILD & PACKAGE PHASE
@@ -654,7 +747,7 @@ jobs:
       - name: Terraform Apply
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         run: |
-          echo "🚀 Applying Terraform configuration..."
+          echo " Applying Terraform configuration..."
 
           # First attempt - normal apply
           if ! terraform apply -auto-approve tfplan; then
@@ -670,18 +763,18 @@ jobs:
               
               # Try to import backend log group
               if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_BACKEND" --region ${{ env.AWS_REGION }} --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP_BACKEND"; then
-                echo "📥 Importing existing backend log group: $LOG_GROUP_BACKEND"
+                echo " Importing existing backend log group: $LOG_GROUP_BACKEND"
                 terraform import aws_cloudwatch_log_group.backend_ecs "$LOG_GROUP_BACKEND" || echo "⚠️ Backend log group import failed or already in state"
               fi
               
               # Try to import frontend log group  
               if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_FRONTEND" --region ${{ env.AWS_REGION }} --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP_FRONTEND"; then
-                echo "📥 Importing existing frontend log group: $LOG_GROUP_FRONTEND"
+                echo " Importing existing frontend log group: $LOG_GROUP_FRONTEND"
                 terraform import aws_cloudwatch_log_group.frontend_ecs "$LOG_GROUP_FRONTEND" || echo "⚠️ Frontend log group import failed or already in state"
               fi
               
               # Retry apply after import
-              echo "🔄 Retrying Terraform apply after importing existing resources..."
+              echo " Retrying Terraform apply after importing existing resources..."
               terraform apply -auto-approve tfplan
             else
               echo "❌ Terraform apply failed for reasons other than CloudWatch Log Group conflicts"
@@ -726,7 +819,7 @@ jobs:
           # Validate and report outputs
           if [ -z "$ALB_DNS" ]; then
             echo "⚠️  Warning: alb_dns_name output not found or invalid"
-            echo "📋 Available outputs:"
+            echo " Available outputs:"
             terraform output 2>/dev/null | head -10 || echo "No outputs available"
             ALB_DNS=""
           else
@@ -735,7 +828,7 @@ jobs:
 
           if [ -z "$CLUSTER_NAME" ]; then
             echo "⚠️  Warning: ecs_cluster_name output not found or invalid"
-            echo "📋 Available outputs:"
+            echo " Available outputs:"
             terraform output 2>/dev/null | head -10 || echo "No outputs available"
             CLUSTER_NAME=""
           else
@@ -884,619 +977,4 @@ jobs:
 
           # 5. Validate CloudWatch Log Groups exist
           echo "🔍 Checking CloudWatch Log Groups..."
-          BACKEND_LOG_GROUP="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
-          FRONTEND_LOG_GROUP="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
-
-          # Check backend log group
-          aws logs describe-log-groups \
-            --log-group-name-prefix "$BACKEND_LOG_GROUP" \
-            --region ${{ env.AWS_REGION }} \
-            --query 'logGroups[0].logGroupName' \
-            --output text | grep -q "$BACKEND_LOG_GROUP"
-
-          if [ $? -eq 0 ]; then
-            echo "✅ Backend log group exists"
-          else
-            echo "❌ Backend log group $BACKEND_LOG_GROUP not found"
-            exit 1
-          fi
-
-          # Check frontend log group
-          aws logs describe-log-groups \
-            --log-group-name-prefix "$FRONTEND_LOG_GROUP" \
-            --region ${{ env.AWS_REGION }} \
-            --query 'logGroups[0].logGroupName' \
-            --output text | grep -q "$FRONTEND_LOG_GROUP"
-
-          if [ $? -eq 0 ]; then
-            echo "✅ Frontend log group exists"
-          else
-            echo "❌ Frontend log group $FRONTEND_LOG_GROUP not found"
-            exit 1
-          fi
-
-          # 6. Summary
-          echo ""
-          echo "🎯 Pre-flight Validation Summary:"
-          echo "================================="
-          echo "✅ ECS Cluster: $CLUSTER_NAME (ACTIVE)"
-          echo "✅ Backend Service: $BACKEND_SERVICE (ACTIVE)"  
-          echo "✅ Frontend Service: $FRONTEND_SERVICE (ACTIVE)"
-          echo "✅ ECR Repositories: hibiji-backend, hibiji-frontend"
-          echo "✅ CloudWatch Log Groups: backend, frontend"
-          if [ "$USE_REAL_IMAGES" = "true" ]; then
-            echo "✅ Application Images: Available (will deploy real images)"
-          else
-            echo "⚠️ Application Images: Not available (will use nginx placeholders)"
-          fi
-          echo ""
-          echo "🚀 Infrastructure is ready for deployment!"
-
-      - name: Deploy application to ECS
-        run: |
-          echo "🚀 Starting Robust ECS Deployment..."
-          echo "===================================="
-
-          # Use validated cluster name from pre-flight check
-          CLUSTER_NAME="${{ steps.terraform-outputs.outputs.cluster_name }}"
-          BACKEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
-          FRONTEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
-
-          echo "🎯 Deployment Configuration:"
-          echo "  Cluster: $CLUSTER_NAME"
-          echo "  Backend Service: $BACKEND_SERVICE"
-          echo "  Frontend Service: $FRONTEND_SERVICE"
-          echo "  Backend Image: $BACKEND_IMAGE_URI"
-          echo "  Frontend Image: $FRONTEND_IMAGE_URI"
-          echo "  Using Real Images: $USE_REAL_IMAGES"
-          echo ""
-
-          # Deploy Backend Service
-          echo "🔄 Deploying Backend Service..."
-          echo "==============================="
-
-          # Get current backend task definition
-          BACKEND_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$BACKEND_SERVICE" \
-            --region ${{ env.AWS_REGION }} \
-            --query 'taskDefinition' \
-            --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
-
-          # Update backend image URI with validated image
-          UPDATED_BACKEND_TASK_DEF=$(echo $BACKEND_TASK_DEF | jq \
-            --arg BACKEND_IMAGE "$BACKEND_IMAGE_URI" \
-            '.containerDefinitions |= map(
-              if .name == "backend" then .image = $BACKEND_IMAGE
-              else . end
-            )')
-
-          # Register new backend task definition
-          echo $UPDATED_BACKEND_TASK_DEF > updated-backend-task-def.json
-          NEW_BACKEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://updated-backend-task-def.json \
-            --region ${{ env.AWS_REGION }} \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "✅ Registered backend task definition: $NEW_BACKEND_TASK_DEF_ARN"
-
-          # Update backend service
-          echo "🔄 Updating backend service..."
-          aws ecs update-service \
-            --cluster "$CLUSTER_NAME" \
-            --service "$BACKEND_SERVICE" \
-            --task-definition "$NEW_BACKEND_TASK_DEF_ARN" \
-            --region ${{ env.AWS_REGION }}
-
-          echo "✅ Backend service update initiated"
-
-          # Deploy Frontend Service
-          echo ""
-          echo "🔄 Deploying Frontend Service..."
-          echo "================================"
-
-          # Get current frontend task definition
-          FRONTEND_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$FRONTEND_SERVICE" \
-            --region ${{ env.AWS_REGION }} \
-            --query 'taskDefinition' \
-            --output json | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)')
-
-          # Update frontend image URI with validated image
-          UPDATED_FRONTEND_TASK_DEF=$(echo $FRONTEND_TASK_DEF | jq \
-            --arg FRONTEND_IMAGE "$FRONTEND_IMAGE_URI" \
-            '.containerDefinitions |= map(
-              if .name == "frontend" then .image = $FRONTEND_IMAGE
-              else . end
-            )')
-
-          # Register new frontend task definition
-          echo $UPDATED_FRONTEND_TASK_DEF > updated-frontend-task-def.json
-          NEW_FRONTEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://updated-frontend-task-def.json \
-            --region ${{ env.AWS_REGION }} \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "✅ Registered frontend task definition: $NEW_FRONTEND_TASK_DEF_ARN"
-
-          # Update frontend service
-          echo "🔄 Updating frontend service..."
-          aws ecs update-service \
-            --cluster "$CLUSTER_NAME" \
-            --service "$FRONTEND_SERVICE" \
-            --task-definition "$NEW_FRONTEND_TASK_DEF_ARN" \
-            --region ${{ env.AWS_REGION }}
-
-          echo "✅ Frontend service update initiated"
-          echo ""
-          echo "🎯 ECS Deployment Summary:"
-          echo "========================="
-          echo "✅ Backend: Updated to use $BACKEND_IMAGE_URI"
-          echo "✅ Frontend: Updated to use $FRONTEND_IMAGE_URI"
-          if [ "$USE_REAL_IMAGES" = "true" ]; then
-            echo "🚀 Deployed with REAL application images!"
-          else
-            echo "⚠️ Deployed with nginx placeholder images (ECR images not available)"
-          fi
-
-          # Enhanced Service Monitoring and Rollback
-          echo ""
-          echo "⏳ Enhanced Service Stabilization Monitoring..."
-          echo "==============================================="
-
-          # Function to check service health
-          check_service_health() {
-            local service_name="$1"
-            local service_type="$2"
-            
-            echo "🔍 Monitoring $service_type service: $service_name"
-            
-            # Get current service status
-            local service_info=$(aws ecs describe-services \
-              --cluster "$CLUSTER_NAME" \
-              --services "$service_name" \
-              --region ${{ env.AWS_REGION }} \
-              --query 'services[0]' \
-              --output json)
-            
-            local running_count=$(echo "$service_info" | jq -r '.runningCount')
-            local pending_count=$(echo "$service_info" | jq -r '.pendingCount')
-            local desired_count=$(echo "$service_info" | jq -r '.desiredCount')
-            local deployment_status=$(echo "$service_info" | jq -r '.deployments[0].status')
-            local rollout_state=$(echo "$service_info" | jq -r '.deployments[0].rolloutState')
-            
-            echo "  Status: $deployment_status | Rollout: $rollout_state"
-            echo "  Tasks: $running_count running, $pending_count pending (desired: $desired_count)"
-            
-            # Check for failed tasks if deployment is having issues
-            if [ "$rollout_state" = "FAILED" ] || [ "$pending_count" -gt 0 ]; then
-              echo "🔍 Checking for failed tasks..."
-              local failed_tasks=$(aws ecs list-tasks \
-                --cluster "$CLUSTER_NAME" \
-                --service-name "$service_name" \
-                --desired-status STOPPED \
-                --region ${{ env.AWS_REGION }} \
-                --query 'taskArns[0]' \
-                --output text)
-              
-              if [ "$failed_tasks" != "None" ] && [ "$failed_tasks" != "" ]; then
-                echo "🔍 Analyzing failed task: $failed_tasks"
-                aws ecs describe-tasks \
-                  --cluster "$CLUSTER_NAME" \
-                  --tasks "$failed_tasks" \
-                  --region ${{ env.AWS_REGION }} \
-                  --query 'tasks[0].{stopReason:stopReason,stopCode:stopCode,containers:containers[0].{name:name,exitCode:exitCode,reason:reason}}' \
-                  --output table
-              fi
-            fi
-            
-            return 0
-          }
-
-          # Monitor backend service
-          echo "🔍 Initial backend service status:"
-          check_service_health "$BACKEND_SERVICE" "Backend"
-
-          # Wait for backend service with enhanced monitoring
-          echo ""
-          echo "⏳ Waiting for backend service to stabilize (max 20 minutes)..."
-          BACKEND_STABLE=false
-
-          for i in {1..40}; do
-            sleep 30
-            echo "🔍 Check $i/40 - Backend service status:"
-            
-            service_info=$(aws ecs describe-services \
-              --cluster "$CLUSTER_NAME" \
-              --services "$BACKEND_SERVICE" \
-              --region ${{ env.AWS_REGION }} \
-              --query 'services[0]' \
-              --output json)
-            
-            running_count=$(echo "$service_info" | jq -r '.runningCount')
-            desired_count=$(echo "$service_info" | jq -r '.desiredCount')
-            rollout_state=$(echo "$service_info" | jq -r '.deployments[0].rolloutState')
-            
-            echo "  Backend: $running_count/$desired_count running, rollout: $rollout_state"
-            
-            if [ "$rollout_state" = "COMPLETED" ] && [ "$running_count" -eq "$desired_count" ]; then
-              echo "✅ Backend service stabilized successfully!"
-              BACKEND_STABLE=true
-              break
-            elif [ "$rollout_state" = "FAILED" ]; then
-              echo "❌ Backend service deployment failed!"
-              check_service_health "$BACKEND_SERVICE" "Backend"
-              break
-            fi
-          done
-
-          if [ "$BACKEND_STABLE" = "false" ]; then
-            echo "⚠️ Backend service did not stabilize within 20 minutes"
-            check_service_health "$BACKEND_SERVICE" "Backend"
-            echo "⚠️ Continuing with frontend deployment..."
-          fi
-
-          # Wait for frontend service deployment to complete (if it exists)
-          if aws ecs describe-services \
-            --cluster "$CLUSTER_NAME" \
-            --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
-            --region ${{ env.AWS_REGION }} \
-            --query 'services[0].serviceName' \
-            --output text 2>/dev/null | grep -q "frontend"; then
-            
-            echo "⏳ Waiting for frontend service to stabilize..."
-            echo "🔍 Checking frontend service status before waiting..."
-            aws ecs describe-services \
-              --cluster "$CLUSTER_NAME" \
-              --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
-              --region ${{ env.AWS_REGION }} \
-              --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount}' \
-              --output table
-            
-            # Wait with extended timeout
-            timeout 1200 aws ecs wait services-stable \
-              --cluster "$CLUSTER_NAME" \
-              --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
-              --region ${{ env.AWS_REGION }} \
-              --cli-read-timeout 1200 \
-              --cli-connect-timeout 60 || {
-                echo "⚠️ Frontend service stabilization timed out or failed, checking current status..."
-                aws ecs describe-services \
-                  --cluster "$CLUSTER_NAME" \
-                  --services "hibiji-${{ needs.detect-environment.outputs.environment }}-frontend" \
-                  --region ${{ env.AWS_REGION }} \
-                  --query 'services[0].{serviceName:serviceName,status:status,runningCount:runningCount,pendingCount:pendingCount,desiredCount:desiredCount,deployments:deployments[0].{status:status,rolloutState:rolloutState}}' \
-                  --output table
-                
-                echo "⚠️ Continuing with deployment despite frontend stabilization timeout..."
-              }
-          else
-            echo "⚠️ Frontend service not found, skipping frontend wait..."
-          fi
-
-          echo "✅ ECS deployment completed successfully"
-
-      - name: Run post-deployment health check
-        run: |
-          # Wait a bit for the service to be ready
-          sleep 30
-
-          # Health check
-          HEALTH_URL="https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}/health"
-
-          for i in {1..10}; do
-            if curl -f -s "$HEALTH_URL" > /dev/null; then
-              echo "✅ Health check passed"
-              break
-            else
-              echo "⏳ Health check attempt $i/10 failed, retrying in 30s..."
-              sleep 30
-            fi
-          done
-
-      - name: Deployment Summary
-        if: always()
-        run: |
-          echo ""
-          echo "═══════════════════════════════════════════════════════════════"
-          echo "🚀 DEPLOYMENT SUMMARY"
-          echo "═══════════════════════════════════════════════════════════════"
-
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ Status: DEPLOYMENT SUCCESSFUL"
-            echo "🎉 Deployment to ${{ needs.detect-environment.outputs.environment }} completed successfully!"
-          else
-            echo "❌ Status: DEPLOYMENT FAILED"
-            echo "⚠️  Some deployment steps failed - check logs above for details"
-          fi
-
-          echo ""
-          echo "🌐 APPLICATION URLS:"
-          echo "   Primary: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
-
-          # Get ALB DNS name for internal access
-          ALB_DNS="${{ steps.terraform-outputs.outputs.alb_dns_name }}"
-          if [ -n "$ALB_DNS" ] && [ "$ALB_DNS" != "" ]; then
-            echo "   Internal: http://$ALB_DNS"
-            echo "   (Use internal URL if custom domain DNS not configured)"
-            
-            echo ""
-            echo "🔧 DNS CONFIGURATION REQUIRED:"
-            echo "═══════════════════════════════════════════════════════════════"
-            echo "To enable custom domain access, add these DNS records to hibiji.com:"
-            echo ""
-            echo "┌─────────────────────────────────────────────────────────────┐"
-            echo "│ DNS Records for hibiji.com Domain Hosting Service          │"
-            echo "├─────────────────────────────────────────────────────────────┤"
-            echo "│ Type: CNAME                                                 │"
-            echo "│ Name: ${{ needs.detect-environment.outputs.environment }}  │"
-            echo "│ Value: $ALB_DNS                                             │"
-            echo "│ TTL: 300 (or your provider's default)                      │"
-            echo "└─────────────────────────────────────────────────────────────┘"
-            echo ""
-            echo "📝 INSTRUCTIONS:"
-            echo "1. Log into your hibiji.com DNS hosting provider"
-            echo "2. Navigate to DNS management/records section"
-            echo "3. Add a new CNAME record:"
-            echo "   • Subdomain: ${{ needs.detect-environment.outputs.environment }}"
-            echo "   • Points to: $ALB_DNS"
-            echo "4. Save the record and wait for DNS propagation (5-30 minutes)"
-            echo "5. Test: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
-          else
-            echo "   Internal: ⚠️ Not available (ALB DNS output missing)"
-            echo ""
-            echo "⚠️  DNS CONFIGURATION:"
-            echo "   Cannot provide DNS records - ALB DNS name not available"
-            echo "   Check Terraform outputs for alb_dns_name"
-          fi
-
-          echo ""
-          echo "📊 INFRASTRUCTURE DETAILS:"
-          echo "   Environment: ${{ needs.detect-environment.outputs.environment }}"
-          echo "   ECS Cluster: ${{ steps.terraform-outputs.outputs.cluster_name }}"
-          echo "   Database: RDS PostgreSQL"
-          echo "   Security: AWS Secrets Manager"
-          echo "   Containers: Backend + Frontend"
-          echo "   Region: ${{ env.AWS_REGION }}"
-
-          if [ "${{ job.status }}" == "success" ]; then
-            echo ""
-            echo "🎯 NEXT STEPS:"
-            echo "1. Configure DNS records above (if not already done)"
-            echo "2. Test application at both URLs"
-            echo "3. Monitor logs for any issues"
-            echo "4. All services are running and healthy!"
-          else
-            echo ""
-            echo "🔧 TROUBLESHOOTING:"
-            echo "1. Check job logs above for specific errors"
-            echo "2. Verify AWS credentials and permissions"
-            echo "3. Check Terraform state and resources"
-            echo "4. Use internal URL for direct testing if available"
-          fi
-
-          echo "═══════════════════════════════════════════════════════════════"
-
-  # ===========================================
-  # ASYNCHRONOUS DEPENDENCY FIX MONITORING
-  # ===========================================
-  async-dependency-fix-checker:
-    name: 🔍 Async Dependency Fix Monitor
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: always() # Always run, regardless of other job results
-    needs: [dependency-scan] # Only needs dependency-scan to exist, not to succeed
-    continue-on-error: true # Don't fail workflow if this monitoring fails
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install monitoring tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit packaging requests
-
-      - name: Check for dependency vulnerability fixes
-        id: fix_check
-        run: |
-          echo "🔍 Checking for dependency vulnerability fixes..."
-
-          # Create results file
-          mkdir -p monitoring/dependency-fixes
-          RESULTS_FILE="monitoring/dependency-fixes/fix-check-$(date +%Y%m%d_%H%M%S).md"
-
-          echo "# 🔍 Dependency Fix Monitoring Report" > "$RESULTS_FILE"
-          echo "**Generated**: $(date)" >> "$RESULTS_FILE"
-          echo "**Workflow**: ${{ github.workflow }}" >> "$RESULTS_FILE"
-          echo "**Run ID**: ${{ github.run_id }}" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-
-          # Check urllib3 compatibility with current boto3
-          echo "## 🔍 urllib3 2.5.0+ Compatibility Check" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-
-          # Test urllib3 upgrade in isolated environment
-          python -c "
-          import subprocess
-          import sys
-          import json
-
-          print('Testing urllib3 2.5.0 compatibility...')
-
-          # Get current boto3 version from requirements.txt
-          with open('python-ml-service/requirements.txt', 'r') as f:
-              content = f.read()
-              for line in content.split('\n'):
-                  if line.startswith('boto3=='):
-                      boto3_version = line.split('==')[1]
-                      print(f'Current boto3 version: {boto3_version}')
-                      break
-
-          # Test compatibility
-          try:
-              result = subprocess.run([
-                  sys.executable, '-c', '''
-          import subprocess
-          import sys
-          subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"urllib3>=2.5.0\", \"--dry-run\", \"--quiet\"])
-          print(\"✅ urllib3 2.5.0+ appears compatible!\")
-          '''
-              ], capture_output=True, text=True, timeout=30)
-              
-              if result.returncode == 0:
-                  print('✅ urllib3 2.5.0+ compatibility: COMPATIBLE')
-                  with open('$RESULTS_FILE', 'a') as f:
-                      f.write('**Status**: ✅ **COMPATIBLE** - urllib3 >= 2.5.0 can be safely upgraded!\\n\\n')
-                      f.write('**Action Required**: Update requirements.txt to urllib3>=2.5.0\\n\\n')
-              else:
-                  print('❌ urllib3 2.5.0+ compatibility: CONFLICT')
-                  with open('$RESULTS_FILE', 'a') as f:
-                      f.write('**Status**: ❌ **CONFLICT** - urllib3 >= 2.5.0 still has dependency conflicts\\n\\n')
-                      f.write('**Reason**: ' + result.stderr.replace('\n', ' ') + '\\n\\n')
-          except Exception as e:
-              print(f'⚠️ urllib3 compatibility check failed: {e}')
-              with open('$RESULTS_FILE', 'a') as f:
-                  f.write(f'**Status**: ⚠️ **ERROR** - Could not test compatibility: {str(e)}\\n\\n')
-          " 2>&1 | tee -a "$RESULTS_FILE"
-
-      - name: Check PyTorch security updates
-        run: |
-          RESULTS_FILE="monitoring/dependency-fixes/fix-check-$(date +%Y%m%d_%H%M%S).md"
-
-          echo "## 🔍 PyTorch Security Updates Check" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-
-          # Check for PyTorch security updates
-          python -c "
-          import subprocess
-          import json
-          import sys
-
-          print('🔍 Checking PyTorch security updates...')
-
-          try:
-              # Get latest PyTorch version
-              result = subprocess.run([
-                  sys.executable, '-c', 
-                  'import subprocess; import json; result = subprocess.run([\"pip\", \"index\", \"versions\", \"torch\"], capture_output=True, text=True); print(result.stdout)'
-              ], capture_output=True, text=True, timeout=20)
-              
-              if 'Available versions:' in result.stdout:
-                  print('✅ PyTorch version check successful')
-                  with open('$RESULTS_FILE', 'a') as f:
-                      f.write('**Latest PyTorch versions checked** ✅\\n\\n')
-              else:
-                  print('📋 Using pip show for version info')
-                  version_result = subprocess.run(['pip', 'show', 'torch'], capture_output=True, text=True)
-                  with open('$RESULTS_FILE', 'a') as f:
-                      f.write('**Current PyTorch**: Standard version check completed\\n\\n')
-          except Exception as e:
-              print(f'⚠️ PyTorch update check failed: {e}')
-              with open('$RESULTS_FILE', 'a') as f:
-                  f.write(f'**PyTorch Check**: ⚠️ Could not check updates: {str(e)}\\n\\n')
-          " 2>&1 | tee -a "$RESULTS_FILE"
-
-      - name: Check for boto3/botocore updates
-        run: |
-          RESULTS_FILE="monitoring/dependency-fixes/fix-check-$(date +%Y%m%d_%H%M%S).md"
-
-          echo "## 🔍 boto3/botocore Updates Check" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-
-          # Check if newer boto3 versions support urllib3 2.5.0+
-          python -c "
-          import subprocess
-          import sys
-
-          print('🔍 Checking boto3/botocore urllib3 compatibility...')
-
-          try:
-              # Test with latest boto3
-              result = subprocess.run([
-                  sys.executable, '-c', '''
-          import subprocess
-          import sys
-          # Try installing latest boto3 with urllib3 2.5.0
-          subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"boto3\", \"urllib3>=2.5.0\", \"--dry-run\", \"--quiet\"])
-          print(\"✅ Latest boto3 + urllib3 2.5.0: COMPATIBLE\")
-          '''
-              ], capture_output=True, text=True, timeout=30)
-              
-              if result.returncode == 0:
-                  print('✅ boto3 + urllib3 2.5.0: COMPATIBLE')
-                  with open('$RESULTS_FILE', 'a') as f:
-                      f.write('**boto3 Compatibility**: ✅ **COMPATIBLE** - boto3 latest + urllib3 2.5.0+ works!\\n\\n')
-                      f.write('**Recommendation**: Consider upgrading boto3 to latest version\\n\\n')
-              else:
-                  print('❌ boto3 + urllib3 2.5.0: STILL INCOMPATIBLE')
-                  with open('$RESULTS_FILE', 'a') as f:
-                      f.write('**boto3 Compatibility**: ❌ **INCOMPATIBLE** - boto3 + urllib3 2.5.0+ still conflicts\\n\\n')
-          except Exception as e:
-              print(f'⚠️ boto3 compatibility check failed: {e}')
-              with open('$RESULTS_FILE', 'a') as f:
-                  f.write(f'**boto3 Check**: ⚠️ Could not test: {str(e)}\\n\\n')
-          " 2>&1 | tee -a "$RESULTS_FILE"
-
-      - name: Generate fix recommendations
-        run: |
-          RESULTS_FILE="monitoring/dependency-fixes/fix-check-$(date +%Y%m%d_%H%M%S).md"
-
-          echo "" >> "$RESULTS_FILE"
-          echo "## 🎯 Automated Recommendations" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-          echo "1. **If urllib3 2.5.0+ shows COMPATIBLE**: Update requirements.txt and test" >> "$RESULTS_FILE"
-          echo "2. **If boto3 shows COMPATIBLE**: Consider boto3 version upgrade" >> "$RESULTS_FILE"
-          echo "3. **Monitor this report**: Check weekly for compatibility improvements" >> "$RESULTS_FILE"
-          echo "4. **Manual verification**: Always test in development before production" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-          echo "## 📋 Security Context" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-          echo "- **Current urllib3 vulnerability**: SSRF (moderate, internal use)" >> "$RESULTS_FILE"
-          echo "- **Current torch vulnerability**: DoS (low, local attack, disputed)" >> "$RESULTS_FILE"
-          echo "- **Deployment status**: ✅ Production deployed with monitoring" >> "$RESULTS_FILE"
-          echo "- **Risk level**: 🟡 LOW (comprehensive monitoring in place)" >> "$RESULTS_FILE"
-          echo "" >> "$RESULTS_FILE"
-          echo "---" >> "$RESULTS_FILE"
-          echo "*This is an automated dependency fix monitoring report. For manual security scanning, run: \`./scripts/security-monitor.sh\`*" >> "$RESULTS_FILE"
-
-          echo "📋 Dependency fix monitoring report generated: $RESULTS_FILE"
-
-      - name: Upload dependency fix monitoring results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dependency-fix-monitoring-${{ github.run_id }}
-          path: monitoring/dependency-fixes/
-          retention-days: 30
-
-      - name: Post summary comment (if PR)
-        if: github.event_name == 'pull_request' && always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            // Find the latest results file
-            const monitoringDir = 'monitoring/dependency-fixes';
-            if (fs.existsSync(monitoringDir)) {
-              const files = fs.readdirSync(monitoringDir);
-              const latestFile = files.find(f => f.startsWith('fix-check-'));
-              
-              if (latestFile) {
-                const content = fs.readFileSync(path.join(monitoringDir, latestFile), 'utf8');
-                
-                await github.rest.issues.createComment({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body: `## 🔍 Asynchronous Dependency Fix Monitoring\n\n${content}\n\n*This monitoring runs independently and does not affect deployment success.*`
-                });
-              }
-            }
+          BAC

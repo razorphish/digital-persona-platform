@@ -57,6 +57,10 @@ jobs:
       main_env: ${{ steps.env.outputs.main_env }}
       should_deploy: ${{ steps.env.outputs.should_deploy }}
       is_numbered_env: ${{ steps.env.outputs.is_numbered_env }}
+      api_url: ${{ steps.env.outputs.api_url }}
+      s3_bucket: ${{ steps.env.outputs.s3_bucket }}
+      function_name: ${{ steps.env.outputs.function_name }}
+      log_group_name: ${{ steps.env.outputs.log_group_name }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -64,7 +68,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Determine Environment
+      - name: Determine Environment and Resources
         id: env
         run: |
           # Determine environment based on branch
@@ -99,15 +103,35 @@ jobs:
             exit 1
           fi
 
+          # Generate dynamic resource names
+          FUNCTION_NAME="$MAIN_ENV-$ENVIRONMENT-dpp-api"
+          S3_BUCKET="$MAIN_ENV-$ENVIRONMENT-dpp-website"
+          LOG_GROUP_NAME="/aws/lambda/$FUNCTION_NAME"
+
+          # Generate API URL dynamically based on environment pattern
+          if [[ "$ENVIRONMENT" == "prod" ]]; then
+            API_URL="https://api.$DOMAIN"
+          else
+            API_URL="https://$ENVIRONMENT.$DOMAIN"
+          fi
+
           echo "Environment: $ENVIRONMENT"
           echo "Main Environment: $MAIN_ENV"
           echo "Should Deploy: $SHOULD_DEPLOY"
           echo "Is Numbered Environment: $IS_NUMBERED_ENV"
+          echo "Function Name: $FUNCTION_NAME"
+          echo "S3 Bucket: $S3_BUCKET"
+          echo "Log Group: $LOG_GROUP_NAME"
+          echo "API URL: $API_URL"
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
           echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
           echo "is_numbered_env=$IS_NUMBERED_ENV" >> $GITHUB_OUTPUT
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          echo "s3_bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
+          echo "log_group_name=$LOG_GROUP_NAME" >> $GITHUB_OUTPUT
 
   # =================================
   # Build and Test
@@ -174,19 +198,10 @@ jobs:
         env:
           NODE_ENV: production
           NEXT_BUILD_EXPORT: true
-          # Set API URL based on environment
-          NEXT_PUBLIC_API_URL: >-
-            ${{ 
-              needs.detect-environment.outputs.environment == 'prod' && secrets.API_URL_MAIN ||
-              needs.detect-environment.outputs.environment == 'dev01' && secrets.API_URL_DEV01 ||
-              needs.detect-environment.outputs.environment == 'dev02' && secrets.API_URL_DEV02 ||
-              needs.detect-environment.outputs.environment == 'qa01' && secrets.API_URL_QA01 ||
-              needs.detect-environment.outputs.environment == 'staging01' && secrets.API_URL_STAGING01 ||
-              secrets.API_URL_DEV01
-            }}
+          # Use dynamic API URL from environment detection
+          NEXT_PUBLIC_API_URL: ${{ needs.detect-environment.outputs.api_url }}
         run: |
           npm run build --workspace=apps/web
-          npm run export --workspace=apps/web
 
       - name: Generate frontend hash
         id: frontend-hash
@@ -290,43 +305,46 @@ jobs:
           echo "🔍 Checking and importing existing resources..."
 
           # Import ECS execution role if it exists in AWS but not in state
-          if aws iam get-role --role-name "${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-execution" >/dev/null 2>&1; then
+          ECS_EXECUTION_ROLE="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-execution"
+          if aws iam get-role --role-name "$ECS_EXECUTION_ROLE" >/dev/null 2>&1; then
             if ! terraform state show aws_iam_role.ecs_execution >/dev/null 2>&1; then
-              echo "📥 Importing ECS execution role..."
-              terraform import aws_iam_role.ecs_execution ${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-execution || echo "⚠️ Import failed (may not have permissions)"
+              echo "📥 Importing ECS execution role: $ECS_EXECUTION_ROLE"
+              terraform import aws_iam_role.ecs_execution "$ECS_EXECUTION_ROLE" || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
 
           # Import ECS task role if it exists in AWS but not in state  
-          if aws iam get-role --role-name "${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-task" >/dev/null 2>&1; then
+          ECS_TASK_ROLE="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-task"
+          if aws iam get-role --role-name "$ECS_TASK_ROLE" >/dev/null 2>&1; then
             if ! terraform state show aws_iam_role.ecs_task >/dev/null 2>&1; then
-              echo "📥 Importing ECS task role..."
-              terraform import aws_iam_role.ecs_task ${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-task || echo "⚠️ Import failed (may not have permissions)"
+              echo " Importing ECS task role: $ECS_TASK_ROLE"
+              terraform import aws_iam_role.ecs_task "$ECS_TASK_ROLE" || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
 
           # Import Lambda execution role if it exists in AWS but not in state
-          if aws iam get-role --role-name "${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-lambda-execution" >/dev/null 2>&1; then
+          LAMBDA_EXECUTION_ROLE="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-lambda-execution"
+          if aws iam get-role --role-name "$LAMBDA_EXECUTION_ROLE" >/dev/null 2>&1; then
             if ! terraform state show module.lambda_backend.aws_iam_role.lambda_execution >/dev/null 2>&1; then
-              echo "📥 Importing Lambda execution role..."
-              terraform import module.lambda_backend.aws_iam_role.lambda_execution ${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-lambda-execution || echo "⚠️ Import failed (may not have permissions)"
+              echo "📥 Importing Lambda execution role: $LAMBDA_EXECUTION_ROLE"
+              terraform import module.lambda_backend.aws_iam_role.lambda_execution "$LAMBDA_EXECUTION_ROLE" || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
 
           # Import CloudWatch Log Group if it exists in AWS but not in state
-          LAMBDA_LOG_GROUP="/aws/lambda/${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+          LAMBDA_LOG_GROUP="${{ needs.detect-environment.outputs.log_group_name }}"
           if aws logs describe-log-groups --log-group-name-prefix "$LAMBDA_LOG_GROUP" --query 'logGroups[?logGroupName==`'"$LAMBDA_LOG_GROUP"'`]' --output text | grep -q "$LAMBDA_LOG_GROUP"; then
             if ! terraform state show module.lambda_backend.aws_cloudwatch_log_group.lambda_logs >/dev/null 2>&1; then
-              echo "📥 Importing CloudWatch Log Group..."
+              echo "📥 Importing CloudWatch Log Group: $LAMBDA_LOG_GROUP"
               terraform import module.lambda_backend.aws_cloudwatch_log_group.lambda_logs "$LAMBDA_LOG_GROUP" || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
 
           # Import API Gateway Log Group if it exists in AWS but not in state
-          API_LOG_GROUP="/aws/apigateway/${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+          API_LOG_GROUP="/aws/apigateway/${{ needs.detect-environment.outputs.function_name }}"
           if aws logs describe-log-groups --log-group-name-prefix "$API_LOG_GROUP" --query 'logGroups[?logGroupName==`'"$API_LOG_GROUP"'`]' --output text | grep -q "$API_LOG_GROUP"; then
             if ! terraform state show module.api_gateway.aws_cloudwatch_log_group.api_gateway >/dev/null 2>&1; then
-              echo "📥 Importing API Gateway Log Group..."
+              echo "📥 Importing API Gateway Log Group: $API_LOG_GROUP"
               terraform import module.api_gateway.aws_cloudwatch_log_group.api_gateway "$API_LOG_GROUP" || echo "⚠️ Import failed (may not have permissions)"
             fi
           fi
@@ -407,13 +425,19 @@ jobs:
 
       - name: Deploy to S3
         run: |
-          aws s3 sync out/ s3://${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-website --delete
+          # Use dynamic S3 bucket name from environment detection
+          aws s3 sync out/ s3://${{ needs.detect-environment.outputs.s3_bucket }} --delete
 
       - name: Invalidate CloudFront cache
         run: |
-          DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@, '${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}')]].Id" --output text)
+          # Use dynamic domain name based on environment
+          DOMAIN_NAME="${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@, '$DOMAIN_NAME')]].Id" --output text)
           if [ "$DISTRIBUTION_ID" != "None" ] && [ "$DISTRIBUTION_ID" != "" ]; then
+            echo " Invalidating CloudFront cache for distribution: $DISTRIBUTION_ID"
             aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
+          else
+            echo "⚠️ No CloudFront distribution found for domain: $DOMAIN_NAME"
           fi
 
   # =================================
@@ -457,7 +481,7 @@ jobs:
           cp ../../packages/database/package.json ./node_modules/@digital-persona/database/
 
           # Copy production dependencies
-          echo "📦 Copying production dependencies..."
+          echo " Copying production dependencies..."
           cp -r ../../node_modules/* ./node_modules/
 
           # Clean up unnecessary files
@@ -477,7 +501,8 @@ jobs:
 
       - name: Deploy Lambda function
         run: |
-          FUNCTION_NAME="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+          # Use dynamic function name from environment detection
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
 
           echo "🔄 Updating Lambda function: $FUNCTION_NAME"
 
@@ -530,7 +555,8 @@ jobs:
 
       - name: Wait for Lambda update
         run: |
-          FUNCTION_NAME="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+          # Use dynamic function name from environment detection
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
           aws lambda wait function-updated --function-name $FUNCTION_NAME
 
   # =================================
@@ -552,7 +578,9 @@ jobs:
       - name: Get API Gateway URL
         id: api-url
         run: |
-          API_ID=$(aws apigatewayv2 get-apis --query "Items[?Name=='${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api'].ApiId" --output text)
+          # Use dynamic function name from environment detection
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
+          API_ID=$(aws apigatewayv2 get-apis --query "Items[?Name=='$FUNCTION_NAME'].ApiId" --output text)
           echo "api_url=https://$API_ID.execute-api.${{ env.AWS_REGION }}.amazonaws.com/v1" >> $GITHUB_OUTPUT
 
       - name: Test API health endpoint
@@ -588,11 +616,12 @@ jobs:
                 
                 # Capture CloudWatch logs for debugging
                 echo "📋 Capturing CloudWatch logs for debugging..."
-                FUNCTION_NAME="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-api"
+                FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
+                LOG_GROUP_NAME="${{ needs.detect-environment.outputs.log_group_name }}"
                 
                 # Get the latest log stream
                 LOG_STREAM=$(aws logs describe-log-streams \
-                  --log-group-name "/aws/lambda/$FUNCTION_NAME" \
+                  --log-group-name "$LOG_GROUP_NAME" \
                   --order-by LastEventTime \
                   --descending \
                   --max-items 1 \
@@ -602,7 +631,7 @@ jobs:
                 if [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "" ]; then
                   echo " Latest log stream: $LOG_STREAM"
                   aws logs get-log-events \
-                    --log-group-name "/aws/lambda/$FUNCTION_NAME" \
+                    --log-group-name "$LOG_GROUP_NAME" \
                     --log-stream-name "$LOG_STREAM" \
                     --start-time $(date -d '10 minutes ago' +%s)000 \
                     --query 'events[*].message' \
