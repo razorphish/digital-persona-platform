@@ -38,7 +38,7 @@ env:
   AWS_REGION: us-west-1
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
-  DOMAIN: hibiji.com
+  # Remove hardcoded DOMAIN - will be determined dynamically
   TERRAFORM_VERSION: "1.5.0"
 
 # Prevent multiple runs from conflicting
@@ -60,6 +60,7 @@ jobs:
       should_deploy: ${{ steps.env.outputs.should_deploy }}
       is_numbered_env: ${{ steps.env.outputs.is_numbered_env }}
       ecr_registry: ${{ steps.env.outputs.ecr_registry }}
+      domain: ${{ steps.env.outputs.domain }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -108,16 +109,21 @@ jobs:
           # Set ECR registry for later use
           ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
 
+          # Set dynamic domain based on environment
+          DOMAIN="hibiji.com"
+
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
           echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
           echo "is_numbered_env=$IS_NUMBERED_ENV" >> $GITHUB_OUTPUT
           echo "ecr_registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+          echo "domain=$DOMAIN" >> $GITHUB_OUTPUT
 
           echo "🎯 Environment: $ENVIRONMENT"
           echo "️  Main Environment: $MAIN_ENV"
           echo " Should Deploy: $SHOULD_DEPLOY"
           echo " ECR Registry: $ECR_REGISTRY"
+          echo " Domain: $DOMAIN"
 
   # ===========================================
   # PARALLEL CI PHASE (All run simultaneously)
@@ -550,22 +556,29 @@ jobs:
 
       - name: Create ECR repositories if they don't exist
         run: |
+          # Use dynamic environment variables
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+          PROJECT_NAME="hibiji"
+          
           # Create backend repository
-          aws ecr describe-repositories --repository-names hibiji-backend --region ${{ env.AWS_REGION }} || \
+          BACKEND_REPO="${PROJECT_NAME}-${MAIN_ENV}-backend"
+          aws ecr describe-repositories --repository-names "$BACKEND_REPO" --region ${{ env.AWS_REGION }} || \
           aws ecr create-repository \
-            --repository-name hibiji-backend \
+            --repository-name "$BACKEND_REPO" \
             --region ${{ env.AWS_REGION }} \
-            --tags Key=Environment,Value=${{ needs.detect-environment.outputs.environment }} \
-                   Key=Project,Value=hibiji \
+            --tags Key=Environment,Value=$ENVIRONMENT \
+                   Key=Project,Value=$PROJECT_NAME \
                    Key=ManagedBy,Value=github-actions
 
           # Create frontend repository  
-          aws ecr describe-repositories --repository-names hibiji-frontend --region ${{ env.AWS_REGION }} || \
+          FRONTEND_REPO="${PROJECT_NAME}-${MAIN_ENV}-frontend"
+          aws ecr describe-repositories --repository-names "$FRONTEND_REPO" --region ${{ env.AWS_REGION }} || \
           aws ecr create-repository \
-            --repository-name hibiji-frontend \
+            --repository-name "$FRONTEND_REPO" \
             --region ${{ env.AWS_REGION }} \
-            --tags Key=Environment,Value=${{ needs.detect-environment.outputs.environment }} \
-                   Key=Project,Value=hibiji \
+            --tags Key=Environment,Value=$ENVIRONMENT \
+                   Key=Project,Value=$PROJECT_NAME \
                    Key=ManagedBy,Value=github-actions
 
       - name: Build and push backend Docker image
@@ -575,11 +588,11 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:latest
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-backend:${{ github.sha }}
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-backend:latest
           # Use registry cache to avoid disk space issues
-          cache-from: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:cache
-          cache-to: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:cache,mode=max
+          cache-from: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-backend:cache
+          cache-to: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-backend:cache,mode=max
 
       - name: Build and push frontend Docker image
         uses: docker/build-push-action@v5
@@ -589,11 +602,11 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}
-            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:latest
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-frontend:${{ github.sha }}
+            ${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-frontend:latest
           # Use registry cache to avoid disk space issues
-          cache-from: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:cache
-          cache-to: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:cache,mode=max
+          cache-from: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-frontend:cache
+          cache-to: type=registry,ref=${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-${{ needs.detect-environment.outputs.main_env }}-frontend:cache,mode=max
 
       - name: Create build artifacts
         run: |
@@ -624,7 +637,7 @@ jobs:
       (needs.build-and-package.result == 'success' || github.event.inputs.force_deploy == 'true')
     environment:
       name: ${{ needs.detect-environment.outputs.environment }}
-      url: https://${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}
+      url: https://${{ needs.detect-environment.outputs.environment }}.${{ needs.detect-environment.outputs.domain }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -648,8 +661,11 @@ jobs:
 
       - name: Create AWS Secrets if they don't exist
         run: |
-          # Get the environment-specific prefix
-          RESOURCE_PREFIX="hibiji-${{ needs.detect-environment.outputs.environment }}"
+          # Use dynamic environment variables
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+          PROJECT_NAME="hibiji"
+          RESOURCE_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
 
           # Check if secrets already exist (they may have random suffixes from Terraform)
           echo "🔍 Checking for existing secrets..."
@@ -675,10 +691,10 @@ jobs:
             
             aws secretsmanager create-secret \
               --name "$SECRET_KEY_NAME" \
-              --description "Application secret key for ${{ needs.detect-environment.outputs.environment }}" \
+              --description "Application secret key for $ENVIRONMENT" \
               --secret-string "$(openssl rand -base64 64)" \
               --region ${{ env.AWS_REGION }} \
-              --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+              --tags '[{"Key":"Environment","Value":"'$ENVIRONMENT'"},{"Key":"Project","Value":"'$PROJECT_NAME'"},{"Key":"ManagedBy","Value":"github-actions"}]'
             echo "✅ Created secret: $SECRET_KEY_NAME"
           else
             echo "✅ Found existing secret key: $EXISTING_SECRET_KEY"
@@ -693,10 +709,10 @@ jobs:
             
             aws secretsmanager create-secret \
               --name "$DB_PASSWORD_NAME" \
-              --description "Database password for ${{ needs.detect-environment.outputs.environment }}" \
+              --description "Database password for $ENVIRONMENT" \
               --secret-string "$(openssl rand -base64 32)" \
               --region ${{ env.AWS_REGION }} \
-              --tags '[{"Key":"Environment","Value":"${{ needs.detect-environment.outputs.environment }}"},{"Key":"Project","Value":"hibiji"},{"Key":"ManagedBy","Value":"github-actions"}]'
+              --tags '[{"Key":"Environment","Value":"'$ENVIRONMENT'"},{"Key":"Project","Value":"'$PROJECT_NAME'"},{"Key":"ManagedBy","Value":"github-actions"}]'
             echo "✅ Created secret: $DB_PASSWORD_NAME"
           else
             echo "✅ Found existing database password: $EXISTING_DB_PASSWORD"
@@ -802,9 +818,14 @@ jobs:
             if terraform apply -auto-approve tfplan 2>&1 | grep -q "ResourceAlreadyExistsException.*CloudWatch.*Log Group"; then
               echo "🔍 Detected existing CloudWatch Log Groups, attempting to import them..."
               
+              # Use dynamic environment variables
+              ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+              MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+              PROJECT_NAME="hibiji"
+              
               # Import existing log groups if they exist
-              LOG_GROUP_BACKEND="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
-              LOG_GROUP_FRONTEND="/ecs/hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
+              LOG_GROUP_BACKEND="/ecs/${PROJECT_NAME}-${ENVIRONMENT}-backend"
+              LOG_GROUP_FRONTEND="/ecs/${PROJECT_NAME}-${ENVIRONMENT}-frontend"
               
               # Try to import backend log group
               if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_BACKEND" --region ${{ env.AWS_REGION }} --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP_BACKEND"; then
@@ -898,6 +919,11 @@ jobs:
           echo "🔍 Pre-flight Infrastructure Validation"
           echo "========================================"
 
+          # Use dynamic environment variables
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+          PROJECT_NAME="hibiji"
+
           # Get Terraform outputs for validation
           CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "")
           ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "")
@@ -923,8 +949,8 @@ jobs:
 
           # 2. Validate ECS services exist
           echo "🔍 Checking ECS services..."
-          BACKEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-backend"
-          FRONTEND_SERVICE="hibiji-${{ needs.detect-environment.outputs.environment }}-frontend"
+          BACKEND_SERVICE="${PROJECT_NAME}-${ENVIRONMENT}-backend"
+          FRONTEND_SERVICE="${PROJECT_NAME}-${ENVIRONMENT}-frontend"
 
           # Check backend service
           BACKEND_STATUS=$(aws ecs describe-services \
@@ -956,8 +982,8 @@ jobs:
 
           # 3. Validate ECR repositories exist
           echo "🔍 Checking ECR repositories..."
-          ECR_BACKEND_REPO="hibiji-backend"
-          ECR_FRONTEND_REPO="hibiji-frontend"
+          ECR_BACKEND_REPO="${PROJECT_NAME}-${MAIN_ENV}-backend"
+          ECR_FRONTEND_REPO="${PROJECT_NAME}-${MAIN_ENV}-frontend"
 
           # Check backend repository
           aws ecr describe-repositories \
@@ -987,8 +1013,8 @@ jobs:
 
           # 4. Validate ECR images exist (if Build & Package succeeded)
           echo "🔍 Checking ECR images..."
-          BACKEND_IMAGE_URI="${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-backend:${{ github.sha }}"
-          FRONTEND_IMAGE_URI="${{ needs.detect-environment.outputs.ecr_registry }}/hibiji-frontend:${{ github.sha }}"
+          BACKEND_IMAGE_URI="${{ needs.detect-environment.outputs.ecr_registry }}/${ECR_BACKEND_REPO}:${{ github.sha }}"
+          FRONTEND_IMAGE_URI="${{ needs.detect-environment.outputs.ecr_registry }}/${ECR_FRONTEND_REPO}:${{ github.sha }}"
 
           # Check backend image
           aws ecr describe-images \
@@ -1020,6 +1046,4 @@ jobs:
             echo "FRONTEND_IMAGE_URI=nginx:latest" >> $GITHUB_ENV
           fi
 
-          # 5. Validate CloudWatch Log Groups exist
-          echo "🔍 Checking CloudWatch Log Groups..."
-          BAC
+          echo "✅ Infrastructure validation completed successfully"

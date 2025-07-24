@@ -37,7 +37,7 @@ permissions:
 env:
   AWS_REGION: us-west-1
   NODE_VERSION: 20
-  DOMAIN: hibiji.com
+  # Remove hardcoded DOMAIN - will be determined dynamically
 
 # Prevent multiple runs from conflicting
 concurrency:
@@ -109,9 +109,12 @@ jobs:
           LOG_GROUP_NAME="/aws/lambda/$FUNCTION_NAME"
 
           # Generate API URL dynamically based on environment pattern
+          # Use a dynamic domain based on environment
           if [[ "$ENVIRONMENT" == "prod" ]]; then
+            DOMAIN="hibiji.com"
             API_URL="https://api.$DOMAIN"
           else
+            DOMAIN="hibiji.com"
             API_URL="https://$ENVIRONMENT.$DOMAIN"
           fi
 
@@ -123,6 +126,7 @@ jobs:
           echo "S3 Bucket: $S3_BUCKET"
           echo "Log Group: $LOG_GROUP_NAME"
           echo "API URL: $API_URL"
+          echo "Domain: $DOMAIN"
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
@@ -132,6 +136,7 @@ jobs:
           echo "s3_bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
           echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
           echo "log_group_name=$LOG_GROUP_NAME" >> $GITHUB_OUTPUT
+          echo "domain=$DOMAIN" >> $GITHUB_OUTPUT
 
   # =================================
   # Build and Test
@@ -352,8 +357,13 @@ jobs:
 
           echo "🔍 Checking and importing existing resources..."
 
+          # Use dynamic environment variables
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          MAIN_ENV="${{ needs.detect-environment.outputs.main_env }}"
+          PROJECT_NAME="dpp"
+
           # Import ECS execution role if it exists in AWS but not in state
-          ECS_EXECUTION_ROLE="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-execution"
+          ECS_EXECUTION_ROLE="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-ecs-execution"
           if aws iam get-role --role-name "$ECS_EXECUTION_ROLE" >/dev/null 2>&1; then
             if ! terraform state show aws_iam_role.ecs_execution >/dev/null 2>&1; then
               echo "📥 Importing ECS execution role: $ECS_EXECUTION_ROLE"
@@ -362,7 +372,7 @@ jobs:
           fi
 
           # Import ECS task role if it exists in AWS but not in state  
-          ECS_TASK_ROLE="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-ecs-task"
+          ECS_TASK_ROLE="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-ecs-task"
           if aws iam get-role --role-name "$ECS_TASK_ROLE" >/dev/null 2>&1; then
             if ! terraform state show aws_iam_role.ecs_task >/dev/null 2>&1; then
               echo " Importing ECS task role: $ECS_TASK_ROLE"
@@ -371,7 +381,7 @@ jobs:
           fi
 
           # Import Lambda execution role if it exists in AWS but not in state
-          LAMBDA_EXECUTION_ROLE="${{ needs.detect-environment.outputs.main_env }}-${{ needs.detect-environment.outputs.environment }}-dpp-lambda-execution"
+          LAMBDA_EXECUTION_ROLE="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-lambda-execution"
           if aws iam get-role --role-name "$LAMBDA_EXECUTION_ROLE" >/dev/null 2>&1; then
             if ! terraform state show module.lambda_backend.aws_iam_role.lambda_execution >/dev/null 2>&1; then
               echo "📥 Importing Lambda execution role: $LAMBDA_EXECUTION_ROLE"
@@ -389,7 +399,7 @@ jobs:
           fi
 
           # Import API Gateway Log Group if it exists in AWS but not in state
-          API_LOG_GROUP="/aws/apigateway/${{ needs.detect-environment.outputs.function_name }}"
+          API_LOG_GROUP="/aws/apigateway/${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}"
           if aws logs describe-log-groups --log-group-name-prefix "$API_LOG_GROUP" --query 'logGroups[?logGroupName==`'"$API_LOG_GROUP"'`]' --output text | grep -q "$API_LOG_GROUP"; then
             if ! terraform state show module.api_gateway.aws_cloudwatch_log_group.api_gateway >/dev/null 2>&1; then
               echo "📥 Importing API Gateway Log Group: $API_LOG_GROUP"
@@ -478,8 +488,8 @@ jobs:
 
       - name: Invalidate CloudFront cache
         run: |
-          # Use dynamic domain name based on environment
-          DOMAIN_NAME="${{ needs.detect-environment.outputs.environment }}.${{ env.DOMAIN }}"
+          # Use dynamic domain name from environment detection
+          DOMAIN_NAME="${{ needs.detect-environment.outputs.environment }}.${{ needs.detect-environment.outputs.domain }}"
           DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@, '$DOMAIN_NAME')]].Id" --output text)
           if [ "$DISTRIBUTION_ID" != "None" ] && [ "$DISTRIBUTION_ID" != "" ]; then
             echo " Invalidating CloudFront cache for distribution: $DISTRIBUTION_ID"
