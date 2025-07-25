@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:lambda": "node build-lambda.js",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist && rm -rf .turbo",
+    "clean": "rm -rf dist && rm -rf .turbo && rm -rf lambda-dist",
     "db:push": "drizzle-kit push:pg",
     "db:migrate": "drizzle-kit generate:pg",
     "db:studio": "drizzle-kit studio"
@@ -43,6 +44,7 @@
     "@types/node": "^20.9.0",
     "@types/pg": "^8.10.7",
     "drizzle-kit": "^0.20.6",
+    "esbuild": "^0.19.5",
     "tsx": "^4.6.0",
     "typescript": "^5.2.2"
   }

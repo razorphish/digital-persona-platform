@@ -1,8 +1,8 @@
-// Lambda entry point
-import { handler } from "./lambda.js";
+// Lambda entry point for AWS Lambda runtime
+import { handler as lambdaHandler } from "./lambda.js";
 
-// Export for AWS Lambda runtime
-export { handler };
+// Export the handler for AWS Lambda runtime
+export const handler = lambdaHandler;
 
-// For compatibility with different Lambda runtime configurations
-export default handler;
+// Default export for compatibility
+export default lambdaHandler;

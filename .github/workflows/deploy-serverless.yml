@@ -252,13 +252,15 @@ jobs:
           npm run build --workspace=@digital-persona/shared
           npm run build --workspace=@digital-persona/database
 
-      - name: Build backend
-        run: npm run build --workspace=apps/server
+      - name: Build backend for Lambda
+        run: |
+          echo "🚀 Building Lambda function with esbuild bundling..."
+          npm run build:lambda --workspace=apps/server
 
       - name: Generate backend hash
         id: backend-hash
         run: |
-          cd apps/server/dist
+          cd apps/server/lambda-dist
           HASH=$(find . -type f | xargs sha256sum | sort | sha256sum | cut -d' ' -f1)
           echo "hash=$HASH" >> $GITHUB_OUTPUT
 
@@ -266,7 +268,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-${{ needs.detect-environment.outputs.environment }}-${{ steps.backend-hash.outputs.hash }}
-          path: apps/server/dist/
+          path: apps/server/lambda-dist/
           retention-days: 7
 
   # =================================
@@ -763,66 +765,20 @@ jobs:
 
       - name: Create Lambda deployment package
         run: |
-          # Create deployment directory
-          mkdir -p lambda-deployment
-          cd lambda-deployment
+          echo "📦 Creating Lambda deployment package from bundled output..."
 
-          # Copy built backend files from downloaded artifacts (exclude lambda-deployment directory)
-          echo "📦 Copying backend files from artifacts..."
-          cp -r ../* . 2>/dev/null || true
+          # The lambda-dist directory already contains everything we need:
+          # - index.js (bundled Lambda function with all dependencies)
+          # - package.json (Lambda package metadata)
 
-          # Remove the lambda-deployment directory if it was copied
-          rm -rf ./lambda-deployment
-
-          # Create node_modules directory structure
-          mkdir -p node_modules/@digital-persona
-
-          # Copy workspace package dist folders and package.json files
-          echo "📦 Copying workspace packages..."
-          if [ -d "../../packages/shared/dist" ]; then
-            cp -r ../../packages/shared/dist ./node_modules/@digital-persona/shared/
-            cp ../../packages/shared/package.json ./node_modules/@digital-persona/shared/
-          else
-            echo "⚠️ Shared package dist not found, creating placeholder"
-            mkdir -p ./node_modules/@digital-persona/shared/
-            echo '{"name":"@digital-persona/shared","version":"1.0.0"}' > ./node_modules/@digital-persona/shared/package.json
-          fi
-
-          if [ -d "../../packages/database/dist" ]; then
-            cp -r ../../packages/database/dist ./node_modules/@digital-persona/database/
-            cp ../../packages/database/package.json ./node_modules/@digital-persona/database/
-          else
-            echo "⚠️ Database package dist not found, creating placeholder"
-            mkdir -p ./node_modules/@digital-persona/database/
-            echo '{"name":"@digital-persona/database","version":"1.0.0"}' > ./node_modules/@digital-persona/database/package.json
-          fi
-
-          # Copy production dependencies if they exist
-          echo " Copying production dependencies..."
-          if [ -d "../../node_modules" ]; then
-            cp -r ../../node_modules/* ./node_modules/
-          else
-            echo "⚠️ node_modules not found, creating minimal package.json"
-            echo '{"name":"lambda-deployment","version":"1.0.0","dependencies":{}}' > package.json
-          fi
-
-          # Clean up unnecessary files
-          echo "🧹 Cleaning up deployment package..."
-          find . -name "*.d.ts" -delete
-          find . -name "*.d.mts" -delete
-          find . -name "*.d.cts" -delete
-          find . -name "*.map" -delete
-          find . -name "*.test.js" -delete
-          find . -name "*.spec.js" -delete
-          find . -name "__tests__" -type d -exec rm -rf {} + 2>/dev/null || true
-
-          # Create deployment zip
-          echo "📦 Creating deployment zip..."
-          zip -r ../lambda-deployment.zip . -x "*.git*" "*.DS_Store*"
-
+          # Create deployment zip directly from the bundled output
+          cd lambda-dist
+          zip -r ../lambda-deployment.zip . -x "*.DS_Store*"
           cd ..
 
           echo "✅ Lambda deployment package created successfully"
+          echo "📊 Package contents:"
+          unzip -l lambda-deployment.zip
 
       - name: Deploy Lambda function
         run: |
