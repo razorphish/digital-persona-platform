@@ -67,9 +67,20 @@ jobs:
 
           # Initialize Terraform first
           echo "🔧 Initializing Terraform..."
-          terraform init
+          terraform init -reconfigure
+
+          # Verify initialization worked
+          echo "🔍 Checking Terraform initialization..."
+          if ! terraform version >/dev/null 2>&1; then
+            echo "❌ Terraform initialization failed"
+            exit 1
+          fi
+
+          echo "✅ Terraform initialized successfully"
 
           # Check if workspace exists
+          echo "📋 Listing workspaces..."
+          terraform workspace list
           if terraform workspace list | grep -q "$BRANCH_NAME"; then
             echo "Found workspace $BRANCH_NAME, proceeding with cleanup"
             
