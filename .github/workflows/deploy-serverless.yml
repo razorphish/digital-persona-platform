@@ -189,7 +189,7 @@ jobs:
         working-directory: apps/server
         run: |
           echo "📦 Building backend for Lambda deployment..."
-          npm run build
+          npm run build:lambda
 
       - name: Generate build hash
         id: hash
@@ -203,9 +203,8 @@ jobs:
         with:
           name: backend-${{ needs.detect-environment.outputs.environment }}-${{ steps.hash.outputs.backend-hash }}
           path: |
-            apps/server/dist/
-            apps/server/package.json
-            apps/server/package-lock.json
+            apps/server/lambda-dist/index.js
+            apps/server/lambda-dist/package.json
 
   build-frontend:
     runs-on: ubuntu-latest
