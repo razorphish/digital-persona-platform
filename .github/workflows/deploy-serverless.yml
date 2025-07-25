@@ -699,46 +699,164 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Health Check API
-        run: |
-          API_URL="${{ needs.detect-environment.outputs.api_url }}"
-          echo "🏥 Testing API health endpoint: $API_URL/health"
+      - name: Download Terraform outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-outputs-${{ needs.detect-environment.outputs.environment }}
 
-          # Wait for API to be ready
-          for i in {1..10}; do
-            if curl -f "$API_URL/health" -m 10; then
-              echo "✅ API health check passed"
+      - name: Health Check Internal AWS API (Critical)
+        run: |
+          echo "🔧 Step 1: Testing Internal AWS API (CRITICAL - must pass)"
+
+          # Get internal API Gateway URL from Terraform outputs
+          if [ -f outputs.json ]; then
+            INTERNAL_API_URL=$(cat outputs.json | jq -r '.api_url.value // empty')
+          fi
+
+          if [ -z "$INTERNAL_API_URL" ]; then
+            echo "❌ Could not get internal API URL from Terraform outputs"
+            echo "📋 Available outputs:"
+            cat outputs.json | jq .
+            exit 1
+          fi
+
+          echo "🎯 Internal API URL: $INTERNAL_API_URL"
+          echo "🏥 Testing internal health endpoint: $INTERNAL_API_URL/health"
+
+          # Test internal API - MUST pass (5 attempts)
+          SUCCESS=false
+          for i in {1..5}; do
+            echo "🔄 Internal API test attempt $i/5..."
+            if curl -f "$INTERNAL_API_URL/health" -m 15 -s -o response.json; then
+              echo "✅ Internal API health check PASSED"
+              echo "📋 Response:"
+              cat response.json | jq . 2>/dev/null || cat response.json
+              SUCCESS=true
               break
             else
-              echo "⏳ API not ready, waiting... (attempt $i/10)"
-              sleep 15
+              echo "❌ Internal API test attempt $i/5 failed"
+              if [ $i -lt 5 ]; then
+                echo "⏳ Waiting 20 seconds before retry..."
+                sleep 20
+              fi
             fi
           done
+
+          if [ "$SUCCESS" = false ]; then
+            echo ""
+            echo "🚨 CRITICAL: Internal AWS API failed all 5 attempts"
+            echo "🚨 This indicates infrastructure deployment issues"
+            echo "🚨 Failing the workflow..."
+            exit 1
+          fi
+
+          echo "✅ Internal AWS API verification completed successfully"
+
+      - name: Health Check Public Domain API (Warning Only)
+        continue-on-error: true
+        run: |
+          echo ""
+          echo "🌐 Step 2: Testing Public Domain API (warning only if fails)"
+
+          PUBLIC_API_URL="${{ needs.detect-environment.outputs.api_url }}"
+          echo "🎯 Public API URL: $PUBLIC_API_URL"
+          echo "🏥 Testing public health endpoint: $PUBLIC_API_URL/health"
+
+          # Test public API - warn only (3 attempts)
+          SUCCESS=false
+          for i in {1..3}; do
+            echo "🔄 Public API test attempt $i/3..."
+            if curl -f "$PUBLIC_API_URL/health" -m 15 -s -o public_response.json; then
+              echo "✅ Public API health check PASSED"
+              echo "📋 Response:"
+              cat public_response.json | jq . 2>/dev/null || cat public_response.json
+              SUCCESS=true
+              break
+            else
+              echo "⚠️ Public API test attempt $i/3 failed"
+              if [ $i -lt 3 ]; then
+                echo "⏳ Waiting 30 seconds before retry (DNS propagation)..."
+                sleep 30
+              fi
+            fi
+          done
+
+          if [ "$SUCCESS" = false ]; then
+            echo ""
+            echo "⚠️ WARNING: Public domain API failed all 3 attempts"
+            echo "⚠️ This is often due to DNS propagation delays"
+            echo "⚠️ Internal API is working, so deployment is successful"
+            echo "⚠️ Public domain should work within 24 hours"
+            
+            # Set output for summary
+            echo "PUBLIC_API_STATUS=FAILED" >> $GITHUB_ENV
+          else
+            echo "PUBLIC_API_STATUS=PASSED" >> $GITHUB_ENV
+          fi
 
       - name: Health Check Website
+        continue-on-error: true
         run: |
-          WEBSITE_URL="https://${{ needs.detect-environment.outputs.domain_name }}"
-          echo "🌐 Testing website: $WEBSITE_URL"
+          echo ""
+          echo "🌐 Step 3: Testing Website (warning only if fails)"
 
-          # Wait for website to be ready
-          for i in {1..10}; do
-            if curl -f "$WEBSITE_URL" -m 10; then
-              echo "✅ Website health check passed"
+          WEBSITE_URL="https://${{ needs.detect-environment.outputs.domain_name }}"
+          echo "🎯 Website URL: $WEBSITE_URL"
+
+          # Test website - warn only (3 attempts)
+          SUCCESS=false
+          for i in {1..3}; do
+            echo "🔄 Website test attempt $i/3..."
+            if curl -f "$WEBSITE_URL" -m 15 -s -o /dev/null; then
+              echo "✅ Website health check PASSED"
+              SUCCESS=true
               break
             else
-              echo "⏳ Website not ready, waiting... (attempt $i/10)"
-              sleep 15
+              echo "⚠️ Website test attempt $i/3 failed"
+              if [ $i -lt 3 ]; then
+                echo "⏳ Waiting 30 seconds before retry (DNS propagation)..."
+                sleep 30
+              fi
             fi
           done
+
+          if [ "$SUCCESS" = false ]; then
+            echo "⚠️ WARNING: Website failed all 3 attempts"
+            echo "⚠️ This is often due to DNS propagation delays"
+            echo "WEBSITE_STATUS=FAILED" >> $GITHUB_ENV
+          else
+            echo "WEBSITE_STATUS=PASSED" >> $GITHUB_ENV
+          fi
 
       - name: Deployment Summary
         run: |
+          echo ""
           echo "🎉 Deployment Summary"
           echo "===================="
           echo "Environment: ${{ needs.detect-environment.outputs.environment }}"
-          echo "API URL: ${{ needs.detect-environment.outputs.api_url }}"
-          echo "Website URL: https://${{ needs.detect-environment.outputs.domain_name }}"
-          echo "Function Name: ${{ needs.detect-environment.outputs.function_name }}"
-          echo "S3 Bucket: ${{ needs.detect-environment.outputs.s3_bucket }}"
+          echo "Internal API: ✅ PASSED (verified working)"
+          echo "Public API: ${PUBLIC_API_STATUS:-UNKNOWN}"
+          echo "Website: ${WEBSITE_STATUS:-UNKNOWN}"
+          echo ""
+          echo "📍 URLs:"
+          echo "  Internal API: $(cat outputs.json | jq -r '.api_url.value // "N/A"')"
+          echo "  Public API: ${{ needs.detect-environment.outputs.api_url }}"
+          echo "  Website: https://${{ needs.detect-environment.outputs.domain_name }}"
+          echo ""
+          echo "🔧 Infrastructure:"
+          echo "  Function: ${{ needs.detect-environment.outputs.function_name }}"
+          echo "  S3 Bucket: ${{ needs.detect-environment.outputs.s3_bucket }}"
+          echo ""
+          if [ "${PUBLIC_API_STATUS}" = "FAILED" ] || [ "${WEBSITE_STATUS}" = "FAILED" ]; then
+            echo "⚠️ NOTES:"
+            if [ "${PUBLIC_API_STATUS}" = "FAILED" ]; then
+              echo "  - Public API domain may need DNS propagation time (up to 24 hours)"
+            fi
+            if [ "${WEBSITE_STATUS}" = "FAILED" ]; then
+              echo "  - Website domain may need DNS propagation time (up to 24 hours)"
+            fi
+            echo "  - Internal AWS API is working, deployment is successful"
+            echo "  - Check public URLs again in a few hours"
+          fi
           echo ""
           echo "✅ Serverless deployment completed successfully!"
