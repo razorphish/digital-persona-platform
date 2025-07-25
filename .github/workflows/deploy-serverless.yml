@@ -924,25 +924,41 @@ jobs:
             local api_name="$1"
             echo "🔍 Checking for API Gateway: $api_name" >&2
             
-            # Get API ID by name
-            local potential_api_id=$(aws apigatewayv2 get-apis --query "Items[?Name=='$api_name'].ApiId" --output text | tr -d '[:space:]')
+            # Get all API IDs with this name, sorted by creation date (newest first)
+            local potential_api_ids=$(aws apigatewayv2 get-apis \
+              --query "Items[?Name=='$api_name'] | sort_by(@, &CreatedDate) | reverse(@) | [*].ApiId" \
+              --output text | tr -s '[:space:]' '\n')
             
-            if [ -n "$potential_api_id" ] && [ "$potential_api_id" != "None" ] && [ "$potential_api_id" != "" ]; then
-              echo "🔎 Found potential API ID: $potential_api_id" >&2
-              
-              # Validate the API actually exists by trying to get its details
-              if aws apigatewayv2 get-api --api-id "$potential_api_id" >/dev/null 2>&1; then
-                echo "✅ Validated API Gateway '$api_name' with ID: $potential_api_id" >&2
-                echo "$potential_api_id"  # This is the only output to stdout
-                return 0
-              else
-                echo "❌ API ID $potential_api_id is invalid or inaccessible" >&2
-                return 1
-              fi
-            else
+            if [ -z "$potential_api_ids" ] || [ "$potential_api_ids" = "None" ]; then
               echo "❌ No API found with name: $api_name" >&2
               return 1
             fi
+            
+            echo "🔎 Found $(echo "$potential_api_ids" | wc -l) API(s) with name '$api_name'" >&2
+            
+            # Try each API ID (newest first) until we find a valid one
+            local line_number=1
+            while IFS= read -r potential_api_id; do
+              # Clean the API ID
+              potential_api_id=$(echo "$potential_api_id" | tr -d '[:space:]')
+              
+              if [ -n "$potential_api_id" ] && [ "$potential_api_id" != "None" ]; then
+                echo "🔎 Testing API ID #$line_number: $potential_api_id" >&2
+                
+                # Validate the API actually exists by trying to get its details
+                if aws apigatewayv2 get-api --api-id "$potential_api_id" >/dev/null 2>&1; then
+                  echo "✅ Validated API Gateway '$api_name' with ID: $potential_api_id" >&2
+                  echo "$potential_api_id"  # This is the only output to stdout
+                  return 0
+                else
+                  echo "❌ API ID $potential_api_id is invalid or inaccessible" >&2
+                fi
+              fi
+              line_number=$((line_number + 1))
+            done <<< "$potential_api_ids"
+            
+            echo "❌ No valid API IDs found for name: $api_name" >&2
+            return 1
           }
 
           # Try to find and validate API Gateway with different naming patterns
@@ -966,12 +982,45 @@ jobs:
             echo "🔍 Available APIs in region ${{ env.AWS_REGION }}:"
             aws apigatewayv2 get-apis --query 'Items[*].{Name:Name,Id:ApiId,Protocol:ProtocolType,CreatedDate:CreatedDate}' --output table
             
+            # Check for duplicate API names
+            echo ""
+            echo "🔍 Checking for duplicate API Gateway names..."
+            DUPLICATE_APIS=$(aws apigatewayv2 get-apis \
+              --query 'Items[*].Name' --output text | sort | uniq -d)
+            
+            if [ -n "$DUPLICATE_APIS" ]; then
+              echo "⚠️ Found duplicate API Gateway names:"
+              echo "$DUPLICATE_APIS"
+              echo ""
+              echo "🧹 Cleanup recommendation:"
+              echo "You have multiple API Gateways with the same name, which can cause issues."
+              echo "Consider deleting the older/unused ones:"
+              echo ""
+              for dup_name in $DUPLICATE_APIS; do
+                echo "APIs with name '$dup_name':"
+                aws apigatewayv2 get-apis \
+                  --query "Items[?Name=='$dup_name'].{Id:ApiId,Created:CreatedDate}" \
+                  --output table
+                echo "Suggested cleanup (delete older APIs):"
+                OLDER_IDS=$(aws apigatewayv2 get-apis \
+                  --query "Items[?Name=='$dup_name'] | sort_by(@, &CreatedDate) | [:-1] | [*].ApiId" \
+                  --output text)
+                for old_id in $OLDER_IDS; do
+                  echo "  aws apigatewayv2 delete-api --api-id $old_id"
+                done
+                echo ""
+              done
+            fi
+            
             echo ""
             echo "🔧 Troubleshooting steps:"
             echo "1. Check if Terraform deployment completed successfully"
             echo "2. Verify API Gateway module was applied without errors"
             echo "3. Look for API Gateway creation logs in deployment output"
             echo "4. Expected API name should be: $PRIMARY_API_NAME"
+            if [ -n "$DUPLICATE_APIS" ]; then
+              echo "5. Clean up duplicate API Gateways using the commands above"
+            fi
             echo ""
             echo "❌ Cannot proceed with health check - no valid API Gateway found"
             exit 1
