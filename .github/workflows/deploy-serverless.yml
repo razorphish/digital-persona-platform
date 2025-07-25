@@ -1167,8 +1167,8 @@ jobs:
             
             echo "🔍 Performing detailed curl test..."
             
-            # Use curl with proper separation of HTTP code and body
-            response=$(curl -s -w "\n%{http_code}\n%{time_total}\n%{time_connect}\n%{time_namelookup}" \
+            # Use curl with reliable HTTP status code extraction
+            response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
               --max-time 30 \
               --connect-timeout 10 \
               --retry 0 \
@@ -1180,19 +1180,13 @@ jobs:
             
             echo "📊 Curl exit code: $curl_exit_code"
             
-            # Parse response properly - body is everything except last 3 lines
-            response_body=$(echo "$response" | sed '$d' | sed '$d' | sed '$d')
-            http_code=$(echo "$response" | tail -n3 | head -n1)
-            time_total=$(echo "$response" | tail -n2 | head -n1)
-            time_connect=$(echo "$response" | tail -n1)
+            # Parse response reliably - separate body and HTTP status
+            response_body=$(echo "$response" | sed -e 's/HTTPSTATUS\:.*//g')
+            http_code=$(echo "$response" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
             
             echo "📋 Response body:"
             echo "$response_body"
             echo "📊 HTTP Status Code: $http_code"
-            
-            echo "🕐 Timing details:"
-            echo "  - Connect: ${time_connect}s" 
-            echo "  - Total: ${time_total}s"
             
             # Analyze the response
             case $curl_exit_code in
