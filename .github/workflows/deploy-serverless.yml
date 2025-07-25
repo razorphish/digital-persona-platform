@@ -237,9 +237,11 @@ jobs:
         working-directory: apps/web
         env:
           NEXT_PUBLIC_API_URL: ${{ needs.detect-environment.outputs.api_url }}
+          NEXT_BUILD_EXPORT: "true"
         run: |
           echo "📦 Building frontend for static hosting..."
           echo "🌐 API URL: $NEXT_PUBLIC_API_URL"
+          echo "📦 Export mode: Static export for S3"
           npm run build
 
       - name: Generate build hash
