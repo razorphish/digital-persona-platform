@@ -766,15 +766,21 @@ jobs:
       - name: Create Lambda deployment package
         run: |
           echo "📦 Creating Lambda deployment package from bundled output..."
+          echo "📁 Current directory contents:"
+          ls -la
 
-          # The lambda-dist directory already contains everything we need:
-          # - index.js (bundled Lambda function with all dependencies)
-          # - package.json (Lambda package metadata)
+          # The artifacts are downloaded to the current directory
+          # Check if we have the bundled files
+          if [ ! -f "index.js" ]; then
+            echo "❌ index.js not found in current directory"
+            echo "📁 Available files:"
+            find . -name "*.js" -o -name "*.json" | head -10
+            exit 1
+          fi
 
-          # Create deployment zip directly from the bundled output
-          cd lambda-dist
-          zip -r ../lambda-deployment.zip . -x "*.DS_Store*"
-          cd ..
+          # Create deployment zip from current directory (which contains the bundled output)
+          echo "📦 Creating deployment zip from bundled files..."
+          zip -r lambda-deployment.zip . -x "*.DS_Store*" "*.git*"
 
           echo "✅ Lambda deployment package created successfully"
           echo "📊 Package contents:"
