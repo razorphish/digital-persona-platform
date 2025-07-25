@@ -36,14 +36,25 @@ jobs:
 
       - name: Determine environment and cleanup
         run: |
-          BRANCH_NAME="${{ github.event.ref_name }}"
+          # For delete events, we need to extract branch name from the ref
+          BRANCH_NAME="${{ github.event.ref }}"
+          # Remove refs/heads/ prefix if present
+          BRANCH_NAME=${BRANCH_NAME#refs/heads/}
+
+          # Fallback to ref_name if ref is empty
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME="${{ github.event.ref_name }}"
+          fi
+
           MAIN_ENV=$(echo $BRANCH_NAME | sed 's/[0-9]*$//')
           TFVARS_FILE="terraform/environments/$MAIN_ENV/${BRANCH_NAME}.auto.tfvars"
 
           echo "🚨 BRANCH DELETED - CLEANING UP SUB-ENVIRONMENT 🚨"
           echo "Branch: $BRANCH_NAME"
-          echo "Main environment: $MAIN_ENV"
+          echo "Main environment: $MAIN_ENV" 
           echo "Tfvars file: $TFVARS_FILE"
+          echo "Debug - Raw ref: ${{ github.event.ref }}"
+          echo "Debug - Raw ref_name: ${{ github.event.ref_name }}"
 
           # Check if this is a sub-environment (has numbers)
           if [[ ! "$BRANCH_NAME" =~ [0-9]+$ ]]; then
