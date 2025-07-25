@@ -179,6 +179,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build workspace packages
+        run: |
+          echo "🔧 Building workspace packages..."
+          npm run build --workspace=@digital-persona/database
+          npm run build --workspace=@digital-persona/shared
+
       - name: Build backend for Lambda
         working-directory: apps/server
         run: |
@@ -220,6 +226,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build workspace packages
+        run: |
+          echo "🔧 Building workspace packages..."
+          npm run build --workspace=@digital-persona/database
+          npm run build --workspace=@digital-persona/shared
 
       - name: Build frontend for static hosting
         working-directory: apps/web
