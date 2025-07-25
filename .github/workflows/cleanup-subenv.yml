@@ -65,6 +65,10 @@ jobs:
           # Navigate to the correct environment directory
           cd terraform/environments/$MAIN_ENV
 
+          # Initialize Terraform first
+          echo "🔧 Initializing Terraform..."
+          terraform init
+
           # Check if workspace exists
           if terraform workspace list | grep -q "$BRANCH_NAME"; then
             echo "Found workspace $BRANCH_NAME, proceeding with cleanup"
