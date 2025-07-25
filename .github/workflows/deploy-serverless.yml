@@ -922,33 +922,38 @@ jobs:
           # Function to find API by name and validate it exists
           find_and_validate_api() {
             local api_name="$1"
-            echo "🔍 Checking for API Gateway: $api_name"
+            echo "🔍 Checking for API Gateway: $api_name" >&2
             
             # Get API ID by name
             local potential_api_id=$(aws apigatewayv2 get-apis --query "Items[?Name=='$api_name'].ApiId" --output text | tr -d '[:space:]')
             
             if [ -n "$potential_api_id" ] && [ "$potential_api_id" != "None" ] && [ "$potential_api_id" != "" ]; then
-              echo "🔎 Found potential API ID: $potential_api_id"
+              echo "🔎 Found potential API ID: $potential_api_id" >&2
               
               # Validate the API actually exists by trying to get its details
               if aws apigatewayv2 get-api --api-id "$potential_api_id" >/dev/null 2>&1; then
-                echo "✅ Validated API Gateway '$api_name' with ID: $potential_api_id"
-                echo "$potential_api_id"
+                echo "✅ Validated API Gateway '$api_name' with ID: $potential_api_id" >&2
+                echo "$potential_api_id"  # This is the only output to stdout
                 return 0
               else
-                echo "❌ API ID $potential_api_id is invalid or inaccessible"
+                echo "❌ API ID $potential_api_id is invalid or inaccessible" >&2
                 return 1
               fi
             else
-              echo "❌ No API found with name: $api_name"
+              echo "❌ No API found with name: $api_name" >&2
               return 1
             fi
           }
 
           # Try to find and validate API Gateway with different naming patterns
           API_ID=""
+          API_NAME_FOUND=""
           for api_name in "$PRIMARY_API_NAME" "$ALT_API_NAME1" "$ALT_API_NAME2"; do
-            if API_ID=$(find_and_validate_api "$api_name"); then
+            # Call function and capture return code
+            if temp_api_id=$(find_and_validate_api "$api_name"); then
+              # The function only outputs the API ID to stdout on success
+              API_ID="$temp_api_id"
+              API_NAME_FOUND="$api_name"
               echo "✅ Successfully found and validated API Gateway: $api_name ($API_ID)"
               break
             fi
@@ -971,6 +976,19 @@ jobs:
             echo "❌ Cannot proceed with health check - no valid API Gateway found"
             exit 1
           fi
+
+          # Clean and validate the API ID format
+          API_ID=$(echo "$API_ID" | tr -d '[:space:]' | head -n 1)
+
+          # Validate API ID format (should be alphanumeric, roughly 10 characters)
+          if ! echo "$API_ID" | grep -E '^[a-z0-9]{8,15}$' >/dev/null; then
+            echo "❌ Invalid API ID format: '$API_ID'"
+            echo "🔧 API ID should be alphanumeric string, got: $(echo "$API_ID" | cat -v)"
+            echo "This suggests an issue with the API lookup logic."
+            exit 1
+          fi
+
+          echo "✅ Using clean API ID: $API_ID (found via: $API_NAME_FOUND)"
 
           # Double-check API exists and get additional details
           echo "🔍 Validating final API Gateway configuration..."
