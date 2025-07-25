@@ -51,6 +51,12 @@ resource "aws_iam_role" "lambda_execution" {
   })
 
   tags = {}
+  
+  # Workaround for IAM permission issues during deployment
+  # This prevents Terraform from trying to read role policies when user lacks iam:GetRolePolicy permission
+  lifecycle {
+    ignore_changes = [inline_policy]
+  }
 }
 
 # Lambda execution policy
