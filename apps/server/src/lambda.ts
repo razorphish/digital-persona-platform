@@ -146,6 +146,51 @@ app.get("/health", (req, res) => {
   }
 });
 
+// Health check endpoint with stage prefix (for API Gateway v1 compatibility)
+app.get("/v1/health", (req, res) => {
+  logger.info("Health check requested with stage prefix");
+
+  try {
+    const healthData = {
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      service: "Digital Persona Platform API",
+      environment: process.env.NODE_ENV || "development",
+      version: "1.0.0",
+      stage: "v1",
+      lambda: {
+        region: process.env.AWS_REGION,
+        functionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
+        runtime: process.env.AWS_EXECUTION_ENV,
+        memorySize: process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE,
+        timeout: process.env.AWS_LAMBDA_FUNCTION_TIMEOUT,
+      },
+      system: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage(),
+      },
+      config: {
+        hasJwtSecret: !!process.env.JWT_SECRET,
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        corsOrigin: process.env.CORS_ORIGIN || "*",
+      },
+    };
+
+    logger.info("Health check successful (with stage prefix)", healthData);
+    res.json(healthData);
+  } catch (error) {
+    logger.error("Health check failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "Health check failed",
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 logger.info("🏠 Setting up root endpoint");
 
 // Root endpoint
@@ -158,6 +203,7 @@ app.get("/", (req, res) => {
     endpoints: {
       api: "/api/trpc",
       health: "/health",
+      healthWithStage: "/v1/health",
     },
     timestamp: new Date().toISOString(),
   });
@@ -174,7 +220,7 @@ app.use("*", (req, res) => {
   res.status(404).json({
     error: "Not Found",
     message: `Route ${req.originalUrl} not found`,
-    availableRoutes: ["/", "/health", "/api/trpc/*"],
+    availableRoutes: ["/", "/health", "/v1/health", "/api/trpc/*"],
   });
 });
 
