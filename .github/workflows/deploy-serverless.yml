@@ -588,9 +588,29 @@ jobs:
           # Get function configuration
           aws lambda get-function --function-name $FUNCTION_NAME --query 'Configuration.{Runtime:Runtime,Timeout:Timeout,MemorySize:MemorySize,State:State}' --output table
 
-          # Test Lambda function
+          # Test Lambda function with proper API Gateway event format
           echo "🧪 Testing Lambda function..."
-          aws lambda invoke --function-name $FUNCTION_NAME --payload '{"httpMethod":"GET","path":"/health"}' response.json
+          echo '{
+            "httpMethod": "GET",
+            "path": "/health",
+            "pathParameters": null,
+            "queryStringParameters": null,
+            "headers": {
+              "Accept": "application/json",
+              "Content-Type": "application/json",
+              "User-Agent": "AWS-Lambda-Test/1.0"
+            },
+            "multiValueHeaders": {},
+            "requestContext": {
+              "requestId": "test-request-id",
+              "stage": "test",
+              "httpMethod": "GET",
+              "path": "/health"
+            },
+            "body": null,
+            "isBase64Encoded": false
+          }' > test-payload.json
+          aws lambda invoke --function-name $FUNCTION_NAME --payload file://test-payload.json response.json
 
           if [ -f response.json ]; then
             echo "📋 Lambda response:"
