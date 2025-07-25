@@ -840,6 +840,35 @@ jobs:
 
           update_lambda
 
+      - name: Verify Lambda permissions after deployment
+        run: |
+          # Use dynamic function name from environment detection
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
+
+          echo "🔍 Verifying Lambda permissions are managed by Terraform..."
+
+          # Check if Lambda has the correct API Gateway permission
+          if aws lambda get-policy --function-name "$FUNCTION_NAME" --query 'Policy' --output text 2>/dev/null; then
+            echo "✅ Lambda has permission policy"
+            
+            # Check if the permission matches what Terraform should create
+            POLICY_JSON=$(aws lambda get-policy --function-name "$FUNCTION_NAME" --query 'Policy' --output text)
+            
+            if echo "$POLICY_JSON" | grep -q "AllowExecutionFromAPIGateway"; then
+              echo "✅ API Gateway permission found"
+            else
+              echo "⚠️ API Gateway permission missing - this may cause health check failures"
+            fi
+            
+            # Show current permissions for verification
+            echo "📋 Current Lambda permissions:"
+            echo "$POLICY_JSON" | jq . 2>/dev/null || echo "$POLICY_JSON"
+            
+          else
+            echo "⚠️ No permission policy found on Lambda function"
+            echo "This will likely cause API Gateway integration errors"
+          fi
+
       - name: Wait for Lambda update
         run: |
           # Use dynamic function name from environment detection

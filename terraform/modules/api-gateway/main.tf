@@ -135,6 +135,14 @@ resource "aws_lambda_permission" "api_gateway_lambda" {
   function_name = var.lambda_function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+  
+  # Ensure this permission is created after the API and routes
+  depends_on = [
+    aws_apigatewayv2_api.main,
+    aws_apigatewayv2_stage.main,
+    aws_apigatewayv2_route.health,
+    aws_apigatewayv2_route.api_trpc
+  ]
 }
 
 
