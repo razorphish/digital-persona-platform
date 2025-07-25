@@ -868,50 +868,98 @@ jobs:
           # Step 4: Check bucket policy for public read access
           echo ""
           echo "🔍 Step 4: Checking bucket policy..."
+          CLOUDFRONT_ONLY=false
           if aws s3api get-bucket-policy --bucket "$S3_BUCKET" > bucket-policy.json 2>/dev/null; then
             echo "✅ Bucket policy exists"
             echo "📋 Policy summary:"
             cat bucket-policy.json | jq '.Policy | fromjson | .Statement[] | {Effect, Principal, Action}' 2>/dev/null || echo "Policy format check failed"
+            
+            # Check if this is a CloudFront-only policy
+            if cat bucket-policy.json | jq '.Policy | fromjson | .Statement[] | select(.Principal.Service == "cloudfront.amazonaws.com")' | grep -q "cloudfront"; then
+              echo "🔍 Detected CloudFront-only bucket policy"
+              CLOUDFRONT_ONLY=true
+            fi
           else
             echo "⚠️ No bucket policy found - checking if bucket is publicly accessible"
           fi
 
-          # Step 5: Test website accessibility with detailed error info
+          # Step 5: Determine correct URL to test based on policy type
           echo ""
-          echo "🔍 Step 5: Testing website accessibility..."
-          echo "🌐 Testing internal S3 website endpoint: $INTERNAL_WEBSITE_URL"
+          if [ "$CLOUDFRONT_ONLY" = true ]; then
+            echo "🔍 Step 5a: CloudFront distribution detected - finding CloudFront URL..."
+            
+            # Try to get CloudFront distribution URL from Terraform outputs
+            CLOUDFRONT_URL=$(cat outputs.json | jq -r '.cloudfront_distribution_domain_name.value // empty' 2>/dev/null)
+            
+            if [ -z "$CLOUDFRONT_URL" ]; then
+              # Fallback: try to find CloudFront distribution for this bucket
+              echo "🔍 Searching for CloudFront distribution for bucket $S3_BUCKET..."
+              CLOUDFRONT_URL=$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(Origins.Items[].DomainName, '$S3_BUCKET')].DomainName" --output text 2>/dev/null | head -1)
+            fi
+            
+            if [ -n "$CLOUDFRONT_URL" ] && [ "$CLOUDFRONT_URL" != "None" ]; then
+              TEST_URL="https://$CLOUDFRONT_URL"
+              echo "✅ Found CloudFront distribution: $CLOUDFRONT_URL"
+              echo "🌐 Testing CloudFront endpoint: $TEST_URL"
+            else
+              echo "⚠️ CloudFront distribution not found, falling back to S3 direct test"
+              echo "⚠️ Note: This may fail due to CloudFront-only policy"
+              TEST_URL="$INTERNAL_WEBSITE_URL"
+            fi
+          else
+            echo "🔍 Step 5b: Testing direct S3 website endpoint..."
+            TEST_URL="$INTERNAL_WEBSITE_URL"
+            echo "🌐 Testing direct S3 website endpoint: $TEST_URL"
+          fi
 
-          # Test internal S3 website with detailed diagnostics
+          # Test the appropriate endpoint with detailed diagnostics
           SUCCESS=false
           for i in {1..3}; do
-            echo "🔄 Internal S3 website test attempt $i/3..."
+            echo "🔄 Website test attempt $i/3..."
             
             # Get detailed curl response
-            HTTP_CODE=$(curl -s -o response.html -w "%{http_code}" "$INTERNAL_WEBSITE_URL" -m 15)
+            HTTP_CODE=$(curl -s -o response.html -w "%{http_code}" "$TEST_URL" -m 15)
             
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Internal S3 website health check PASSED (HTTP $HTTP_CODE)"
+              echo "✅ Website health check PASSED (HTTP $HTTP_CODE)"
               echo "📋 Response size: $(wc -c < response.html 2>/dev/null || echo 'unknown') bytes"
               SUCCESS=true
               break
             else
-              echo "❌ Internal S3 website test failed (HTTP $HTTP_CODE)"
+              echo "❌ Website test failed (HTTP $HTTP_CODE)"
               
-              # Provide specific error guidance
-              case "$HTTP_CODE" in
-                "403")
-                  echo "🚨 HTTP 403: Access denied - bucket policy issue"
-                  ;;
-                "404") 
-                  echo "🚨 HTTP 404: Not found - website configuration or DNS issue"
-                  ;;
-                "000")
-                  echo "🚨 HTTP 000: Connection failed - DNS or network issue"
-                  ;;
-                *)
-                  echo "🚨 HTTP $HTTP_CODE: Unexpected response"
-                  ;;
-              esac
+              # Provide specific error guidance based on endpoint type
+              if [ "$CLOUDFRONT_ONLY" = true ]; then
+                case "$HTTP_CODE" in
+                  "403")
+                    echo "🚨 HTTP 403: CloudFront access denied - distribution may not be deployed yet"
+                    ;;
+                  "404") 
+                    echo "🚨 HTTP 404: CloudFront distribution not found or not configured"
+                    ;;
+                  "000")
+                    echo "🚨 HTTP 000: Connection failed - CloudFront distribution may not exist"
+                    ;;
+                  *)
+                    echo "🚨 HTTP $HTTP_CODE: Unexpected CloudFront response"
+                    ;;
+                esac
+              else
+                case "$HTTP_CODE" in
+                  "403")
+                    echo "🚨 HTTP 403: S3 access denied - bucket policy needs public read access"
+                    ;;
+                  "404") 
+                    echo "🚨 HTTP 404: S3 website not found - website configuration issue"
+                    ;;
+                  "000")
+                    echo "🚨 HTTP 000: Connection failed - DNS or network issue"
+                    ;;
+                  *)
+                    echo "🚨 HTTP $HTTP_CODE: Unexpected S3 response"
+                    ;;
+                esac
+              fi
               
               if [ $i -lt 3 ]; then
                 echo "⏳ Waiting 20 seconds before retry..."
@@ -922,29 +970,42 @@ jobs:
 
           if [ "$SUCCESS" = false ]; then
             echo ""
-            echo "🚨 CRITICAL: Internal S3 website failed all diagnostic checks"
+            echo "🚨 CRITICAL: Website failed all diagnostic checks"
             echo "🚨 Last HTTP response code: $HTTP_CODE"
-            echo "🚨 This indicates S3 static website deployment or configuration issues"
+            echo "🚨 Tested URL: $TEST_URL"
             
-            # Additional debugging info
+            # Additional debugging info based on endpoint type
             echo ""
             echo "🔧 Debugging Information:"
             echo "  Bucket: $S3_BUCKET"
-            echo "  Website URL: $INTERNAL_WEBSITE_URL"
+            echo "  CloudFront-only policy: $CLOUDFRONT_ONLY"
+            if [ "$CLOUDFRONT_ONLY" = true ]; then
+              echo "  CloudFront URL: ${CLOUDFRONT_URL:-'Not found'}"
+              echo "  S3 Website URL: $INTERNAL_WEBSITE_URL (restricted by policy)"
+            else
+              echo "  S3 Website URL: $INTERNAL_WEBSITE_URL"
+            fi
             echo "  Files in bucket: $FILE_COUNT"
             echo "  Region: ${{ env.AWS_REGION }}"
             
             echo ""
             echo "🔧 Possible fixes:"
-            echo "  1. Check if frontend deployment step succeeded"
-            echo "  2. Verify S3 bucket policy allows public read access"
-            echo "  3. Confirm S3 website configuration is correct"
-            echo "  4. Check if index.html was deployed correctly"
+            if [ "$CLOUDFRONT_ONLY" = true ]; then
+              echo "  1. Ensure CloudFront distribution is deployed and configured"
+              echo "  2. Check CloudFront distribution points to correct S3 bucket"
+              echo "  3. Verify CloudFront distribution is in 'Deployed' status"
+              echo "  4. Wait for CloudFront deployment (can take 15-20 minutes)"
+            else
+              echo "  1. Update S3 bucket policy to allow public read access"
+              echo "  2. Add public read policy: {\"Principal\": \"*\", \"Action\": \"s3:GetObject\"}"
+              echo "  3. Check if frontend deployment step succeeded"
+              echo "  4. Verify S3 website configuration is correct"
+            fi
             
             exit 1
           fi
 
-          echo "✅ Internal S3 website verification completed successfully"
+          echo "✅ Website verification completed successfully"
 
       - name: Health Check Public Domain Website (Warning Only)
         continue-on-error: true
