@@ -919,47 +919,104 @@ jobs:
           echo "  Alternative 1: $ALT_API_NAME1"
           echo "  Alternative 2: $ALT_API_NAME2"
 
-          # Function to find API by name
-          find_api_by_name() {
+          # Function to find API by name and validate it exists
+          find_and_validate_api() {
             local api_name="$1"
-            aws apigatewayv2 get-apis --query "Items[?Name=='$api_name'].ApiId" --output text | tr -d '[:space:]'
+            echo "🔍 Checking for API Gateway: $api_name"
+            
+            # Get API ID by name
+            local potential_api_id=$(aws apigatewayv2 get-apis --query "Items[?Name=='$api_name'].ApiId" --output text | tr -d '[:space:]')
+            
+            if [ -n "$potential_api_id" ] && [ "$potential_api_id" != "None" ] && [ "$potential_api_id" != "" ]; then
+              echo "🔎 Found potential API ID: $potential_api_id"
+              
+              # Validate the API actually exists by trying to get its details
+              if aws apigatewayv2 get-api --api-id "$potential_api_id" >/dev/null 2>&1; then
+                echo "✅ Validated API Gateway '$api_name' with ID: $potential_api_id"
+                echo "$potential_api_id"
+                return 0
+              else
+                echo "❌ API ID $potential_api_id is invalid or inaccessible"
+                return 1
+              fi
+            else
+              echo "❌ No API found with name: $api_name"
+              return 1
+            fi
           }
 
-          # Try to find API Gateway with different naming patterns
+          # Try to find and validate API Gateway with different naming patterns
           API_ID=""
           for api_name in "$PRIMARY_API_NAME" "$ALT_API_NAME1" "$ALT_API_NAME2"; do
-            echo "🔍 Checking for API Gateway: $api_name"
-            API_ID=$(find_api_by_name "$api_name")
-            if [ -n "$API_ID" ] && [ "$API_ID" != "None" ] && [ "$API_ID" != "" ]; then
-              echo "✅ Found API Gateway '$api_name' with ID: $API_ID"
+            if API_ID=$(find_and_validate_api "$api_name"); then
+              echo "✅ Successfully found and validated API Gateway: $api_name ($API_ID)"
               break
             fi
           done
 
-          # If still not found, list all APIs for debugging
+          # If still not found, list all APIs for debugging but don't use fuzzy search
           if [ -z "$API_ID" ] || [ "$API_ID" = "None" ] || [ "$API_ID" = "" ]; then
-            echo "❌ No API Gateway found with expected names"
-            echo "Available APIs in region ${{ env.AWS_REGION }}:"
-            aws apigatewayv2 get-apis --query 'Items[*].{Name:Name,Id:ApiId,Protocol:ProtocolType}' --output table
+            echo "❌ No valid API Gateway found with expected names"
+            echo ""
+            echo "🔍 Available APIs in region ${{ env.AWS_REGION }}:"
+            aws apigatewayv2 get-apis --query 'Items[*].{Name:Name,Id:ApiId,Protocol:ProtocolType,CreatedDate:CreatedDate}' --output table
             
-            # Try to find any API that contains our project name
-            echo "🔍 Searching for APIs containing '$PROJECT_NAME'..."
-            FUZZY_API_ID=$(aws apigatewayv2 get-apis --query "Items[?contains(Name, '$PROJECT_NAME')].ApiId" --output text | head -n1 | tr -d '[:space:]')
-            
-            if [ -n "$FUZZY_API_ID" ] && [ "$FUZZY_API_ID" != "None" ]; then
-              echo "⚠️ Found API containing '$PROJECT_NAME': $FUZZY_API_ID"
-              API_ID="$FUZZY_API_ID"
-            else
-              echo "❌ No API Gateway found containing '$PROJECT_NAME'"
-              exit 1
-            fi
+            echo ""
+            echo "🔧 Troubleshooting steps:"
+            echo "1. Check if Terraform deployment completed successfully"
+            echo "2. Verify API Gateway module was applied without errors"
+            echo "3. Look for API Gateway creation logs in deployment output"
+            echo "4. Expected API name should be: $PRIMARY_API_NAME"
+            echo ""
+            echo "❌ Cannot proceed with health check - no valid API Gateway found"
+            exit 1
           fi
 
-          # Construct the API URL
-          API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/v1"
+          # Double-check API exists and get additional details
+          echo "🔍 Validating final API Gateway configuration..."
+          if ! aws apigatewayv2 get-api --api-id "$API_ID" >/dev/null 2>&1; then
+            echo "❌ Final validation failed - API Gateway $API_ID does not exist"
+            exit 1
+          fi
 
-          echo "✅ Using API Gateway: $API_ID"
+          # Check if API has stages (required for health check)
+          STAGES=$(aws apigatewayv2 get-stages --api-id "$API_ID" --query 'Items[*].StageName' --output text 2>/dev/null)
+          if [ -z "$STAGES" ] || [ "$STAGES" = "None" ]; then
+            echo "❌ API Gateway $API_ID has no stages configured"
+            echo "🔧 This indicates incomplete deployment - API Gateway needs at least one stage"
+            exit 1
+          else
+            echo "✅ API Gateway has stages: $STAGES"
+          fi
+
+          # Check if API has routes (required for /health endpoint)
+          ROUTES=$(aws apigatewayv2 get-routes --api-id "$API_ID" --query 'Items[*].RouteKey' --output text 2>/dev/null)
+          if [ -z "$ROUTES" ] || [ "$ROUTES" = "None" ]; then
+            echo "❌ API Gateway $API_ID has no routes configured"
+            echo "🔧 This indicates incomplete deployment - API Gateway needs routes for /health endpoint"
+            exit 1
+          else
+            echo "✅ API Gateway has routes configured"
+          fi
+
+          # Construct the API URL using the validated stage
+          # Use the first stage found (typically 'v1' based on your configuration)
+          FIRST_STAGE=$(echo "$STAGES" | awk '{print $1}')
+          API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/${FIRST_STAGE}"
+
+          echo "✅ Using validated API Gateway: $API_ID"
           echo "🌐 API URL: $API_URL"
+
+          # Final DNS pre-check to verify the hostname resolves
+          echo "🔍 Pre-checking DNS resolution..."
+          API_HOSTNAME="${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com"
+          if nslookup "$API_HOSTNAME" >/dev/null 2>&1; then
+            echo "✅ DNS resolution successful for $API_HOSTNAME"
+          else
+            echo "⚠️ DNS resolution issue detected for $API_HOSTNAME"
+            echo "🔧 This might be due to recent API Gateway creation - DNS propagation can take a few minutes"
+            echo "Will proceed with health check but may need retries..."
+          fi
 
           # Set the output
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
