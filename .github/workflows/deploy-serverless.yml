@@ -794,25 +794,78 @@ jobs:
             echo "PUBLIC_API_STATUS=PASSED" >> $GITHUB_ENV
           fi
 
-      - name: Health Check Website
-        continue-on-error: true
+      - name: Health Check Internal S3 Website (Critical)
         run: |
           echo ""
-          echo "🌐 Step 3: Testing Website (warning only if fails)"
+          echo "🌐 Step 3a: Testing Internal S3 Website (CRITICAL - must pass)"
 
-          WEBSITE_URL="https://${{ needs.detect-environment.outputs.domain_name }}"
-          echo "🎯 Website URL: $WEBSITE_URL"
+          # Get internal S3 website URL from Terraform outputs
+          if [ -f outputs.json ]; then
+            INTERNAL_WEBSITE_URL=$(cat outputs.json | jq -r '.website_url.value // empty')
+            S3_BUCKET=$(cat outputs.json | jq -r '.website_bucket_name.value // empty')
+          fi
 
-          # Test website - warn only (3 attempts)
+          # Fallback to construct S3 website URL if not in outputs
+          if [ -z "$INTERNAL_WEBSITE_URL" ] && [ -n "$S3_BUCKET" ]; then
+            INTERNAL_WEBSITE_URL="http://${S3_BUCKET}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
+          fi
+
+          if [ -z "$INTERNAL_WEBSITE_URL" ]; then
+            echo "❌ Could not get internal S3 website URL from Terraform outputs"
+            echo "📋 Available outputs:"
+            cat outputs.json | jq .
+            exit 1
+          fi
+
+          echo "🎯 Internal S3 Website URL: $INTERNAL_WEBSITE_URL"
+          echo "🌐 Testing internal S3 website endpoint..."
+
+          # Test internal S3 website - MUST pass (5 attempts)
           SUCCESS=false
-          for i in {1..3}; do
-            echo "🔄 Website test attempt $i/3..."
-            if curl -f "$WEBSITE_URL" -m 15 -s -o /dev/null; then
-              echo "✅ Website health check PASSED"
+          for i in {1..5}; do
+            echo "🔄 Internal S3 website test attempt $i/5..."
+            if curl -f "$INTERNAL_WEBSITE_URL" -m 15 -s -o /dev/null; then
+              echo "✅ Internal S3 website health check PASSED"
               SUCCESS=true
               break
             else
-              echo "⚠️ Website test attempt $i/3 failed"
+              echo "❌ Internal S3 website test attempt $i/5 failed"
+              if [ $i -lt 5 ]; then
+                echo "⏳ Waiting 20 seconds before retry..."
+                sleep 20
+              fi
+            fi
+          done
+
+          if [ "$SUCCESS" = false ]; then
+            echo ""
+            echo "🚨 CRITICAL: Internal S3 website failed all 5 attempts"
+            echo "🚨 This indicates S3 static website deployment issues"
+            echo "🚨 Failing the workflow..."
+            exit 1
+          fi
+
+          echo "✅ Internal S3 website verification completed successfully"
+
+      - name: Health Check Public Domain Website (Warning Only)
+        continue-on-error: true
+        run: |
+          echo ""
+          echo "🌐 Step 3b: Testing Public Domain Website (warning only if fails)"
+
+          PUBLIC_WEBSITE_URL="https://${{ needs.detect-environment.outputs.domain_name }}"
+          echo "🎯 Public Website URL: $PUBLIC_WEBSITE_URL"
+
+          # Test public domain website - warn only (3 attempts)
+          SUCCESS=false
+          for i in {1..3}; do
+            echo "🔄 Public website test attempt $i/3..."
+            if curl -f "$PUBLIC_WEBSITE_URL" -m 15 -s -o /dev/null; then
+              echo "✅ Public domain website health check PASSED"
+              SUCCESS=true
+              break
+            else
+              echo "⚠️ Public website test attempt $i/3 failed"
               if [ $i -lt 3 ]; then
                 echo "⏳ Waiting 30 seconds before retry (DNS propagation)..."
                 sleep 30
@@ -821,8 +874,11 @@ jobs:
           done
 
           if [ "$SUCCESS" = false ]; then
-            echo "⚠️ WARNING: Website failed all 3 attempts"
+            echo ""
+            echo "⚠️ WARNING: Public domain website failed all 3 attempts"
             echo "⚠️ This is often due to DNS propagation delays"
+            echo "⚠️ Internal S3 website is working, so deployment is successful"
+            echo "⚠️ Public domain should work within 24 hours"
             echo "WEBSITE_STATUS=FAILED" >> $GITHUB_ENV
           else
             echo "WEBSITE_STATUS=PASSED" >> $GITHUB_ENV
@@ -834,29 +890,41 @@ jobs:
           echo "🎉 Deployment Summary"
           echo "===================="
           echo "Environment: ${{ needs.detect-environment.outputs.environment }}"
-          echo "Internal API: ✅ PASSED (verified working)"
-          echo "Public API: ${PUBLIC_API_STATUS:-UNKNOWN}"
-          echo "Website: ${WEBSITE_STATUS:-UNKNOWN}"
+          echo ""
+          echo "🔧 Infrastructure Status (Critical - All Verified ✅):"
+          echo "  Internal API: ✅ PASSED (AWS infrastructure verified)"
+          echo "  Internal S3 Website: ✅ PASSED (S3 static hosting verified)"
+          echo ""
+          echo "🌐 Public Domain Status (DNS-dependent):"
+          echo "  Public API: ${PUBLIC_API_STATUS:-UNKNOWN}"
+          echo "  Public Website: ${WEBSITE_STATUS:-UNKNOWN}"
           echo ""
           echo "📍 URLs:"
           echo "  Internal API: $(cat outputs.json | jq -r '.api_url.value // "N/A"')"
+          echo "  Internal S3 Website: $(cat outputs.json | jq -r '.website_url.value // "N/A"')"
           echo "  Public API: ${{ needs.detect-environment.outputs.api_url }}"
-          echo "  Website: https://${{ needs.detect-environment.outputs.domain_name }}"
+          echo "  Public Website: https://${{ needs.detect-environment.outputs.domain_name }}"
           echo ""
-          echo "🔧 Infrastructure:"
+          echo "🔧 Infrastructure Details:"
           echo "  Function: ${{ needs.detect-environment.outputs.function_name }}"
           echo "  S3 Bucket: ${{ needs.detect-environment.outputs.s3_bucket }}"
+          echo "  AWS Region: ${{ env.AWS_REGION }}"
           echo ""
           if [ "${PUBLIC_API_STATUS}" = "FAILED" ] || [ "${WEBSITE_STATUS}" = "FAILED" ]; then
-            echo "⚠️ NOTES:"
+            echo "⚠️ DNS PROPAGATION NOTES:"
             if [ "${PUBLIC_API_STATUS}" = "FAILED" ]; then
-              echo "  - Public API domain may need DNS propagation time (up to 24 hours)"
+              echo "  - Public API domain (qa03-api.hibiji.com) may need DNS propagation time"
             fi
             if [ "${WEBSITE_STATUS}" = "FAILED" ]; then
-              echo "  - Website domain may need DNS propagation time (up to 24 hours)"
+              echo "  - Public website domain (qa03.hibiji.com) may need DNS propagation time"
             fi
-            echo "  - Internal AWS API is working, deployment is successful"
+            echo "  - DNS propagation can take up to 24 hours globally"
+            echo "  - Internal AWS infrastructure is verified and working correctly"
+            echo "  - You can test using internal URLs immediately"
             echo "  - Check public URLs again in a few hours"
+          else
+            echo "🎉 All endpoints verified and working correctly!"
           fi
           echo ""
           echo "✅ Serverless deployment completed successfully!"
+          echo "✅ All critical infrastructure components verified working!"
