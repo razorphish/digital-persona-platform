@@ -610,7 +610,7 @@ jobs:
             "body": null,
             "isBase64Encoded": false
           }' > test-payload.json
-          aws lambda invoke --function-name $FUNCTION_NAME --payload file://test-payload.json response.json
+          aws lambda invoke --function-name $FUNCTION_NAME --payload file://test-payload.json --cli-binary-format raw-in-base64-out response.json
 
           if [ -f response.json ]; then
             echo "📋 Lambda response:"
