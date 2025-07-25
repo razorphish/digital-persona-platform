@@ -912,7 +912,19 @@ jobs:
               fi
             fi
             
-            # Method 3: Search by S3 website endpoint
+            # Method 3: Search by S3 direct access endpoint (common CloudFront setup)
+            if [ -z "$CLOUDFRONT_URL" ]; then
+              echo "🔍 Searching for CloudFront distribution for S3 direct access endpoint..."
+              S3_DIRECT_DOMAIN="${S3_BUCKET}.s3.${{ env.AWS_REGION }}.amazonaws.com"
+              CLOUDFRONT_URL=$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(Origins.Items[].DomainName, '$S3_DIRECT_DOMAIN')].DomainName" --output text 2>/dev/null | head -1)
+              if [ -n "$CLOUDFRONT_URL" ] && [ "$CLOUDFRONT_URL" != "None" ]; then
+                echo "✅ Found CloudFront distribution via S3 direct access: $CLOUDFRONT_URL"
+              else
+                CLOUDFRONT_URL=""
+              fi
+            fi
+            
+            # Method 4: Search by S3 website endpoint
             if [ -z "$CLOUDFRONT_URL" ]; then
               echo "🔍 Searching for CloudFront distribution for S3 website endpoint..."
               S3_WEBSITE_DOMAIN="${S3_BUCKET}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
@@ -924,7 +936,7 @@ jobs:
               fi
             fi
             
-            # Method 4: List all distributions and show for debugging
+            # Method 5: List all distributions and show for debugging
             if [ -z "$CLOUDFRONT_URL" ]; then
               echo "🔍 Listing all CloudFront distributions for debugging..."
               aws cloudfront list-distributions --query "DistributionList.Items[*].{DomainName:DomainName,Status:Status,Origins:Origins.Items[0].DomainName}" --output table 2>/dev/null || echo "Failed to list CloudFront distributions"
