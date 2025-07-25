@@ -1,0 +1,41 @@
+# Simple single-stage Dockerfile for debugging
+FROM node:20-alpine
+
+# Install basic dependencies
+RUN apk add --no-cache libc6-compat
+
+# Set working directory
+WORKDIR /app
+
+# Copy everything from the repo root
+COPY . .
+
+# Install dependencies
+RUN npm ci
+
+# Build shared packages first
+RUN npm run build --workspace=@digital-persona/shared
+
+# Change to web app directory
+WORKDIR /app/apps/web
+
+# Debug: Show what we have
+RUN echo "=== Current directory ===" && \
+    pwd && \
+    echo "=== Contents of current directory ===" && \
+    ls -la && \
+    echo "=== Contents of src directory ===" && \
+    ls -la src/ && \
+    echo "=== Contents of src/lib ===" && \
+    ls -la src/lib/ && \
+    echo "=== tsconfig.json ===" && \
+    cat tsconfig.json
+
+# Build the Next.js app
+RUN npm run build
+
+# Expose port
+EXPOSE 4000
+
+# Start the application
+CMD ["npm", "start"] 

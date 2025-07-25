@@ -1,0 +1,83 @@
+# TruffleHog ignore patterns - Proper regex syntax for path exclusions
+
+# ===========================================
+# DOCUMENTATION AND EXAMPLE FILES
+# ===========================================
+
+# Documentation containing example secrets/configs
+docs/
+README\.md
+.*\.md$
+
+# Configuration examples
+env\.production\.example
+docker-compose\.yml
+docker-compose\.dev\.yml
+
+# ===========================================
+# TERRAFORM FILES WITH PLACEHOLDER SECRETS
+# ===========================================
+
+# Terraform configurations (contain placeholder secrets)
+terraform/
+
+# ===========================================
+# SCRIPTS AND SETUP FILES
+# ===========================================
+
+# Setup and configuration scripts
+scripts/
+start\.sh
+setup_aws\.sh
+
+# ===========================================
+# BUILD ARTIFACTS AND DEPENDENCIES
+# ===========================================
+
+# Next.js build artifacts (false positive hashes)
+apps/web/\.next/
+apps/web/out/
+
+# Node modules and lock files
+node_modules/
+package-lock\.json
+yarn\.lock
+
+# Python dependencies
+venv/
+__pycache__/
+
+# ===========================================
+# GITHUB WORKFLOWS AND CI/CD
+# ===========================================
+
+# GitHub workflows (contain example patterns)
+\.github/
+
+# ===========================================
+# APPLICATION CONFIG FILES
+# ===========================================
+
+# Python ML service configuration
+python-ml-service/app/config/
+
+# Test files
+tests/
+.*test.*
+.*_test\..*
+.*\.test\..*
+
+# ===========================================
+# LOGS AND TEMPORARY FILES
+# ===========================================
+
+# Log files and temporary data
+logs/
+.*\.log$
+.*\.tmp$
+.*\.temp$
+
+# Database files
+.*\.db$
+.*\.sqlite$
+.*\.sqlite3$

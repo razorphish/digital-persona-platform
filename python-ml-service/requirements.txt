@@ -1,0 +1,55 @@
+# Core FastAPI and web framework
+fastapi>=0.115.14  # Updated for starlette 0.47.2+ compatibility
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+pydantic[email]>=2.9.0,<3.0.0
+pydantic-settings==2.1.0
+
+# Authentication and security
+python-jose[cryptography]>=3.4.0,<4.0.0
+passlib[bcrypt]>=1.7.4,<2.0.0
+python-dotenv>=1.0.0,<2.0.0
+
+# HTTP client for inter-service communication
+httpx>=0.28.1,<1.0.0
+requests>=2.32.3,<3.0.0
+urllib3>=2.2.3,<3.0.0
+
+# AI and ML core services
+openai==1.3.7
+numpy<2.0
+
+# Computer Vision and Image Processing
+opencv-python>=4.9.0.80,<5.0.0
+Pillow>=10.4.0,<11.0.0
+
+# Vector Embeddings and Memory
+chromadb>=0.5.0,<1.0.0
+
+# Voice Synthesis
+gtts==2.4.0
+edge-tts==6.1.10
+pydub==0.25.1
+
+# File handling and processing
+aiofiles==23.2.1
+python-magic==0.4.27
+
+# AWS services (for S3 integration)
+boto3>=1.35.0,<2.0.0
+aioboto3>=13.0.0,<14.0.0
+
+# Data processing (placeholder for future needs)
+
+# Logging and monitoring
+structlog==23.1.0
+prometheus-client==0.19.0
+
+# Development and testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+
+# Additional utilities
+click==8.1.7
+typing-extensions>=4.12.2 

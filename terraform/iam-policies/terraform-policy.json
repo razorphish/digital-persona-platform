@@ -115,6 +115,61 @@
       "Resource": "*"
     },
     {
+      "Sid": "TerraformAPIGatewayAccess",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TerraformAPIGatewayTagging",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:POST",
+        "apigateway:PUT",
+        "apigateway:DELETE",
+        "apigateway:GET"
+      ],
+      "Resource": [
+        "arn:aws:apigateway:*::/tags/*",
+        "arn:aws:apigateway:*::/v2/apis/*/tags",
+        "arn:aws:apigateway:*::/v2/apis/*/tags/*"
+      ]
+    },
+    {
+      "Sid": "TerraformLambdaAccess",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TerraformIAMPassRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/*-lambda-execution",
+        "arn:aws:iam::*:role/*lambda*",
+        "arn:aws:iam::*:role/*Lambda*"
+      ]
+    },
+    {
+      "Sid": "TerraformTaggingAccess",
+      "Effect": "Allow",
+      "Action": [
+        "tag:GetResources",
+        "tag:TagResources",
+        "tag:UntagResources",
+        "tag:GetTagKeys",
+        "tag:GetTagValues"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "TerraformSTSAccess",
       "Effect": "Allow",
       "Action": [

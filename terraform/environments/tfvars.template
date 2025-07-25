@@ -1,0 +1,18 @@
+# Auto-generated for sub-environment: {{SUB_ENV}}
+# Generated on: {{TIMESTAMP}}
+# Branch: {{BRANCH_NAME}}
+
+environment     = "{{MAIN_ENV}}"
+sub_environment = "{{SUB_ENV}}"
+domain_name     = "hibiji.com"
+
+# ECR Repository URLs
+ecr_repository_url         = "{{ECR_BACKEND_URL}}"
+frontend_ecr_repository_url = "{{ECR_FRONTEND_URL}}"
+
+# Image tags (using commit SHA for versioning)
+image_tag                  = "{{IMAGE_TAG}}"
+frontend_image_tag         = "{{FRONTEND_IMAGE_TAG}}"
+
+# Environment-specific configurations
+# These can be customized per sub-environment if needed 

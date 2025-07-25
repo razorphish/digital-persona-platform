@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
 
 # Test configuration
 TEST_SERVER_HOST = "127.0.0.1"
-TEST_SERVER_PORT = 8001  # Use different port to avoid conflicts
+TEST_SERVER_PORT = 8002  # Use different port to avoid conflicts
 BASE_URL = f"http://{TEST_SERVER_HOST}:{TEST_SERVER_PORT}"
 TEST_DB_PATH = Path(__file__).parent.parent / "test.db"
 INIT_DB_SQL = Path(__file__).parent.parent / "init-db.sql"
@@ -53,19 +53,6 @@ def reset_test_db():
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS personas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    name VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    personality_data TEXT,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
-                )
-            """)
         print(f"✅ Test database created with basic schema at {TEST_DB_PATH}")
     
     # Set environment variable so the app uses test.db
@@ -78,12 +65,27 @@ def reset_test_db():
 
 @pytest.fixture(scope="session")
 def test_server(reset_test_db):
+    import sys  # Ensure sys is available in this scope
+    import os
+    import random
     """
     Fixture to start and stop the test server for integration tests.
-    Uses a different port to avoid conflicts with development server.
+    Uses a different port and database file to avoid conflicts with development server and parallel workers.
     """
     server_process = None
-    
+
+    # Assign a unique port and DB per worker
+    base_port = 8002
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    # Extract a number from the worker id (e.g., gw0 -> 0)
+    try:
+        worker_num = int(''.join(filter(str.isdigit, worker_id)))
+    except Exception:
+        worker_num = 0
+    TEST_SERVER_PORT = base_port + worker_num
+    BASE_URL = f"http://127.0.0.1:{TEST_SERVER_PORT}"
+    TEST_DB_PATH = os.path.abspath(f"test_{worker_id}.db")
+
     try:
         # Test imports before starting server
         print("🔍 Testing imports...")
@@ -103,19 +105,13 @@ def test_server(reset_test_db):
         
         # Initialize database schema before starting server
         print("🔧 Initializing database schema...")
-        try:
-            import asyncio
-            from app.database import create_tables
-            
-            # Run database initialization
-            asyncio.run(create_tables())
-            print("✅ Database schema initialized")
-        except Exception as e:
-            print(f"⚠️ Database initialization warning: {e}")
-            # Continue anyway, the app might handle this
+        # No manual table creation here; handled by app startup
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
+        print(f"(DB file {TEST_DB_PATH} will be created by the app on startup)")
         
         # Start the server with DATABASE_URL env set
-        print(f"🚀 Starting test server on {BASE_URL}")
+        print(f"🚀 Starting test server on {BASE_URL} with DB {TEST_DB_PATH}")
         env = os.environ.copy()
         env["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
         # Set a dummy OpenAI API key to prevent initialization errors
@@ -153,12 +149,13 @@ def test_server(reset_test_db):
         server_process = subprocess.Popen([
             sys.executable, "-m", "uvicorn", 
             "app.main:app", 
-            "--host", TEST_SERVER_HOST,
+            "--host", "127.0.0.1",
             "--port", str(TEST_SERVER_PORT),
             "--log-level", "error"
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         
         # Give the server a moment to start
+        import time
         time.sleep(3)
         
         # Check if process is still running
@@ -181,6 +178,7 @@ def test_server(reset_test_db):
         
         # Wait for server to start
         max_attempts = 30
+        import requests
         for attempt in range(max_attempts):
             try:
                 response = requests.get(f"{BASE_URL}/health", timeout=2)
@@ -243,6 +241,9 @@ def test_server(reset_test_db):
                 print("⚠️ psutil not available, skipping process cleanup")
             except Exception as e:
                 print(f"⚠️ Process cleanup error: {e}")
+        # Clean up the worker-specific DB file
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
 
 @pytest.fixture
 def api_client(test_server):
@@ -293,26 +294,86 @@ def test_user_credentials():
 @pytest.fixture
 def authenticated_user(api_client, test_user_credentials, auth_headers):
     """
-    Fixture providing an authenticated user session.
+    Fixture providing an authenticated user session with retry logic for parallel execution.
     """
-    # Register user if not exists
+    import time
+    import random
+    
+    # Add worker-specific identifier to avoid conflicts
+    # Try to get worker ID from pytest-xdist
     try:
-        response = api_client.post("/auth/register", json=test_user_credentials)
-        if response.status_code not in [200, 201, 422]:  # 422 means user already exists
-            print(f"Warning: Registration failed with status {response.status_code}")
-    except Exception as e:
-        print(f"Warning: Registration failed: {e}")
+        import os
+        worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'main')
+    except:
+        worker_id = 'main'
     
-    # Login to get token
-    response = api_client.post("/auth/login", json={
-        "email": test_user_credentials["email"],
-        "password": test_user_credentials["password"]
-    })
+    # Add process ID and random number for extra uniqueness
+    import os
+    process_id = os.getpid()
+    unique_suffix = f"{worker_id}_{process_id}_{random.randint(1000, 9999)}"
     
-    if response.status_code == 200:
-        login_data = response.json()
-        token = login_data.get("access_token")
-        
+    # Create worker-specific credentials
+    worker_credentials = {
+        "email": f"test_{unique_suffix}@example.com",
+        "password": "testpass123",
+        "username": f"testuser_{unique_suffix}",
+        "full_name": "Test User"
+    }
+    
+    # Retry logic for registration and login
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Register user with retry logic
+            response = api_client.post("/auth/register", json=worker_credentials)
+            if response.status_code in [200, 201, 422]:  # 422 means user already exists
+                break
+            elif response.status_code == 500:
+                print(f"Registration attempt {attempt + 1} failed with 500, retrying...")
+                time.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                continue
+            else:
+                print(f"Registration failed with status {response.status_code}: {response.text}")
+                break
+        except Exception as e:
+            print(f"Registration attempt {attempt + 1} failed with exception: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            else:
+                print(f"Registration failed after {max_retries} attempts")
+                break
+    
+    # Retry logic for login
+    token = None
+    for attempt in range(max_retries):
+        try:
+            response = api_client.post("/auth/login", json={
+                "email": worker_credentials["email"],
+                "password": worker_credentials["password"]
+            })
+            
+            if response.status_code == 200:
+                login_data = response.json()
+                token = login_data.get("access_token")
+                break
+            elif response.status_code == 500:
+                print(f"Login attempt {attempt + 1} failed with 500, retrying...")
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            else:
+                print(f"Login failed with status {response.status_code}: {response.text}")
+                break
+        except Exception as e:
+            print(f"Login attempt {attempt + 1} failed with exception: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            else:
+                print(f"Login failed after {max_retries} attempts")
+                break
+    
+    if token:
         # Get user info from the token or make a request to /auth/me
         try:
             user_response = api_client.get("/auth/me", headers=auth_headers(token))
@@ -320,19 +381,19 @@ def authenticated_user(api_client, test_user_credentials, auth_headers):
                 user_data = user_response.json()
             else:
                 # Fallback: create minimal user data
-                user_data = {"id": 1, "email": test_user_credentials["email"]}
+                user_data = {"id": 1, "email": worker_credentials["email"]}
         except Exception:
             # Fallback: create minimal user data
-            user_data = {"id": 1, "email": test_user_credentials["email"]}
+            user_data = {"id": 1, "email": worker_credentials["email"]}
         
         return {
             "token": token,
             "headers": auth_headers(token),
-            "credentials": test_user_credentials,
+            "credentials": worker_credentials,
             "user": user_data
         }
     else:
-        pytest.skip("Could not authenticate test user")
+        pytest.skip("Could not authenticate test user after multiple attempts")
 
 # Mark tests that require the server
 def pytest_configure(config):

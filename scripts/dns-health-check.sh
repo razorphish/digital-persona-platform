@@ -6,6 +6,20 @@ set -e
 DOMAIN="hibiji.com"
 HEALTH_ENDPOINT="/health"
 
+# Cross-platform date function
+parse_date_to_timestamp() {
+    local date_string=$1
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS (BSD date) - try different formats
+        date -j -f "%Y-%m-%dT%H:%M:%S%z" "$date_string" +%s 2>/dev/null || \
+        date -j -f "%Y-%m-%dT%H:%M:%S" "$date_string" +%s 2>/dev/null || \
+        echo "0"
+    else
+        # Linux (GNU date)
+        date -d "$date_string" +%s 2>/dev/null || echo "0"
+    fi
+}
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -223,7 +237,7 @@ if [ ! -z "$CERT_ARN" ]; then
         echo "Certificate expires: $EXPIRATION"
         
         # Check if certificate expires within 30 days
-        EXPIRATION_DATE=$(date -d "$EXPIRATION" +%s 2>/dev/null || echo "0")
+        EXPIRATION_DATE=$(parse_date_to_timestamp "$EXPIRATION")
         CURRENT_DATE=$(date +%s)
         DAYS_UNTIL_EXPIRY=$(( (EXPIRATION_DATE - CURRENT_DATE) / 86400 ))
         

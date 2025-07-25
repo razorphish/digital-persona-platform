@@ -1,0 +1,36 @@
+{
+  "name": "@digital-persona/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist && rm -rf .turbo",
+    "db:push": "drizzle-kit push:pg",
+    "db:migrate": "drizzle-kit generate:pg",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@types/pg": "^8.15.4",
+    "drizzle-orm": "^0.29.1",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.7",
+    "drizzle-kit": "^0.20.6",
+    "typescript": "^5.2.2"
+  }
+}

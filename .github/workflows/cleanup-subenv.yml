@@ -1,0 +1,127 @@
+name: Cleanup Sub-Environment
+
+on:
+  delete:
+    branches:
+      - "dev*"
+      - "qa*"
+      - "staging*"
+      - "hotfix*"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-west-1
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Determine environment and cleanup
+        run: |
+          BRANCH_NAME="${{ github.event.ref_name }}"
+          MAIN_ENV=$(echo $BRANCH_NAME | sed 's/[0-9]*$//')
+          TFVARS_FILE="terraform/environments/$MAIN_ENV/${BRANCH_NAME}.auto.tfvars"
+
+          echo "🚨 BRANCH DELETED - CLEANING UP SUB-ENVIRONMENT 🚨"
+          echo "Branch: $BRANCH_NAME"
+          echo "Main environment: $MAIN_ENV"
+          echo "Tfvars file: $TFVARS_FILE"
+
+          # Check if this is a sub-environment (has numbers)
+          if [[ ! "$BRANCH_NAME" =~ [0-9]+$ ]]; then
+            echo "⚠️  Branch $BRANCH_NAME is not a sub-environment, skipping cleanup"
+            exit 0
+          fi
+
+          # Navigate to the correct environment directory
+          cd terraform/environments/$MAIN_ENV
+
+          # Check if workspace exists
+          if terraform workspace list | grep -q "$BRANCH_NAME"; then
+            echo "Found workspace $BRANCH_NAME, proceeding with cleanup"
+            
+            # Select the workspace
+            terraform workspace select "$BRANCH_NAME"
+            
+            # Initialize Terraform if needed
+            terraform init
+            
+            # Destroy the infrastructure
+            echo "Destroying infrastructure for sub-environment: $BRANCH_NAME"
+            terraform destroy -auto-approve -var="sub_environment=$BRANCH_NAME"
+            
+            # Switch back to default workspace
+            terraform workspace select default
+            
+            # Delete the workspace
+            echo "Deleting workspace: $BRANCH_NAME"
+            terraform workspace delete "$BRANCH_NAME"
+            
+            echo "✅ Successfully destroyed sub-environment: $BRANCH_NAME"
+          else
+            echo "⚠️  Workspace $BRANCH_NAME does not exist, skipping Terraform cleanup"
+          fi
+
+          # Clean up tfvars file if it exists
+          if [ -f "$TFVARS_FILE" ]; then
+            echo "Removing tfvars file: $TFVARS_FILE"
+            rm -f "$TFVARS_FILE"
+            echo "✅ Removed tfvars file"
+          else
+            echo "Tfvars file $TFVARS_FILE does not exist"
+          fi
+
+          # Clean up any ECS services that might still exist
+          echo "Checking for ECS services to clean up..."
+          CLUSTER_NAME="hibiji-$MAIN_ENV-cluster"
+          BACKEND_SERVICE="hibiji-$BRANCH_NAME-backend"
+          FRONTEND_SERVICE="hibiji-$BRANCH_NAME-frontend"
+
+          # Check if cluster exists
+          if aws ecs describe-clusters --clusters "$CLUSTER_NAME" --region $AWS_REGION --query 'clusters[0].status' --output text | grep -q "ACTIVE"; then
+            echo "ECS cluster $CLUSTER_NAME is active, checking services..."
+            
+            # Check and delete backend service
+            if aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$BACKEND_SERVICE" --region $AWS_REGION --query 'services[0].status' --output text 2>/dev/null | grep -q "ACTIVE"; then
+              echo "Deleting ECS service: $BACKEND_SERVICE"
+              aws ecs update-service --cluster "$CLUSTER_NAME" --service "$BACKEND_SERVICE" --desired-count 0 --region $AWS_REGION
+              aws ecs delete-service --cluster "$CLUSTER_NAME" --service "$BACKEND_SERVICE" --region $AWS_REGION
+            fi
+            
+            # Check and delete frontend service
+            if aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$FRONTEND_SERVICE" --region $AWS_REGION --query 'services[0].status' --output text 2>/dev/null | grep -q "ACTIVE"; then
+              echo "Deleting ECS service: $FRONTEND_SERVICE"
+              aws ecs update-service --cluster "$CLUSTER_NAME" --service "$FRONTEND_SERVICE" --desired-count 0 --region $AWS_REGION
+              aws ecs delete-service --cluster "$CLUSTER_NAME" --service "$FRONTEND_SERVICE" --region $AWS_REGION
+            fi
+          else
+            echo "ECS cluster $CLUSTER_NAME is not active or does not exist"
+          fi
+
+          echo "🎉 Cleanup completed for sub-environment: $BRANCH_NAME"
+
+      - name: Notify cleanup completion
+        run: |
+          echo "📋 CLEANUP SUMMARY"
+          echo "Branch deleted: ${{ github.event.ref_name }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Time: $(date)"
+          echo "Status: ✅ Cleanup completed successfully"

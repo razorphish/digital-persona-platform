@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # tRPC Backend Server (Development)
+  backend:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+      target: development
+    container_name: dpp-backend-dev
+    ports:
+      - "3101:4001"
+    environment:
+      - NODE_ENV=development
+      - PORT=4001
+      - DATABASE_URL=postgresql://dpp_user:dpp_password@postgres:5432/digital_persona
+      - JWT_SECRET=dev-secret-key-change-in-production
+      - CORS_ORIGIN=http://localhost:3100
+    volumes:
+      - .:/app
+      - backend_data:/app/data
+      - node_modules_cache:/app/node_modules
+    working_dir: /app
+    command: ["sh", "-c", "npm install && cd apps/server && npm run dev"]
+    depends_on:
+      - postgres
+    networks:
+      - dpp-dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Next.js Frontend (Development)
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: dpp-frontend-dev
+    ports:
+      - "3100:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - NEXT_PUBLIC_API_URL=http://localhost:3101
+      - NEXT_PUBLIC_APP_ENV=development
+      - BETTER_AUTH_SECRET=dev-auth-secret-change-in-production
+      - BETTER_AUTH_URL=http://localhost:3100
+    volumes:
+      - .:/app
+      - frontend_node_modules:/app/node_modules
+    working_dir: /app
+    command: ["sh", "-c", "npm install && cd apps/web && npm run dev"]
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - dpp-dev-network
+    restart: unless-stopped
+
+  # Redis for development (caching, sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: dpp-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dpp-dev-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # PostgreSQL for development
+  postgres:
+    image: postgres:15-alpine
+    container_name: dpp-postgres-dev
+    environment:
+      POSTGRES_DB: digital_persona
+      POSTGRES_USER: dpp_user
+      POSTGRES_PASSWORD: dpp_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - dpp-dev-network
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  redis_data:
+  node_modules_cache:
+  frontend_node_modules:
+  postgres_data:
+
+networks:
+  dpp-dev-network:
+    driver: bridge 

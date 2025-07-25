@@ -137,7 +137,7 @@ fi
 echo ""
 print_status "Checking Application Load Balancer..."
 ALB_DNS=$(aws elbv2 describe-load-balancers \
-  --names hibiji-dev-alb \
+  --names hibiji-dev01-alb \
   --region us-west-1 \
   --query 'LoadBalancers[0].DNSName' \
   --output text 2>/dev/null || echo "NOT_FOUND")

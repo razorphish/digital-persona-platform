@@ -42,14 +42,11 @@ echo -e "${GREEN}✅ Found Terraform configuration in $(pwd)${NC}"
 # Set environment variables for Terraform
 export TF_VAR_environment="prod"
 export TF_VAR_ecr_repository_url="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/dpp-backend"
-export TF_VAR_frontend_ecr_repository_url="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/dpp-frontend"
 export TF_VAR_image_tag="latest"
-export TF_VAR_frontend_image_tag="latest"
 
 echo -e "\n${BLUE}Environment variables set:${NC}"
 echo -e "  TF_VAR_environment: ${TF_VAR_environment}"
 echo -e "  TF_VAR_ecr_repository_url: ${TF_VAR_ecr_repository_url}"
-echo -e "  TF_VAR_frontend_ecr_repository_url: ${TF_VAR_frontend_ecr_repository_url}"
 
 # Show available commands
 echo -e "\n${YELLOW}Available Terraform commands:${NC}"

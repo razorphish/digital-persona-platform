@@ -50,6 +50,12 @@ variable "frontend_image_tag" {
   default     = "latest"
 }
 
+variable "aws_region" {
+  description = "AWS region for resource deployment"
+  type        = string
+  default     = "us-west-1"
+}
+
 # Local values for sub-environment
 locals {
   sub_env = var.sub_environment
