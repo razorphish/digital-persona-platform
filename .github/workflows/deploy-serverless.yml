@@ -286,9 +286,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            .terraform
-            .terraform.lock.hcl
-          key: ${{ runner.os }}-terraform-serverless-${{ hashFiles('terraform/**/*.tf') }}
+            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/.terraform
+            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/.terraform.lock.hcl
+          key: ${{ runner.os }}-terraform-serverless-${{ needs.detect-environment.outputs.main_env }}-${{ hashFiles('terraform/**/*.tf') }}
 
       - name: Terraform Init and Plan
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
