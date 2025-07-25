@@ -177,7 +177,6 @@ jobs:
           cache-dependency-path: "package-lock.json"
 
       - name: Install dependencies
-        working-directory: apps/server
         run: npm ci
 
       - name: Build backend for Lambda
@@ -220,7 +219,6 @@ jobs:
           cache-dependency-path: "package-lock.json"
 
       - name: Install dependencies
-        working-directory: apps/web
         run: npm ci
 
       - name: Build frontend for static hosting
