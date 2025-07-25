@@ -317,27 +317,15 @@ jobs:
             --bucket "hibiji-terraform-state" \
             --versioning-configuration Status=Enabled
 
-          # Check if corrupted state exists and backup/remove it
-          echo "🔍 Checking for corrupted state file..."
+          # NOTE: Disabled aggressive state clearing that was causing import conflicts
+          # The state file is usually fine - only clear it if there's a specific corruption issue
+          echo "🔍 Initializing Terraform without clearing existing state..."
           STATE_KEY="${{ needs.detect-environment.outputs.main_env }}/serverless/terraform.tfstate"
 
           if aws s3api head-object --bucket "hibiji-terraform-state" --key "$STATE_KEY" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo "⚠️ Found existing state file, backing up and removing corrupted state..."
-            aws s3api copy-object \
-              --bucket "hibiji-terraform-state" \
-              --copy-source "hibiji-terraform-state/$STATE_KEY" \
-              --key "${STATE_KEY}.backup.$(date +%Y%m%d-%H%M%S)" \
-              --region ${{ env.AWS_REGION }}
-            
-            # Remove the corrupted state file
-            aws s3api delete-object \
-              --bucket "hibiji-terraform-state" \
-              --key "$STATE_KEY" \
-              --region ${{ env.AWS_REGION }}
-            
-            echo "✅ Corrupted state file backed up and removed"
+            echo "✅ Found existing state file - will use it (not clearing unless specifically corrupted)"
           else
-            echo "✅ No existing state file found"
+            echo "✅ No existing state file found - will create new one"
           fi
 
           # Initialize with explicit backend configuration
@@ -469,11 +457,26 @@ jobs:
             
             if check_aws_resource "$resource_type" "$aws_resource_id"; then
               echo "📥 Importing $description: $aws_resource_id"
-              if terraform import "$resource_address" "$aws_resource_id"; then
+              
+              # Try to import and capture output
+              local import_output
+              if import_output=$(terraform import "$resource_address" "$aws_resource_id" 2>&1); then
                 echo "✅ Successfully imported $description"
               else
-                echo "⚠️ Failed to import $description (may not have permissions)"
-                return 1
+                # Check if it's the "already managed" error
+                if echo "$import_output" | grep -q "Resource already managed by Terraform"; then
+                  echo "⚠️ Resource already managed - removing from state and re-importing..."
+                  terraform state rm "$resource_address" || echo "Could not remove from state"
+                  if terraform import "$resource_address" "$aws_resource_id"; then
+                    echo "✅ Successfully re-imported $description after state cleanup"
+                  else
+                    echo "❌ Failed to re-import $description after state cleanup"
+                    return 1
+                  fi
+                else
+                  echo "⚠️ Failed to import $description: $import_output"
+                  return 1
+                fi
               fi
             else
               echo "ℹ️ $description does not exist in AWS, will be created"
