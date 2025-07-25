@@ -975,57 +975,189 @@ jobs:
           echo "Testing API health endpoint: $API_URL"
           echo "URL length: ${#API_URL} characters"
 
-          # Test with detailed error capture
-          for attempt in {1..5}; do
+          # Function to gather AWS logs for debugging
+          gather_aws_logs() {
+            local lambda_name="$1"
+            local api_id="$2"
+            
+            echo "🔍 Gathering AWS logs for debugging..."
+            
+            # Get Lambda function logs from CloudWatch
+            local lambda_log_group="/aws/lambda/$lambda_name"
+            echo "📋 Checking Lambda logs in: $lambda_log_group"
+            
+            if aws logs describe-log-groups --log-group-name-prefix "$lambda_log_group" --query 'logGroups[0].logGroupName' --output text 2>/dev/null | grep -q "$lambda_log_group"; then
+              echo "📄 Recent Lambda log events:"
+              aws logs filter-log-events \
+                --log-group-name "$lambda_log_group" \
+                --start-time $(($(date +%s) * 1000 - 600000)) \
+                --query 'events[*].[timestamp,message]' \
+                --output table \
+                --max-items 20 || echo "⚠️ Could not retrieve Lambda logs"
+            else
+              echo "⚠️ Lambda log group not found: $lambda_log_group"
+            fi
+            
+            # Get API Gateway logs
+            local api_log_group="/aws/apigateway/dev-dev01-dpp"
+            echo "📋 Checking API Gateway logs in: $api_log_group"
+            
+            if aws logs describe-log-groups --log-group-name-prefix "$api_log_group" --query 'logGroups[0].logGroupName' --output text 2>/dev/null | grep -q "$api_log_group"; then
+              echo "📄 Recent API Gateway log events:"
+              aws logs filter-log-events \
+                --log-group-name "$api_log_group" \
+                --start-time $(($(date +%s) * 1000 - 600000)) \
+                --query 'events[*].[timestamp,message]' \
+                --output table \
+                --max-items 20 || echo "⚠️ Could not retrieve API Gateway logs"
+            else
+              echo "⚠️ API Gateway log group not found: $api_log_group"
+            fi
+            
+            # Check Lambda function status
+            echo "🔍 Lambda function status:"
+            aws lambda get-function --function-name "$lambda_name" \
+              --query '{State:Configuration.State,LastModified:Configuration.LastModified,Runtime:Configuration.Runtime,Handler:Configuration.Handler}' \
+              --output table || echo "⚠️ Could not get Lambda function details"
+            
+            # Check API Gateway status
+            if [ -n "$api_id" ]; then
+              echo "🔍 API Gateway status:"
+              aws apigatewayv2 get-api --api-id "$api_id" \
+                --query '{Name:Name,ProtocolType:ProtocolType,RouteSelectionExpression:RouteSelectionExpression,CreatedDate:CreatedDate}' \
+                --output table || echo "⚠️ Could not get API Gateway details"
+              
+              echo "🔍 API Gateway routes:"
+              aws apigatewayv2 get-routes --api-id "$api_id" \
+                --query 'Items[*].{RouteKey:RouteKey,Target:Target}' \
+                --output table || echo "⚠️ Could not get API Gateway routes"
+              
+              echo "🔍 API Gateway stages:"
+              aws apigatewayv2 get-stages --api-id "$api_id" \
+                --query 'Items[*].{StageName:StageName,DeploymentId:DeploymentId,CreatedDate:CreatedDate}' \
+                --output table || echo "⚠️ Could not get API Gateway stages"
+            fi
+          }
+
+          # Function to test health endpoint with detailed logging
+          test_health_endpoint() {
+            local url="$1"
+            local attempt="$2"
+            
             echo "🔄 Health check attempt $attempt/5..."
+            echo "📡 Testing URL: $url"
             
-            # Capture full response
-            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME:%{time_total}" "$API_URL" 2>&1)
-            HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
-            RESPONSE_TIME=$(echo "$RESPONSE" | grep "TIME:" | cut -d: -f2)
-            RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d' | sed '/TIME:/d')
+            # Test with curl and capture detailed output
+            local http_code response_body curl_exit_code
             
-            echo "Status: $HTTP_STATUS"
-            echo "Response Time: $RESPONSE_TIME seconds"
-            echo "Response Body: $RESPONSE_BODY"
+            echo "🔍 Performing detailed curl test..."
+            response_body=$(curl -s -w "HTTP_CODE:%{http_code}\nTIME_TOTAL:%{time_total}\nTIME_CONNECT:%{time_connect}\nTIME_NAMELOOKUP:%{time_namelookup}" \
+              --max-time 30 \
+              --connect-timeout 10 \
+              --retry 0 \
+              -H "Accept: application/json" \
+              -H "User-Agent: GitHub-Actions-Health-Check" \
+              "$url" 2>&1)
             
-            if [ "$HTTP_STATUS" = "200" ]; then
-              echo "✅ Health check passed!"
+            curl_exit_code=$?
+            
+            echo "📊 Curl exit code: $curl_exit_code"
+            echo "📋 Full response:"
+            echo "$response_body"
+            
+            # Extract HTTP code
+            http_code=$(echo "$response_body" | grep "HTTP_CODE:" | cut -d':' -f2)
+            time_total=$(echo "$response_body" | grep "TIME_TOTAL:" | cut -d':' -f2)
+            time_connect=$(echo "$response_body" | grep "TIME_CONNECT:" | cut -d':' -f2)
+            time_namelookup=$(echo "$response_body" | grep "TIME_NAMELOOKUP:" | cut -d':' -f2)
+            
+            echo "🕐 Timing details:"
+            echo "  - Name lookup: ${time_namelookup}s"
+            echo "  - Connect: ${time_connect}s" 
+            echo "  - Total: ${time_total}s"
+            
+            # Analyze the response
+            case $curl_exit_code in
+              0)
+                if [ "$http_code" = "200" ]; then
+                  echo "✅ Health check successful! HTTP $http_code"
+                  return 0
+                else
+                  echo "❌ Health check failed with HTTP $http_code"
+                  return 1
+                fi
+                ;;
+              6)
+                echo "❌ Curl exit code 6: Could not resolve host"
+                echo "🔍 DNS resolution issue detected"
+                # Test DNS resolution
+                echo "🧪 Testing DNS resolution:"
+                local hostname=$(echo "$url" | cut -d'/' -f3)
+                nslookup "$hostname" || echo "⚠️ DNS lookup failed"
+                dig +short "$hostname" || echo "⚠️ Dig lookup failed"
+                return 6
+                ;;
+              7)
+                echo "❌ Curl exit code 7: Failed to connect to host"
+                echo "🔍 Connection issue detected"
+                return 7
+                ;;
+              28)
+                echo "❌ Curl exit code 28: Connection timeout"
+                echo "🔍 Timeout issue detected"
+                return 28
+                ;;
+              *)
+                echo "❌ Curl exit code $curl_exit_code: $(curl --help | grep "Exit code $curl_exit_code" || echo "Unknown error")"
+                return $curl_exit_code
+                ;;
+            esac
+          }
+
+          # Extract Lambda function name and API ID for log gathering
+          LAMBDA_NAME=$(echo "${{ steps.api-url.outputs.api_url }}" | grep -o 'https://[^.]*' | cut -d'/' -f3)
+          API_ID=$(echo "${{ steps.api-url.outputs.api_url }}" | cut -d'.' -f1 | cut -d'/' -f3)
+
+          echo "🔍 Extracted details:"
+          echo "  - API ID: $API_ID"
+          echo "  - Lambda function: ${{ needs.detect-environment.outputs.function_name }}"
+
+          # Perform health check with retries
+          max_attempts=5
+          attempt=1
+          success=false
+
+          while [ $attempt -le $max_attempts ] && [ "$success" = false ]; do
+            if test_health_endpoint "$API_URL" "$attempt"; then
+              success=true
+              echo "🎉 Health check passed on attempt $attempt!"
               break
             else
-              echo "❌ Health check failed (attempt $attempt/5)"
+              health_exit_code=$?
+              echo "⚠️ Attempt $attempt failed with exit code $health_exit_code"
               
-              if [ $attempt -lt 5 ]; then
+              if [ $attempt -eq $max_attempts ]; then
+                echo "❌ All health check attempts failed!"
+                echo "🔍 Gathering detailed AWS logs for debugging..."
+                gather_aws_logs "${{ needs.detect-environment.outputs.function_name }}" "$API_ID"
+                
+                echo "🔧 Troubleshooting suggestions:"
+                echo "1. Check if Lambda function is properly deployed and active"
+                echo "2. Verify API Gateway routes and integrations are configured"
+                echo "3. Check security groups and network connectivity"
+                echo "4. Review CloudWatch logs for errors"
+                echo "5. Verify the health endpoint implementation in your Lambda function"
+                
+                exit $health_exit_code
+              else
                 echo "⏳ Waiting 30 seconds before retry..."
                 sleep 30
-              else
-                echo "❌ All health check attempts failed"
-                
-                # Capture CloudWatch logs for debugging
-                echo "📋 Capturing CloudWatch logs for debugging..."
-                FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
-                LOG_GROUP_NAME="${{ needs.detect-environment.outputs.log_group_name }}"
-                
-                # Get the latest log stream
-                LOG_STREAM=$(aws logs describe-log-streams \
-                  --log-group-name "$LOG_GROUP_NAME" \
-                  --order-by LastEventTime \
-                  --descending \
-                  --max-items 1 \
-                  --query 'logStreams[0].logStreamName' \
-                  --output text 2>/dev/null || echo "No log streams found")
-                
-                if [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "" ]; then
-                  echo " Latest log stream: $LOG_STREAM"
-                  aws logs get-log-events \
-                    --log-group-name "$LOG_GROUP_NAME" \
-                    --log-stream-name "$LOG_STREAM" \
-                    --start-time $(date -d '10 minutes ago' +%s)000 \
-                    --query 'events[*].message' \
-                    --output text
-                fi
-                
-                exit 1
               fi
             fi
+            
+            attempt=$((attempt + 1))
           done
+
+          if [ "$success" = true ]; then
+            echo "✅ API health check completed successfully!"
+          fi
