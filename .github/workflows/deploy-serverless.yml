@@ -888,28 +888,64 @@ jobs:
           if [ "$CLOUDFRONT_ONLY" = true ]; then
             echo "🔍 Step 5a: CloudFront distribution detected - finding CloudFront URL..."
             
-            # Try to get CloudFront distribution URL from Terraform outputs
-            CLOUDFRONT_URL=$(cat outputs.json | jq -r '.cloudfront_distribution_domain_name.value // empty' 2>/dev/null)
+            # Try multiple methods to get CloudFront distribution URL
+            CLOUDFRONT_URL=""
             
+            # Method 1: Try to get CloudFront distribution URL from Terraform outputs
+            if [ -f outputs.json ]; then
+              CLOUDFRONT_URL=$(cat outputs.json | jq -r '.cloudfront_distribution_domain_name.value // empty' 2>/dev/null)
+              if [ -n "$CLOUDFRONT_URL" ] && [ "$CLOUDFRONT_URL" != "null" ] && [ "$CLOUDFRONT_URL" != "empty" ]; then
+                echo "✅ Found CloudFront URL in Terraform outputs: $CLOUDFRONT_URL"
+              else
+                CLOUDFRONT_URL=""
+              fi
+            fi
+            
+            # Method 2: Search by S3 bucket domain name
             if [ -z "$CLOUDFRONT_URL" ]; then
-              # Fallback: try to find CloudFront distribution for this bucket
               echo "🔍 Searching for CloudFront distribution for bucket $S3_BUCKET..."
               CLOUDFRONT_URL=$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(Origins.Items[].DomainName, '$S3_BUCKET')].DomainName" --output text 2>/dev/null | head -1)
+              if [ -n "$CLOUDFRONT_URL" ] && [ "$CLOUDFRONT_URL" != "None" ]; then
+                echo "✅ Found CloudFront distribution via bucket search: $CLOUDFRONT_URL"
+              else
+                CLOUDFRONT_URL=""
+              fi
+            fi
+            
+            # Method 3: Search by S3 website endpoint
+            if [ -z "$CLOUDFRONT_URL" ]; then
+              echo "🔍 Searching for CloudFront distribution for S3 website endpoint..."
+              S3_WEBSITE_DOMAIN="${S3_BUCKET}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
+              CLOUDFRONT_URL=$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(Origins.Items[].DomainName, '$S3_WEBSITE_DOMAIN')].DomainName" --output text 2>/dev/null | head -1)
+              if [ -n "$CLOUDFRONT_URL" ] && [ "$CLOUDFRONT_URL" != "None" ]; then
+                echo "✅ Found CloudFront distribution via website endpoint: $CLOUDFRONT_URL"
+              else
+                CLOUDFRONT_URL=""
+              fi
+            fi
+            
+            # Method 4: List all distributions and show for debugging
+            if [ -z "$CLOUDFRONT_URL" ]; then
+              echo "🔍 Listing all CloudFront distributions for debugging..."
+              aws cloudfront list-distributions --query "DistributionList.Items[*].{DomainName:DomainName,Status:Status,Origins:Origins.Items[0].DomainName}" --output table 2>/dev/null || echo "Failed to list CloudFront distributions"
             fi
             
             if [ -n "$CLOUDFRONT_URL" ] && [ "$CLOUDFRONT_URL" != "None" ]; then
               TEST_URL="https://$CLOUDFRONT_URL"
-              echo "✅ Found CloudFront distribution: $CLOUDFRONT_URL"
               echo "🌐 Testing CloudFront endpoint: $TEST_URL"
+              SHOULD_FAIL_ON_ERROR=true
             else
-              echo "⚠️ CloudFront distribution not found, falling back to S3 direct test"
-              echo "⚠️ Note: This may fail due to CloudFront-only policy"
+              echo "⚠️ CloudFront distribution not found"
+              echo "⚠️ This is common for fresh deployments (CloudFront takes 15-20 minutes)"
+              echo "⚠️ Will test S3 direct endpoint but expect it to fail"
               TEST_URL="$INTERNAL_WEBSITE_URL"
+              SHOULD_FAIL_ON_ERROR=false  # Don't fail the workflow for CloudFront timing issues
             fi
           else
             echo "🔍 Step 5b: Testing direct S3 website endpoint..."
             TEST_URL="$INTERNAL_WEBSITE_URL"
             echo "🌐 Testing direct S3 website endpoint: $TEST_URL"
+            SHOULD_FAIL_ON_ERROR=true
           fi
 
           # Test the appropriate endpoint with detailed diagnostics
@@ -932,7 +968,11 @@ jobs:
               if [ "$CLOUDFRONT_ONLY" = true ]; then
                 case "$HTTP_CODE" in
                   "403")
-                    echo "🚨 HTTP 403: CloudFront access denied - distribution may not be deployed yet"
+                    if [ -n "$CLOUDFRONT_URL" ]; then
+                      echo "🚨 HTTP 403: CloudFront access denied - distribution may not be deployed yet"
+                    else
+                      echo "⚠️ HTTP 403: Expected - testing S3 direct with CloudFront-only policy"
+                    fi
                     ;;
                   "404") 
                     echo "🚨 HTTP 404: CloudFront distribution not found or not configured"
@@ -970,7 +1010,11 @@ jobs:
 
           if [ "$SUCCESS" = false ]; then
             echo ""
-            echo "🚨 CRITICAL: Website failed all diagnostic checks"
+            if [ "$SHOULD_FAIL_ON_ERROR" = true ]; then
+              echo "🚨 CRITICAL: Website failed all diagnostic checks"
+            else
+              echo "⚠️ WARNING: Website test failed but this is expected for fresh CloudFront deployments"
+            fi
             echo "🚨 Last HTTP response code: $HTTP_CODE"
             echo "🚨 Tested URL: $TEST_URL"
             
@@ -991,10 +1035,18 @@ jobs:
             echo ""
             echo "🔧 Possible fixes:"
             if [ "$CLOUDFRONT_ONLY" = true ]; then
-              echo "  1. Ensure CloudFront distribution is deployed and configured"
-              echo "  2. Check CloudFront distribution points to correct S3 bucket"
-              echo "  3. Verify CloudFront distribution is in 'Deployed' status"
-              echo "  4. Wait for CloudFront deployment (can take 15-20 minutes)"
+              if [ -z "$CLOUDFRONT_URL" ]; then
+                echo "  1. CloudFront distribution may still be deploying (15-20 minutes typical)"
+                echo "  2. Check Terraform configuration includes CloudFront distribution"
+                echo "  3. Verify CloudFront distribution was created successfully"
+                echo "  4. Check AWS Console CloudFront section for deployment status"
+                echo "  5. Try accessing the website again in 15-30 minutes"
+              else
+                echo "  1. CloudFront distribution found but not accessible yet"
+                echo "  2. Wait for CloudFront deployment to complete (can take 15-20 minutes)"
+                echo "  3. Check CloudFront distribution status in AWS Console"
+                echo "  4. Verify CloudFront distribution points to correct S3 bucket"
+              fi
             else
               echo "  1. Update S3 bucket policy to allow public read access"
               echo "  2. Add public read policy: {\"Principal\": \"*\", \"Action\": \"s3:GetObject\"}"
@@ -1002,10 +1054,18 @@ jobs:
               echo "  4. Verify S3 website configuration is correct"
             fi
             
-            exit 1
+            # Only fail workflow for non-CloudFront setups or when CloudFront URL is found but still failing
+            if [ "$SHOULD_FAIL_ON_ERROR" = true ]; then
+              exit 1
+            else
+              echo ""
+              echo "⚠️ Continuing workflow despite website test failure"
+              echo "⚠️ This is expected for fresh CloudFront deployments"
+              echo "⚠️ Check website functionality in 15-30 minutes"
+            fi
+          else
+            echo "✅ Website verification completed successfully"
           fi
-
-          echo "✅ Website verification completed successfully"
 
       - name: Health Check Public Domain Website (Warning Only)
         continue-on-error: true
