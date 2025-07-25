@@ -480,20 +480,42 @@ jobs:
         with:
           name: backend-${{ needs.detect-environment.outputs.environment }}-${{ needs.build-backend.outputs.backend-hash }}
 
-      - name: Create Lambda deployment package
+      - name: Locate and prepare Lambda files
         run: |
-          echo "📦 Creating Lambda deployment package from bundled output..."
+          echo "📦 Locating Lambda bundle files after artifact download..."
           echo "📁 Current directory contents:"
           ls -la
 
-          # The artifacts are downloaded to the current directory
-          # Check if we have the bundled files
-          if [ ! -f "index.js" ]; then
-            echo "❌ index.js not found in current directory"
+          # Find index.js location and move to current directory if needed
+          INDEX_JS_PATH=$(find . -name "index.js" -type f | head -1)
+          PACKAGE_JSON_PATH=$(find . -name "package.json" -path "*/lambda-dist/*" -type f | head -1)
+
+          if [ -z "$INDEX_JS_PATH" ]; then
+            echo "❌ index.js not found anywhere"
             echo "📁 Available files:"
             find . -name "*.js" -o -name "*.json" | head -10
             exit 1
           fi
+
+          echo "📍 Found index.js at: $INDEX_JS_PATH"
+
+          # Move files to current directory if they're in subdirectories
+          if [ "$INDEX_JS_PATH" != "./index.js" ]; then
+            echo "📦 Moving Lambda files to current directory..."
+            cp "$INDEX_JS_PATH" ./index.js
+            
+            if [ -n "$PACKAGE_JSON_PATH" ]; then
+              echo "📍 Found package.json at: $PACKAGE_JSON_PATH"
+              cp "$PACKAGE_JSON_PATH" ./package.json
+            fi
+          fi
+
+          echo "✅ Lambda files prepared:"
+          ls -la index.js package.json
+
+      - name: Create Lambda deployment package
+        run: |
+          echo "📦 Creating Lambda deployment package from bundled output..."
 
           # Create deployment zip from current directory (which contains the bundled output)
           echo "📦 Creating deployment zip from bundled files..."
