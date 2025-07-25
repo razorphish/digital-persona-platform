@@ -1162,11 +1162,13 @@ jobs:
             echo "🔄 Health check attempt $attempt/5..."
             echo "📡 Testing URL: $url"
             
-            # Test with curl and capture detailed output
-            local http_code response_body curl_exit_code
+            # Test with curl and capture HTTP status code and response body separately
+            local http_code response_body curl_exit_code response
             
             echo "🔍 Performing detailed curl test..."
-            response_body=$(curl -s -w "HTTP_CODE:%{http_code}\nTIME_TOTAL:%{time_total}\nTIME_CONNECT:%{time_connect}\nTIME_NAMELOOKUP:%{time_namelookup}" \
+            
+            # Use curl with proper separation of HTTP code and body
+            response=$(curl -s -w "\n%{http_code}\n%{time_total}\n%{time_connect}\n%{time_namelookup}" \
               --max-time 30 \
               --connect-timeout 10 \
               --retry 0 \
@@ -1177,17 +1179,18 @@ jobs:
             curl_exit_code=$?
             
             echo "📊 Curl exit code: $curl_exit_code"
-            echo "📋 Full response:"
-            echo "$response_body"
             
-            # Extract HTTP code
-            http_code=$(echo "$response_body" | grep "HTTP_CODE:" | cut -d':' -f2)
-            time_total=$(echo "$response_body" | grep "TIME_TOTAL:" | cut -d':' -f2)
-            time_connect=$(echo "$response_body" | grep "TIME_CONNECT:" | cut -d':' -f2)
-            time_namelookup=$(echo "$response_body" | grep "TIME_NAMELOOKUP:" | cut -d':' -f2)
+            # Parse response properly - body is everything except last 3 lines
+            response_body=$(echo "$response" | sed '$d' | sed '$d' | sed '$d')
+            http_code=$(echo "$response" | tail -n3 | head -n1)
+            time_total=$(echo "$response" | tail -n2 | head -n1)
+            time_connect=$(echo "$response" | tail -n1)
+            
+            echo "📋 Response body:"
+            echo "$response_body"
+            echo "📊 HTTP Status Code: $http_code"
             
             echo "🕐 Timing details:"
-            echo "  - Name lookup: ${time_namelookup}s"
             echo "  - Connect: ${time_connect}s" 
             echo "  - Total: ${time_total}s"
             
@@ -1196,9 +1199,11 @@ jobs:
               0)
                 if [ "$http_code" = "200" ]; then
                   echo "✅ Health check successful! HTTP $http_code"
+                  echo "📋 Health response: $response_body"
                   return 0
                 else
                   echo "❌ Health check failed with HTTP $http_code"
+                  echo "📋 Response body: $response_body"
                   return 1
                 fi
                 ;;
