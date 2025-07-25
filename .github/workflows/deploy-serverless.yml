@@ -616,12 +616,13 @@ jobs:
 
           # Sync frontend files to S3
           echo "🔄 Syncing files to S3..."
-          if [ -d "out" ]; then
-            aws s3 sync out/ s3://$S3_BUCKET/ --delete --cache-control "max-age=31536000" --exclude "*.html" --exclude "*.json"
-            aws s3 sync out/ s3://$S3_BUCKET/ --delete --cache-control "max-age=0" --include "*.html" --include "*.json"
+          if [ -f "index.html" ]; then
+            echo "✅ Frontend build output found (files extracted to current directory)"
+            aws s3 sync . s3://$S3_BUCKET/ --delete --cache-control "max-age=31536000" --exclude "*.html" --exclude "*.json" --exclude "outputs.json"
+            aws s3 sync . s3://$S3_BUCKET/ --delete --cache-control "max-age=0" --include "*.html" --include "*.json" --exclude "outputs.json"
           else
             echo "❌ Frontend build output not found"
-            echo "📁 Available directories:"
+            echo "📁 Available files:"
             ls -la
             exit 1
           fi
