@@ -520,6 +520,10 @@ resource "aws_iam_role" "ecs_execution" {
     Name = "${local.resource_prefix}-ecs-execution"
     Type = "IAMRole"
   })
+
+  lifecycle {
+    ignore_changes = [inline_policy]
+  }
 }
 
 # Attach AWS managed policy for ECS task execution
