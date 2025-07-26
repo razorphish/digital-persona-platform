@@ -234,7 +234,7 @@ resource "aws_batch_compute_environment" "ml_processing" {
     max_vcpus     = var.max_vcpus
     desired_vcpus = var.desired_vcpus
 
-    instance_types = var.instance_types
+    instance_type = var.instance_types
 
     # Use spot instances for cost optimization (can be disabled for production)
     bid_percentage = var.use_spot_instances ? var.spot_bid_percentage : null
