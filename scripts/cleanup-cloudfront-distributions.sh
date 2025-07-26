@@ -86,10 +86,24 @@ check_route53_usage() {
     return 1
 }
 
-# Function to check if S3 bucket exists
+# Function to check if S3 bucket exists (only for S3 origins)
 check_s3_bucket_exists() {
     local origin=$1
-    local bucket_name=$(echo "$origin" | cut -d'.' -f1)
+    
+    # Check if this is actually an S3 origin
+    if [[ ! "$origin" =~ \.s3[.-] ]]; then
+        echo -e "${BLUE}  ℹ️ Non-S3 origin (ALB/ELB): $origin${NC}"
+        return 0  # Not an S3 bucket, so "exists" in the context of this check
+    fi
+    
+    # Extract bucket name from S3 origin
+    local bucket_name
+    if [[ "$origin" =~ ^([^.]+)\.s3[.-] ]]; then
+        bucket_name="${BASH_REMATCH[1]}"
+    else
+        echo -e "${RED}  ❌ Could not parse S3 bucket name from: $origin${NC}"
+        return 1
+    fi
     
     if aws s3api head-bucket --bucket "$bucket_name" 2>/dev/null; then
         echo -e "${GREEN}  ✅ S3 bucket exists: $bucket_name${NC}"
@@ -110,11 +124,11 @@ disable_distribution() {
     # Get current distribution config
     aws cloudfront get-distribution-config --id "$distribution_id" --output json > "/tmp/dist_config_${distribution_id}.json"
     
-    # Update enabled to false
-    jq '.DistributionConfig.Enabled = false' "/tmp/dist_config_${distribution_id}.json" > "/tmp/dist_config_disabled_${distribution_id}.json"
-    
-    # Extract ETag
+    # Extract ETag first
     etag=$(jq -r '.ETag' "/tmp/dist_config_${distribution_id}.json")
+    
+    # Update enabled to false and extract just the DistributionConfig
+    jq '.DistributionConfig | .Enabled = false' "/tmp/dist_config_${distribution_id}.json" > "/tmp/dist_config_disabled_${distribution_id}.json"
     
     # Update distribution
     aws cloudfront update-distribution \
@@ -182,8 +196,15 @@ interactive_cleanup() {
         LastModified:LastModifiedTime
     }' --output json > /tmp/all_distributions.json
     
-    # Process each distribution
-    jq -c '.[]' /tmp/all_distributions.json | while read distribution; do
+    # Process each distribution (using mapfile/array to fix interactive input)
+    if command -v mapfile >/dev/null 2>&1; then
+        mapfile -t distributions < <(jq -c '.[]' /tmp/all_distributions.json)
+    else
+        # Fallback for older bash versions
+        IFS=$'\n' read -d '' -r -a distributions < <(jq -c '.[]' /tmp/all_distributions.json && printf '\0')
+    fi
+    
+    for distribution in "${distributions[@]}"; do
         id=$(echo "$distribution" | jq -r '.Id')
         domain=$(echo "$distribution" | jq -r '.DomainName')
         origin=$(echo "$distribution" | jq -r '.Origins')
@@ -199,20 +220,28 @@ interactive_cleanup() {
         echo "  Enabled: $enabled"
         echo "  Last Modified: $modified"
         
-        # Check if S3 bucket exists
-        if ! check_s3_bucket_exists "$origin"; then
-            echo -e "${RED}🚨 This distribution points to a non-existent S3 bucket!${NC}"
-            read -p "❓ Delete this unused distribution? (y/N): " delete_choice
-            if [[ $delete_choice =~ ^[Yy]$ ]]; then
-                if [ "$enabled" = "true" ]; then
-                    echo "First disabling the distribution..."
-                    disable_distribution "$id" "$domain"
-                    echo "⏳ Please wait 15-20 minutes and run the script again to delete."
-                else
-                    delete_distribution "$id" "$domain"
+        # Check if origin exists (S3 bucket or ALB/ELB)
+        if [[ "$origin" =~ \.s3[.-] ]]; then
+            # This is an S3 origin - check if bucket exists
+            if ! check_s3_bucket_exists "$origin"; then
+                echo -e "${RED}🚨 This distribution points to a non-existent S3 bucket!${NC}"
+                read -p "❓ Delete this unused distribution? (y/N): " delete_choice
+                if [[ $delete_choice =~ ^[Yy]$ ]]; then
+                    if [ "$enabled" = "true" ]; then
+                        echo "First disabling the distribution..."
+                        disable_distribution "$id" "$domain"
+                        echo "⏳ Please wait 15-20 minutes and run the script again to delete."
+                    else
+                        delete_distribution "$id" "$domain"
+                    fi
                 fi
+                continue
             fi
-            continue
+        else
+            # This is a non-S3 origin (ALB, ELB, custom domain, etc.)
+            check_s3_bucket_exists "$origin"  # This will just show the info message
+            echo -e "${BLUE}📋 This distribution uses a non-S3 origin (ALB/ELB/Custom)${NC}"
+            echo -e "${BLUE}💡 Manual review recommended for non-S3 distributions${NC}"
         fi
         
         # Check Route53 usage
