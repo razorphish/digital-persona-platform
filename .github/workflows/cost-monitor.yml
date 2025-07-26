@@ -267,6 +267,15 @@ jobs:
 
           echo "" >> cost_report.md
 
+      - name: Display cost report in job summary
+        run: |
+          echo "📊 Displaying cost report in job summary..."
+
+          # Add the complete cost report to GitHub Actions job summary
+          cat cost_report.md >> $GITHUB_STEP_SUMMARY
+
+          echo "✅ Cost report displayed in job summary - check the Summary tab!"
+
       - name: Create or update cost monitoring issue
         if: env.COST_ALERT != 'ok'
         uses: actions/github-script@v7
@@ -318,9 +327,3 @@ jobs:
               
               console.log('Created new cost monitoring issue');
             }
-
-      - name: Upload cost report
-        uses: actions/upload-artifact@v4
-        with:
-          name: cost-report-${{ github.run_number }}
-          path: cost_report.md
