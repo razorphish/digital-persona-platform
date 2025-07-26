@@ -160,6 +160,101 @@ jobs:
             fi
           done
 
+          # Clean up AWS Batch resources (proper order: Job Definitions → Job Queues → Compute Environments)
+          echo "🧹 Cleaning up AWS Batch Job Definitions..."
+          JOB_DEFINITIONS=$(aws batch describe-job-definitions \
+            --query "jobDefinitions[?starts_with(jobDefinitionName, '${MAIN_ENV}-${ENVIRONMENT}')].jobDefinitionArn" \
+            --output text)
+
+          for job_def in $JOB_DEFINITIONS; do
+            if [ -n "$job_def" ] && [ "$job_def" != "None" ]; then
+              echo "🗑️ Deregistering Batch job definition: $job_def"
+              aws batch deregister-job-definition --job-definition "$job_def" || echo "⚠️ Failed to deregister job definition: $job_def"
+            fi
+          done
+
+          echo "🧹 Cleaning up AWS Batch Job Queues..."
+          JOB_QUEUES=$(aws batch describe-job-queues \
+            --query "jobQueues[?starts_with(jobQueueName, '${MAIN_ENV}-${ENVIRONMENT}')].jobQueueName" \
+            --output text)
+
+          for queue in $JOB_QUEUES; do
+            if [ -n "$queue" ] && [ "$queue" != "None" ]; then
+              echo "🔄 Disabling Batch job queue: $queue"
+              aws batch update-job-queue --job-queue "$queue" --state DISABLED || echo "⚠️ Failed to disable job queue: $queue"
+              
+              echo "⏳ Waiting for job queue to be disabled..."
+              sleep 30
+              
+              echo "🗑️ Deleting Batch job queue: $queue"
+              aws batch delete-job-queue --job-queue "$queue" || echo "⚠️ Failed to delete job queue: $queue"
+            fi
+          done
+
+          echo "🧹 Cleaning up AWS Batch Compute Environments..."
+          COMPUTE_ENVS=$(aws batch describe-compute-environments \
+            --query "computeEnvironments[?starts_with(computeEnvironmentName, '${MAIN_ENV}-${ENVIRONMENT}')].computeEnvironmentName" \
+            --output text)
+
+          for env in $COMPUTE_ENVS; do
+            if [ -n "$env" ] && [ "$env" != "None" ]; then
+              echo "🔄 Disabling Batch compute environment: $env"
+              aws batch update-compute-environment --compute-environment "$env" --state DISABLED || echo "⚠️ Failed to disable compute environment: $env"
+              
+              echo "⏳ Waiting for compute environment to be disabled..."
+              sleep 60
+              
+              echo "🗑️ Deleting Batch compute environment: $env"
+              aws batch delete-compute-environment --compute-environment "$env" || echo "⚠️ Failed to delete compute environment: $env"
+            fi
+          done
+
+          # Clean up SQS Queues (including DLQ)
+          echo "🧹 Cleaning up SQS Queues..."
+          SQS_QUEUES=$(aws sqs list-queues \
+            --queue-name-prefix "${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}" \
+            --query "QueueUrls" --output text)
+
+          for queue_url in $SQS_QUEUES; do
+            if [ -n "$queue_url" ] && [ "$queue_url" != "None" ]; then
+              echo "🗑️ Deleting SQS queue: $queue_url"
+              aws sqs delete-queue --queue-url "$queue_url" || echo "⚠️ Failed to delete SQS queue: $queue_url"
+            fi
+          done
+
+          # Clean up ECR Repositories  
+          echo "🧹 Cleaning up ECR Repositories..."
+          ECR_REPOS=$(aws ecr describe-repositories \
+            --query "repositories[?starts_with(repositoryName, '${MAIN_ENV}-${ENVIRONMENT}')].repositoryName" \
+            --output text)
+
+          for repo in $ECR_REPOS; do
+            if [ -n "$repo" ] && [ "$repo" != "None" ]; then
+              echo "🗑️ Emptying ECR repository: $repo"
+              # Delete all images first
+              IMAGES=$(aws ecr list-images --repository-name "$repo" --query 'imageIds[*]' --output json)
+              if [ "$IMAGES" != "[]" ] && [ -n "$IMAGES" ]; then
+                aws ecr batch-delete-image --repository-name "$repo" --image-ids "$IMAGES" || echo "⚠️ Failed to delete images from: $repo"
+              fi
+              
+              echo "🗑️ Deleting ECR repository: $repo"
+              aws ecr delete-repository --repository-name "$repo" || echo "⚠️ Failed to delete ECR repository: $repo"
+            fi
+          done
+
+          # Clean up RDS Proxy endpoints
+          echo "🧹 Cleaning up RDS Proxy endpoints..."
+          RDS_PROXIES=$(aws rds describe-db-proxies \
+            --query "DBProxies[?starts_with(DBProxyName, '${MAIN_ENV}-${ENVIRONMENT}')].DBProxyName" \
+            --output text)
+
+          for proxy in $RDS_PROXIES; do
+            if [ -n "$proxy" ] && [ "$proxy" != "None" ]; then
+              echo "🗑️ Deleting RDS Proxy: $proxy"
+              aws rds delete-db-proxy --db-proxy-name "$proxy" || echo "⚠️ Failed to delete RDS proxy: $proxy"
+            fi
+          done
+
           # Clean up Secrets Manager secrets
           echo "🧹 Cleaning up Secrets Manager secrets..."
           SECRETS=$(aws secretsmanager list-secrets \
@@ -227,6 +322,27 @@ jobs:
             done
           fi
 
+          # Verification: Check for any remaining AWS Batch resources
+          echo "🔍 Verifying AWS Batch cleanup..."
+          REMAINING_QUEUES=$(aws batch describe-job-queues \
+            --query "jobQueues[?starts_with(jobQueueName, '${MAIN_ENV}-${ENVIRONMENT}')].jobQueueName" \
+            --output text)
+          REMAINING_COMPUTE_ENVS=$(aws batch describe-compute-environments \
+            --query "computeEnvironments[?starts_with(computeEnvironmentName, '${MAIN_ENV}-${ENVIRONMENT}')].computeEnvironmentName" \
+            --output text)
+
+          if [ -n "$REMAINING_QUEUES" ] && [ "$REMAINING_QUEUES" != "None" ]; then
+            echo "⚠️ Warning: Some Batch job queues may still be deleting: $REMAINING_QUEUES"
+            echo "💡 These should finish deleting automatically within a few minutes"
+          fi
+
+          if [ -n "$REMAINING_COMPUTE_ENVS" ] && [ "$REMAINING_COMPUTE_ENVS" != "None" ]; then
+            echo "⚠️ Warning: Some Batch compute environments may still be deleting: $REMAINING_COMPUTE_ENVS"
+            echo "💡 These should finish deleting automatically within a few minutes"
+          fi
+
+          echo "✅ Orphaned resource cleanup completed!"
+
       - name: Cleanup Summary
         if: always()
         run: |
@@ -245,6 +361,10 @@ jobs:
             echo ""
             echo "📋 Resources cleaned up:"
             echo "  • Terraform-managed infrastructure"
+            echo "  • AWS Batch job definitions, queues, and compute environments"
+            echo "  • SQS queues (main queue + dead letter queue)"
+            echo "  • ECR repositories (ML service container images)"
+            echo "  • RDS Proxy endpoints"
             echo "  • Lambda functions"
             echo "  • API Gateway v2 APIs"
             echo "  • S3 buckets"
