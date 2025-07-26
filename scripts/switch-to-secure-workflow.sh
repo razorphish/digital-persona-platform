@@ -21,7 +21,10 @@ echo -e "${GREEN}✅ Secure workflow installed${NC}"
 
 echo -e "\n${YELLOW}Step 3: Verify GitHub secrets${NC}"
 echo -e "${BLUE}Please ensure you have these secrets in your GitHub repository:${NC}"
-echo -e "  ✅ AWS_ROLE_ARN: arn:aws:iam::570827307849:role/GitHubActionsRole"
+
+# Get current AWS account ID dynamically
+CURRENT_ACCOUNT=$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null || echo "YOUR_AWS_ACCOUNT_ID")
+echo -e "  ✅ AWS_ROLE_ARN: arn:aws:iam::${CURRENT_ACCOUNT}:role/GitHubActionsRole"
 echo -e "  ❌ Remove: AWS_ACCESS_KEY_ID (if exists)"
 echo -e "  ❌ Remove: AWS_SECRET_ACCESS_KEY (if exists)"
 

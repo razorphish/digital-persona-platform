@@ -2,14 +2,53 @@
 
 # update-iam-permissions.sh
 # Automatically updates IAM permissions for GitHub Actions Terraform role
+# Works dynamically with any AWS account and wildcard environments
+#
+# USAGE:
+#   ./scripts/update-iam-permissions.sh
+#
+# ENVIRONMENT VARIABLES:
+#   TERRAFORM_POLICY_NAME - Name of the IAM policy (default: TerraformPolicy)
+#   AWS_DEFAULT_REGION    - AWS region if not configured (default: us-west-1)  
+#   AWS_PROFILE          - AWS profile to use (optional)
+#
+# EXAMPLES:
+#   # Standard usage (auto-detects account/region)
+#   ./scripts/update-iam-permissions.sh
+#
+#   # Use different policy name
+#   TERRAFORM_POLICY_NAME="MyCustomTerraformPolicy" ./scripts/update-iam-permissions.sh
+#
+#   # Use specific AWS profile
+#   AWS_PROFILE="production" ./scripts/update-iam-permissions.sh
 
 set -e
 
-POLICY_ARN="arn:aws:iam::570827307849:policy/TerraformPolicy"
+# Dynamic configuration - no hardcoded values
+POLICY_NAME="${TERRAFORM_POLICY_NAME:-TerraformPolicy}"
 POLICY_FILE="terraform/iam-policies/terraform-policy.json"
 
-echo "🔐 IAM Permissions Update Script"
-echo "================================"
+echo "🔐 IAM Permissions Update Script (Dynamic)"
+echo "=========================================="
+
+# Get current AWS account ID dynamically
+echo "🔍 Detecting AWS account information..."
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+AWS_REGION=$(aws configure get region || echo "${AWS_DEFAULT_REGION:-us-west-1}")
+
+if [[ -z "$AWS_ACCOUNT_ID" ]]; then
+    echo "❌ Cannot determine AWS account ID. Please ensure AWS credentials are configured."
+    exit 1
+fi
+
+# Construct policy ARN dynamically
+POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+echo "🎯 Target AWS Account: $AWS_ACCOUNT_ID"
+echo "🌍 Current Region: $AWS_REGION"  
+echo "📋 Policy ARN: $POLICY_ARN"
+echo "📄 Policy File: $POLICY_FILE"
+echo ""
 
 # Check if policy file exists
 if [[ ! -f "$POLICY_FILE" ]]; then
@@ -17,6 +56,17 @@ if [[ ! -f "$POLICY_FILE" ]]; then
     exit 1
 fi
 
+# Check if policy exists
+echo "🔍 Checking if policy exists..."
+if ! aws iam get-policy --policy-arn "$POLICY_ARN" &>/dev/null; then
+    echo "❌ Policy does not exist: $POLICY_ARN"
+    echo "💡 This might be a new AWS account or environment."
+    echo "📋 You may need to create the policy first with:"
+    echo "   aws iam create-policy --policy-name '$POLICY_NAME' --policy-document file://$POLICY_FILE"
+    exit 1
+fi
+
+echo "✅ Policy exists!"
 echo "📋 Current policy versions:"
 aws iam list-policy-versions --policy-arn "$POLICY_ARN" --query 'Versions[*].[VersionId,IsDefaultVersion]' --output table
 

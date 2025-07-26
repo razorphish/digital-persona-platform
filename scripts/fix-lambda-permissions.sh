@@ -30,11 +30,25 @@ print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-# Configuration
-LAMBDA_NAME="dev-dev01-dpp-api"
-API_ID="5usrrmhphl"
-AWS_REGION="us-west-1"
-ACCOUNT_ID="570827307849"
+# Dynamic Configuration (no hardcoded values)
+# These can be overridden with environment variables
+LAMBDA_NAME="${LAMBDA_FUNCTION_NAME:-$(echo "${ENVIRONMENT:-dev}-${SUB_ENVIRONMENT:-dev01}-dpp-api")}"
+API_ID="${API_GATEWAY_ID:-}"  # Must be provided via environment variable
+AWS_REGION="${AWS_DEFAULT_REGION:-$(aws configure get region || echo 'us-west-1')}"
+ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text)"
+
+echo "🔍 Dynamic Configuration Detected:"
+echo "   Lambda Name: $LAMBDA_NAME"  
+echo "   API Gateway ID: ${API_ID:-'❌ NOT SET - Please set API_GATEWAY_ID environment variable'}"
+echo "   AWS Region: $AWS_REGION"
+echo "   AWS Account: $ACCOUNT_ID"
+echo ""
+
+if [[ -z "$API_ID" ]]; then
+    echo "❌ Error: API_GATEWAY_ID environment variable is required"
+    echo "💡 Usage: API_GATEWAY_ID=your_api_id ./scripts/fix-lambda-permissions.sh"
+    exit 1
+fi
 
 print_status "Fixing Lambda permissions for API Gateway invocation..."
 
