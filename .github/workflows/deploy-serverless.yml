@@ -287,14 +287,6 @@ jobs:
         with:
           terraform_version: "1.5.0"
 
-      - name: Cache Terraform
-        uses: actions/cache@v4
-        with:
-          path: |
-            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/.terraform
-            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/.terraform.lock.hcl
-          key: ${{ runner.os }}-terraform-serverless-${{ needs.detect-environment.outputs.main_env }}-${{ hashFiles('terraform/**/*.tf') }}
-
       - name: Terraform Init and Plan
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
@@ -352,12 +344,29 @@ jobs:
         run: |
           echo "🏗️ Step 4: Applying Terraform configuration..."
 
+          # Debug: Show current backend configuration
+          echo "🔍 DEBUG: Checking terraform backend state..."
+          echo "Expected backend key: $MAIN_ENV/$ENVIRONMENT/terraform.tfstate"
+
+          # Clean any existing terraform state to ensure fresh initialization
+          echo "🧹 Cleaning any cached terraform state..."
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
+
+          # Re-initialize with explicit backend configuration
+          echo "🔄 Re-initializing terraform with isolated backend..."
+          terraform init -backend-config="key=$MAIN_ENV/$ENVIRONMENT/terraform.tfstate" -reconfigure
+
           # Get plan exit code to check if changes are needed
+          echo "📊 Running terraform plan with detailed exit codes..."
           PLAN_EXIT_CODE=0
           terraform plan -var-file="environment.auto.tfvars" -detailed-exitcode -out=tfplan || PLAN_EXIT_CODE=$?
 
+          echo "📋 Terraform plan exit code: $PLAN_EXIT_CODE"
+          echo "📋 Exit code meanings: 0=no changes, 1=error, 2=changes detected"
+
           if [ $PLAN_EXIT_CODE -eq 2 ]; then
-            echo "🚀 Step 4: Applying Terraform configuration..."
+            echo "🚀 Changes detected! Applying Terraform configuration..."
+            echo "📊 Resources will be created/modified"
 
             # First attempt: Full apply with timeout
             echo "🎯 Attempt 1: Full Terraform apply..."
