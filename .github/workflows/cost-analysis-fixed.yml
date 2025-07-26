@@ -1,0 +1,213 @@
+name: Cost Analysis (Fixed)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 8 * * 1" # Weekly on Monday
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-west-1
+
+jobs:
+  cost-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install cost analysis tools
+        run: |
+          echo "📦 Installing working cost analysis packages..."
+
+          # Option 1: Use boto3 (AWS SDK for Python)
+          pip install boto3 pandas matplotlib seaborn
+
+          # Option 2: Alternative cost tools that actually exist
+          # pip install aws-cost-anomaly-detector  # If this package exists
+          # pip install awscli-plugin-endpoint     # Alternative AWS CLI plugin
+
+          echo "✅ Installation complete!"
+
+      - name: Run cost analysis with AWS CLI
+        run: |
+          echo "📊 Running cost analysis using AWS CLI..."
+
+          # Get current month date range
+          CURRENT_MONTH=$(date +%Y-%m-01)
+          NEXT_MONTH=$(date -d "+1 month" +%Y-%m-01)
+
+          echo "📅 Analyzing costs from $CURRENT_MONTH to $NEXT_MONTH"
+
+          # Total cost analysis
+          echo "💰 Total Monthly Cost:"
+          aws ce get-cost-and-usage \
+            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --query 'ResultsByTime[0].Total.BlendedCost.Amount' \
+            --output text
+
+          # Service breakdown
+          echo ""
+          echo "🏗️ Cost by Service:"
+          aws ce get-cost-and-usage \
+            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --query 'ResultsByTime[0].Groups[*].{Service:Keys[0],Cost:Metrics.BlendedCost.Amount}' \
+            --output table
+
+          # Cost trends (last 3 months)
+          echo ""
+          echo "📈 3-Month Cost Trend:"
+          THREE_MONTHS_AGO=$(date -d "-3 months" +%Y-%m-01)
+          aws ce get-cost-and-usage \
+            --time-period Start=$THREE_MONTHS_AGO,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --query 'ResultsByTime[*].{Month:TimePeriod.Start,Cost:Total.BlendedCost.Amount}' \
+            --output table
+
+      - name: Run advanced cost analysis with Python
+        run: |
+          echo "🐍 Running advanced analysis with Python/boto3..."
+
+          cat << 'EOF' > cost_analysis.py
+          import boto3
+          import json
+          from datetime import datetime, timedelta
+          import pandas as pd
+
+          def analyze_costs():
+              ce_client = boto3.client('ce', region_name='us-west-1')
+              
+              # Get current month dates
+              today = datetime.now()
+              start_of_month = today.replace(day=1).strftime('%Y-%m-%d')
+              next_month = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+              end_of_analysis = next_month.strftime('%Y-%m-%d')
+              
+              print(f"📊 Analyzing costs from {start_of_month} to {end_of_analysis}")
+              
+              # Get cost and usage data
+              response = ce_client.get_cost_and_usage(
+                  TimePeriod={
+                      'Start': start_of_month,
+                      'End': end_of_analysis
+                  },
+                  Granularity='MONTHLY',
+                  Metrics=['BlendedCost'],
+                  GroupBy=[{'Type': 'DIMENSION', 'Key': 'SERVICE'}]
+              )
+              
+              # Process results
+              if response['ResultsByTime']:
+                  result = response['ResultsByTime'][0]
+                  total_cost = float(result['Total']['BlendedCost']['Amount'])
+                  
+                  print(f"💰 Total Monthly Cost: ${total_cost:.2f}")
+                  print("\n🏗️ Top 10 Services by Cost:")
+                  
+                  # Sort services by cost
+                  services = []
+                  for group in result['Groups']:
+                      service_name = group['Keys'][0]
+                      cost = float(group['Metrics']['BlendedCost']['Amount'])
+                      services.append({'Service': service_name, 'Cost': cost})
+                  
+                  services.sort(key=lambda x: x['Cost'], reverse=True)
+                  
+                  for i, service in enumerate(services[:10], 1):
+                      percentage = (service['Cost'] / total_cost) * 100 if total_cost > 0 else 0
+                      print(f"{i:2d}. {service['Service']:<30} ${service['Cost']:>8.2f} ({percentage:5.1f}%)")
+                  
+                  # Cost alerts
+                  print(f"\n🚨 Cost Alerts:")
+                  if total_cost > 100:
+                      print(f"🔴 CRITICAL: Monthly cost (${total_cost:.2f}) exceeds $100 threshold!")
+                  elif total_cost > 50:
+                      print(f"🟡 WARNING: Monthly cost (${total_cost:.2f}) exceeds $50 threshold")
+                  else:
+                      print(f"✅ OK: Monthly cost (${total_cost:.2f}) is within acceptable limits")
+              
+              print("\n✅ Cost analysis complete!")
+
+          if __name__ == "__main__":
+              analyze_costs()
+          EOF
+
+          python cost_analysis.py
+
+      - name: Generate cost report
+        run: |
+          echo "📝 Generating detailed cost report..."
+
+          # Create comprehensive report
+          echo "# 💰 AWS Cost Analysis Report" > cost_analysis_report.md
+          echo "Generated: $(date)" >> cost_analysis_report.md
+          echo "" >> cost_analysis_report.md
+
+          # Add AWS CLI results
+          echo "## 📊 Cost Summary (AWS CLI)" >> cost_analysis_report.md
+          echo "" >> cost_analysis_report.md
+
+          CURRENT_MONTH=$(date +%Y-%m-01)
+          NEXT_MONTH=$(date -d "+1 month" +%Y-%m-01)
+
+          TOTAL_COST=$(aws ce get-cost-and-usage \
+            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --query 'ResultsByTime[0].Total.BlendedCost.Amount' \
+            --output text)
+
+          echo "**Total Monthly Cost:** \$${TOTAL_COST}" >> cost_analysis_report.md
+          echo "" >> cost_analysis_report.md
+
+          echo "## 🔍 Detailed Service Breakdown" >> cost_analysis_report.md
+          echo "" >> cost_analysis_report.md
+          echo "\`\`\`" >> cost_analysis_report.md
+
+          aws ce get-cost-and-usage \
+            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --output table >> cost_analysis_report.md
+
+          echo "\`\`\`" >> cost_analysis_report.md
+          echo "" >> cost_analysis_report.md
+
+          echo "## 📈 Recommendations" >> cost_analysis_report.md
+          echo "" >> cost_analysis_report.md
+          echo "- Monitor Lambda function memory settings and execution duration" >> cost_analysis_report.md
+          echo "- Review S3 storage classes and lifecycle policies" >> cost_analysis_report.md
+          echo "- Consider CloudFront caching optimizations" >> cost_analysis_report.md
+          echo "- Review RDS Aurora Serverless scaling settings" >> cost_analysis_report.md
+
+          echo "✅ Cost analysis report generated!"
+
+      - name: Upload cost analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cost-analysis-report-${{ github.run_number }}
+          path: |
+            cost_analysis_report.md
+            cost_analysis.py
