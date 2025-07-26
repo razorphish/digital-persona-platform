@@ -269,6 +269,13 @@ resource "aws_batch_job_queue" "ml_jobs" {
     Name = "${var.environment}-${var.sub_environment}-${var.project_name}-ml-jobs-queue"
     Type = "BatchJobQueue"
   })
+
+  # Explicit dependency to ensure proper destruction order
+  # AWS Batch requires: Job Queue destroyed BEFORE Compute Environment
+  # This depends_on ensures Terraform destroys job queue first
+  depends_on = [
+    aws_batch_compute_environment.ml_processing
+  ]
 }
 
 # CloudWatch Log Group for Batch jobs
