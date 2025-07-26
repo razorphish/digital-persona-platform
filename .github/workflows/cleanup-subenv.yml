@@ -99,7 +99,9 @@ jobs:
           fi
 
       - name: Clean up orphaned AWS resources
-        if: github.event.inputs.dry_run != 'true' && github.event.inputs.force_cleanup == 'true'
+        if: always() && github.event.inputs.dry_run != 'true' && github.event.inputs.force_cleanup == 'true'
+        # Run comprehensive cleanup even if Terraform destroy fails
+        # This handles AWS Batch dependencies properly
         run: |
           # Install jq for JSON processing
           sudo apt-get update && sudo apt-get install -y jq
