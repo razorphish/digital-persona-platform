@@ -1,4 +1,4 @@
-name: Cost Monitoring (Simplified)
+name: Cost Monitoring
 
 on:
   schedule:
@@ -64,47 +64,11 @@ jobs:
 
           echo "" >> cost_report.md
 
-          # Enhanced analysis using only AWS CLI
-          echo "### 🔍 Enhanced Analysis (CLI Only)" >> cost_report.md
+          # Serverless services breakdown (restored original format)
+          echo "### ⚡ Serverless Services Breakdown" >> cost_report.md
           echo "" >> cost_report.md
 
-          # Get top 5 services with costs
-          TOP_SERVICES=$(aws ce get-cost-and-usage \
-            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
-            --granularity MONTHLY \
-            --metrics BlendedCost \
-            --group-by Type=DIMENSION,Key=SERVICE \
-            --query 'ResultsByTime[0].Groups[0:5].[Keys[0],Metrics.BlendedCost.Amount]' \
-            --output text)
-
-          echo "**Top 5 Cost Services:**" >> cost_report.md
-          echo "\`\`\`" >> cost_report.md
-          echo "$TOP_SERVICES" >> cost_report.md
-          echo "\`\`\`" >> cost_report.md
-          echo "" >> cost_report.md
-
-          # Cost trends (last 3 months)
-          echo "### 📈 3-Month Cost Trend" >> cost_report.md
-          THREE_MONTHS_AGO=$(date -d "-3 months" +%Y-%m-01)
-          aws ce get-cost-and-usage \
-            --time-period Start=$THREE_MONTHS_AGO,End=$NEXT_MONTH \
-            --granularity MONTHLY \
-            --metrics BlendedCost \
-            --query 'ResultsByTime[*].{Month:TimePeriod.Start,Cost:Total.BlendedCost.Amount}' \
-            --output table >> cost_report.md
-
-          echo "" >> cost_report.md
-
-      - name: Generate optimization recommendations
-        run: |
-          echo "## 💡 Cost Optimization Recommendations" >> cost_report.md
-          echo "" >> cost_report.md
-
-          # Get current month for analysis
-          CURRENT_MONTH=$(date +%Y-%m-01)
-          NEXT_MONTH=$(date -d "+1 month" +%Y-%m-01)
-
-          # Check Lambda costs
+          # Lambda costs
           LAMBDA_COST=$(aws ce get-cost-and-usage \
             --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
             --granularity MONTHLY \
@@ -114,16 +78,21 @@ jobs:
             --query 'ResultsByTime[0].Groups[0].Metrics.BlendedCost.Amount' \
             --output text 2>/dev/null || echo "0.00")
 
-          # Generate smart recommendations based on costs
-          if (( $(echo "$LAMBDA_COST > 10" | bc -l) )); then
-            echo "### ⚡ Lambda Optimization" >> cost_report.md
-            echo "- Lambda costs: \$${LAMBDA_COST}" >> cost_report.md
-            echo "- Consider reviewing memory allocation and execution time" >> cost_report.md
-            echo "- Remove unused function versions" >> cost_report.md
-            echo "" >> cost_report.md
-          fi
+          echo "- **AWS Lambda**: \$${LAMBDA_COST}" >> cost_report.md
 
-          # S3 optimization
+          # API Gateway costs
+          APIGATEWAY_COST=$(aws ce get-cost-and-usage \
+            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon API Gateway"]}}' \
+            --query 'ResultsByTime[0].Groups[0].Metrics.BlendedCost.Amount' \
+            --output text 2>/dev/null || echo "0.00")
+
+          echo "- **API Gateway**: \$${APIGATEWAY_COST}" >> cost_report.md
+
+          # S3 costs
           S3_COST=$(aws ce get-cost-and-usage \
             --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
             --granularity MONTHLY \
@@ -133,20 +102,136 @@ jobs:
             --query 'ResultsByTime[0].Groups[0].Metrics.BlendedCost.Amount' \
             --output text 2>/dev/null || echo "0.00")
 
-          if (( $(echo "$S3_COST > 5" | bc -l) )); then
-            echo "### 🪣 S3 Optimization" >> cost_report.md
-            echo "- S3 costs: \$${S3_COST}" >> cost_report.md
-            echo "- Implement lifecycle policies for old data" >> cost_report.md
-            echo "- Consider Intelligent Tiering" >> cost_report.md
-            echo "" >> cost_report.md
+          echo "- **S3 Storage**: \$${S3_COST}" >> cost_report.md
+
+          # RDS costs
+          RDS_COST=$(aws ce get-cost-and-usage \
+            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon Relational Database Service"]}}' \
+            --query 'ResultsByTime[0].Groups[0].Metrics.BlendedCost.Amount' \
+            --output text 2>/dev/null || echo "0.00")
+
+          echo "- **RDS (Aurora Serverless)**: \$${RDS_COST}" >> cost_report.md
+
+          # CloudFront costs
+          CLOUDFRONT_COST=$(aws ce get-cost-and-usage \
+            --time-period Start=$CURRENT_MONTH,End=$NEXT_MONTH \
+            --granularity MONTHLY \
+            --metrics BlendedCost \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon CloudFront"]}}' \
+            --query 'ResultsByTime[0].Groups[0].Metrics.BlendedCost.Amount' \
+            --output text 2>/dev/null || echo "0.00")
+
+          echo "- **CloudFront**: \$${CLOUDFRONT_COST}" >> cost_report.md
+
+          echo "" >> cost_report.md
+
+      - name: Check resource utilization
+        run: |
+          echo "## 📊 Resource Utilization Analysis" >> cost_report.md
+          echo "" >> cost_report.md
+
+          # Lambda functions analysis
+          echo "### ⚡ Lambda Functions" >> cost_report.md
+          LAMBDA_FUNCTIONS=$(aws lambda list-functions --query 'Functions[*].{Name:FunctionName,Runtime:Runtime,Size:CodeSize,LastModified:LastModified}' --output table)
+          if [ -n "$LAMBDA_FUNCTIONS" ]; then
+            echo "```" >> cost_report.md
+            echo "$LAMBDA_FUNCTIONS" >> cost_report.md
+            echo "```" >> cost_report.md
+          else
+            echo "No Lambda functions found." >> cost_report.md
+          fi
+          echo "" >> cost_report.md
+
+          # API Gateway APIs
+          echo "### 🌐 API Gateway APIs" >> cost_report.md
+          API_GATEWAYS=$(aws apigatewayv2 get-apis --query 'Items[*].{Name:Name,Protocol:ProtocolType,Created:CreatedDate}' --output table)
+          if [ -n "$API_GATEWAYS" ]; then
+            echo "```" >> cost_report.md
+            echo "$API_GATEWAYS" >> cost_report.md
+            echo "```" >> cost_report.md
+          else
+            echo "No API Gateways found." >> cost_report.md
+          fi
+          echo "" >> cost_report.md
+
+          # S3 Buckets
+          echo "### 🪣 S3 Buckets" >> cost_report.md
+          S3_BUCKETS=$(aws s3api list-buckets --query 'Buckets[*].{Name:Name,Created:CreationDate}' --output table)
+          if [ -n "$S3_BUCKETS" ]; then
+            echo "```" >> cost_report.md
+            echo "$S3_BUCKETS" >> cost_report.md
+            echo "```" >> cost_report.md
+          else
+            echo "No S3 buckets found." >> cost_report.md
+          fi
+          echo "" >> cost_report.md
+
+          # RDS Clusters
+          echo "### 🗄️ RDS Aurora Serverless Clusters" >> cost_report.md
+          RDS_CLUSTERS=$(aws rds describe-db-clusters --query 'DBClusters[*].{Name:DBClusterIdentifier,Engine:Engine,Status:Status}' --output table)
+          if [ -n "$RDS_CLUSTERS" ]; then
+            echo "```" >> cost_report.md
+            echo "$RDS_CLUSTERS" >> cost_report.md
+            echo "```" >> cost_report.md
+          else
+            echo "No RDS clusters found." >> cost_report.md
+          fi
+          echo "" >> cost_report.md
+
+      - name: Generate optimization recommendations
+        run: |
+          echo "## 💡 Cost Optimization Recommendations" >> cost_report.md
+          echo "" >> cost_report.md
+
+          # Check for unused Lambda functions
+          echo "### ⚡ Lambda Optimization" >> cost_report.md
+          LAMBDA_COUNT=$(aws lambda list-functions --query 'length(Functions)' --output text)
+          if [ "$LAMBDA_COUNT" -gt 10 ]; then
+            echo "- Consider consolidating Lambda functions (currently: $LAMBDA_COUNT)" >> cost_report.md
           fi
 
-          # General recommendations
-          echo "### 📋 General Recommendations" >> cost_report.md
-          echo "- Monitor unused resources regularly" >> cost_report.md
-          echo "- Use Reserved Instances for predictable workloads" >> cost_report.md
-          echo "- Enable detailed monitoring for better insights" >> cost_report.md
-          echo "- Set up budget alerts for proactive monitoring" >> cost_report.md
+          # Check Lambda memory settings
+          HIGH_MEMORY_LAMBDAS=$(aws lambda list-functions --query 'Functions[?MemorySize > `512`].FunctionName' --output text)
+          if [ -n "$HIGH_MEMORY_LAMBDAS" ]; then
+            echo "- Review high-memory Lambda functions:" >> cost_report.md
+            for func in $HIGH_MEMORY_LAMBDAS; do
+              echo "  - $func" >> cost_report.md
+            done
+          fi
+
+          # Check for old versions
+          echo "- Remove old Lambda versions to reduce storage costs" >> cost_report.md
+          echo "- Consider using Lambda Provisioned Concurrency only for critical functions" >> cost_report.md
+          echo "" >> cost_report.md
+
+          echo "### 🌐 API Gateway Optimization" >> cost_report.md
+          echo "- Use caching for frequently accessed endpoints" >> cost_report.md
+          echo "- Consider request/response compression" >> cost_report.md
+          echo "- Monitor for unused API Gateway instances" >> cost_report.md
+          echo "" >> cost_report.md
+
+          echo "### 🪣 S3 Optimization" >> cost_report.md
+          echo "- Implement lifecycle policies for log files and temporary data" >> cost_report.md
+          echo "- Use S3 Intelligent Tiering for variable access patterns" >> cost_report.md
+          echo "- Consider S3 Transfer Acceleration only if needed" >> cost_report.md
+          echo "" >> cost_report.md
+
+          echo "### 🗄️ RDS Aurora Optimization" >> cost_report.md
+          echo "- Aurora Serverless v2 automatically scales - monitor actual usage" >> cost_report.md
+          echo "- Review backup retention periods" >> cost_report.md
+          echo "- Consider read replicas only for high-read workloads" >> cost_report.md
+          echo "" >> cost_report.md
+
+          echo "### 🌍 CloudFront Optimization" >> cost_report.md
+          echo "- Use appropriate price class based on global requirements" >> cost_report.md
+          echo "- Enable compression for text-based content" >> cost_report.md
+          echo "- Monitor cache hit ratio and adjust TTL settings" >> cost_report.md
+          echo "" >> cost_report.md
 
       - name: Cost alert check
         run: |
@@ -206,7 +291,7 @@ jobs:
             const issueBody = `${costReport}
 
             ---
-            *This issue was automatically generated by the simplified cost monitoring workflow.*
+            *This issue was automatically generated by the cost monitoring workflow.*
             *Last updated: ${new Date().toISOString()}*`;
 
             if (issues.length > 0) {
@@ -237,5 +322,5 @@ jobs:
       - name: Upload cost report
         uses: actions/upload-artifact@v4
         with:
-          name: cost-report-simplified-${{ github.run_number }}
+          name: cost-report-${{ github.run_number }}
           path: cost_report.md
