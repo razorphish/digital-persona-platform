@@ -243,10 +243,20 @@ resource "aws_batch_compute_environment" "ml_processing" {
     security_group_ids = [aws_security_group.batch_compute.id]
     instance_role      = aws_iam_instance_profile.batch_instance.arn
 
-    tags = merge(var.common_tags, {
+    # Minimal tags to prevent unnecessary replacements
+    # EC2 instance tags are not critical for Batch functionality
+    tags = {
       Name = "${var.environment}-${var.sub_environment}-${var.project_name}-batch-compute"
-      Type = "BatchComputeEnvironment"
-    })
+    }
+  }
+
+  # Prevent unnecessary replacements due to tag changes
+  lifecycle {
+    ignore_changes = [
+      compute_resources[0].tags,
+      tags,
+      tags_all
+    ]
   }
 
   depends_on = [
