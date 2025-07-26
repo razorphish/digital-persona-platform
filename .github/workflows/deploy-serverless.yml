@@ -386,49 +386,41 @@ jobs:
             echo "🚀 Changes detected! Applying Terraform configuration..."
             echo "📊 Resources will be created/modified"
 
-            # First attempt: Full apply with timeout
-            echo "🎯 Attempt 1: Full Terraform apply..."
-            if timeout 1800 terraform apply -auto-approve -lock-timeout=300s tfplan; then
-              echo "✅ Full Terraform apply completed successfully!"
-            else
-              echo "⚠️ Full apply failed, trying targeted deployment..."
+            # Robust apply with retry mechanism (no targeted fallback)
+            APPLY_SUCCESS="false"
+            for attempt in 1 2 3; do
+              echo "🎯 Attempt $attempt/3: Full Terraform apply..."
               
-              # Second attempt: Core infrastructure first
-              echo "🏗️ Attempt 2: Core infrastructure deployment..."
-              
-              # Apply VPC and networking first
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_vpc.main \
-                -target=aws_subnet.private \
-                -target=aws_internet_gateway.main \
-                -target=aws_security_group.database \
-                -target=aws_security_group.lambda || echo "⚠️ VPC deployment issues"
-              
-              # Apply secrets and database
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_secretsmanager_secret.jwt_secret \
-                -target=aws_secretsmanager_secret.database_password \
-                -target=aws_secretsmanager_secret_version.jwt_secret \
-                -target=aws_secretsmanager_secret_version.database_password \
-                -target=aws_db_subnet_group.database \
-                -target=aws_rds_cluster.database \
-                -target=aws_rds_cluster_instance.database || echo "⚠️ Database deployment issues"
-              
-              # Apply S3 buckets
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_s3_bucket.uploads \
-                -target=module.s3_website \
-                -target=module.lambda_backend.aws_s3_bucket.lambda_deployments || echo "⚠️ S3 deployment issues"
-              
-              # Apply serverless components
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=module.lambda_backend \
-                -target=module.api_gateway || echo "⚠️ Serverless deployment issues"
-              
-              # Apply DNS records last
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_route53_record.website \
-                -target=aws_route53_record.api || echo "⚠️ DNS deployment issues"
+              if terraform apply -auto-approve -lock-timeout=600s tfplan; then
+                echo "✅ Full Terraform apply completed successfully!"
+                APPLY_SUCCESS="true"
+                break
+              else
+                APPLY_EXIT_CODE=$?
+                echo "❌ Attempt $attempt failed with exit code: $APPLY_EXIT_CODE"
+                
+                if [ $attempt -lt 3 ]; then
+                  echo "⏳ Waiting 30 seconds before retry..."
+                  sleep 30
+                  
+                  # Refresh the plan for the retry
+                  echo "🔄 Refreshing Terraform plan for retry..."
+                  terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+                else
+                  echo "💥 All apply attempts failed!"
+                  echo "🔍 Common solutions:"
+                  echo "   • Check AWS resource limits and quotas"
+                  echo "   • Verify IAM permissions are sufficient"
+                  echo "   • Check for resource naming conflicts"
+                  echo "   • Review Terraform state for inconsistencies"
+                  exit 1
+                fi
+              fi
+            done
+            
+            if [ "$APPLY_SUCCESS" = "false" ]; then
+              echo "❌ Terraform apply failed after 3 attempts"
+              exit 1
             fi
           else
             echo "✅ No infrastructure changes needed (plan exit code: $PLAN_EXIT_CODE)"
