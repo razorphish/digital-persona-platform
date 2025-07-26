@@ -166,6 +166,8 @@ resource "random_password" "jwt_secret" {
 resource "random_password" "database_password" {
   length  = 32
   special = true
+  # Exclude characters not allowed in RDS passwords: '/', '@', '"', ' '
+  override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
 # =================================
