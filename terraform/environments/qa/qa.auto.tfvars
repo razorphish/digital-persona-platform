@@ -1,6 +1,5 @@
-# QA Environment Variables
-environment = "qa"
-sub_environment = "qa03"
+# QA Environment Variables (dynamic values come from workflow)
+# environment and sub_environment are set dynamically by the workflow
 domain_name = "hibiji.com"
 
 # ECR Repository URLs (will be created by Terraform)

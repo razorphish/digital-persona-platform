@@ -102,6 +102,7 @@
         "iam:ListPolicyVersions",
         "iam:ListAttachedRolePolicies",
         "iam:ListRolePolicies",
+        "iam:GetRolePolicy",
         "iam:PassRole"
       ],
       "Resource": "*"
@@ -190,6 +191,22 @@
         "arn:aws:s3:::hibiji-terraform-state",
         "arn:aws:s3:::hibiji-terraform-state/*"
       ]
+    },
+    {
+      "Sid": "TerraformSQSAccess",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TerraformBatchAccess",
+      "Effect": "Allow",
+      "Action": [
+        "batch:*"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "CostMonitoringAccess",
