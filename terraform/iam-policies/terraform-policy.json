@@ -190,6 +190,25 @@
         "arn:aws:s3:::hibiji-terraform-state",
         "arn:aws:s3:::hibiji-terraform-state/*"
       ]
+    },
+    {
+      "Sid": "CostMonitoringAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "ce:GetUsageReport",
+        "ce:GetCostCategories",
+        "ce:GetDimensionValues",
+        "ce:GetRightsizingRecommendation",
+        "ce:GetSavingsUtilization",
+        "ce:GetUsageReport",
+        "ce:ListCostAndUsageSpecifications",
+        "budgets:ViewBudget",
+        "budgets:ViewBudgetAction",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics"
+      ],
+      "Resource": "*"
     }
   ]
 } 
