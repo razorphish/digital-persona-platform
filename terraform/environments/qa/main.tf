@@ -351,6 +351,35 @@ module "s3_website" {
   build_retention_days   = 30
 }
 
+# RDS Proxy for Connection Pooling
+module "rds_proxy" {
+  source = "../../modules/rds-proxy"
+
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  aws_region      = var.aws_region
+  common_tags     = local.common_tags
+
+  # Network configuration
+  vpc_id                        = aws_vpc.main.id
+  subnet_ids                    = aws_subnet.private[*].id
+  lambda_security_group_ids     = [aws_security_group.lambda.id]
+  database_security_group_ids   = [aws_security_group.database.id]
+
+  # Database configuration
+  database_cluster_identifier = aws_rds_cluster.database.cluster_identifier
+  database_secret_arn         = aws_secretsmanager_secret.database_password.arn
+
+  # RDS Proxy settings optimized for serverless
+  idle_client_timeout          = 1800  # 30 minutes
+  max_connections_percent      = 75     # Reserve 25% for direct connections
+  max_idle_connections_percent = 50     # Keep idle connections reasonable
+  connection_borrow_timeout    = 120    # 2 minutes
+  require_tls                  = false  # Can be enabled for production
+  log_retention_days          = 14
+}
+
 # Lambda Backend
 module "lambda_backend" {
   source = "../../modules/lambda-backend"
@@ -365,8 +394,8 @@ module "lambda_backend" {
   lambda_timeout     = 30
   lambda_memory_size = 512
 
-  # Environment variables
-  database_url   = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${aws_rds_cluster.database.endpoint}:${aws_rds_cluster.database.port}/${aws_rds_cluster.database.database_name}"
+  # Environment variables - Using RDS Proxy for connection pooling
+  database_url   = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${module.rds_proxy.proxy_endpoint}:${module.rds_proxy.proxy_port}/${aws_rds_cluster.database.database_name}"
   cors_origin    = "https://${module.s3_website.cloudfront_domain_name}"
 
   # AWS resources
@@ -500,4 +529,21 @@ output "uploads_bucket_name" {
 output "domain_name" {
   description = "Domain name for the environment"
   value       = local.website_domain
+}
+
+# RDS Proxy outputs
+output "rds_proxy_endpoint" {
+  description = "RDS Proxy endpoint for database connections"
+  value       = module.rds_proxy.proxy_endpoint
+  sensitive   = true
+}
+
+output "rds_proxy_name" {
+  description = "RDS Proxy name"
+  value       = module.rds_proxy.proxy_name
+}
+
+output "rds_proxy_port" {
+  description = "RDS Proxy port"
+  value       = module.rds_proxy.proxy_port
 } 
