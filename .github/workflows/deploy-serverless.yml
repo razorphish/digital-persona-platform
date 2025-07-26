@@ -287,6 +287,14 @@ jobs:
         with:
           terraform_version: "1.5.0"
 
+      - name: Update IAM Permissions (if needed)
+        run: |
+          echo "🔐 Checking and updating IAM permissions for new AWS services..."
+          # Install jq for JSON processing
+          sudo apt-get update && sudo apt-get install -y jq
+          # Run the IAM update script
+          ./scripts/update-iam-permissions.sh
+
       - name: Terraform Init and Plan
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
