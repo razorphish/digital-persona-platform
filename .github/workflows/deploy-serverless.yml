@@ -356,15 +356,25 @@ jobs:
           echo "🔄 Re-initializing terraform with isolated backend..."
           terraform init -backend-config="key=$MAIN_ENV/$ENVIRONMENT/terraform.tfstate" -reconfigure
 
-          # Get plan exit code to check if changes are needed
-          echo "📊 Running terraform plan with detailed exit codes..."
-          PLAN_EXIT_CODE=0
-          terraform plan -var-file="environment.auto.tfvars" -detailed-exitcode -out=tfplan || PLAN_EXIT_CODE=$?
+                    # Run terraform plan and parse output to detect changes
+          echo "📊 Running terraform plan to detect changes..."
+          terraform plan -var-file="environment.auto.tfvars" -out=tfplan > plan_output.txt 2>&1
+          PLAN_EXIT_CODE=$?
+
+          # Show plan output
+          cat plan_output.txt
+
+          # Parse plan output to detect changes (terraform exit code is buggy)
+          CHANGES_DETECTED="false"
+          if grep -q "Plan: [1-9]" plan_output.txt || grep -q "to add" plan_output.txt; then
+            CHANGES_DETECTED="true"
+          fi
 
           echo "📋 Terraform plan exit code: $PLAN_EXIT_CODE"
-          echo "📋 Exit code meanings: 0=no changes, 1=error, 2=changes detected"
+          echo "📋 Changes detected: $CHANGES_DETECTED"
+          echo "📋 Logic: Parsing plan output for 'Plan: [1-9]' or 'to add'"
 
-          if [ $PLAN_EXIT_CODE -eq 2 ]; then
+          if [ "$CHANGES_DETECTED" = "true" ]; then
             echo "🚀 Changes detected! Applying Terraform configuration..."
             echo "📊 Resources will be created/modified"
 
