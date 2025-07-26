@@ -49,6 +49,16 @@ async function getOrCreateDefaultPersona(userId: string) {
   return defaultPersona.rows[0];
 }
 
+// Import message queue abstraction
+import {
+  createMessageQueue,
+  queueMLJob,
+  type MLJobMessage,
+} from "./services/messageQueue.js";
+
+// Create message queue instance
+const messageQueue = createMessageQueue();
+
 // Helper function to queue file for AI processing
 async function queueFileForAIProcessing(
   fileId: string,
@@ -56,6 +66,23 @@ async function queueFileForAIProcessing(
   mediaType: string
 ) {
   try {
+    // Queue job via message queue (SQS -> Batch processing)
+    const mlJob: MLJobMessage = {
+      jobType:
+        mediaType === "image" ? "image_analysis" : "personality_analysis",
+      personaId,
+      sourceType: "media_file",
+      sourceId: fileId,
+      content: `File uploaded for analysis: ${mediaType}`,
+      metadata: {
+        mediaType,
+        uploadedAt: new Date().toISOString(),
+      },
+    };
+
+    await queueMLJob(messageQueue, mlJob);
+
+    // Also store in database for tracking (can be removed when ML service handles this)
     await db.execute(sql`
       INSERT INTO persona_learning_data (
         persona_id, source_type, source_id, content, processed, confidence
@@ -64,11 +91,13 @@ async function queueFileForAIProcessing(
         ${"File uploaded for analysis: " + mediaType}, false, 50
       )
     `);
+
     logger.info(
-      `Queued file ${fileId} for AI processing for persona ${personaId}`
+      `✅ Queued file ${fileId} for AI processing via SQS for persona ${personaId}`
     );
   } catch (error) {
-    logger.error(`Failed to queue file for AI processing: ${error}`);
+    logger.error(`❌ Failed to queue file for AI processing: ${error}`);
+    throw error;
   }
 }
 

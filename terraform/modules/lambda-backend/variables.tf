@@ -128,4 +128,17 @@ variable "dependencies_layer_filename" {
   description = "Filename for the dependencies layer ZIP file"
   type        = string
   default     = null
+}
+
+# ML Processing Configuration
+variable "ml_sqs_queue_url" {
+  description = "SQS queue URL for ML job requests"
+  type        = string
+  default     = null
+}
+
+variable "ml_sqs_queue_arn" {
+  description = "SQS queue ARN for ML job requests (for IAM permissions)"
+  type        = string
+  default     = null
 } 

@@ -396,8 +396,10 @@ module "lambda_backend" {
   lambda_memory_size = 512
 
   # Environment variables - Using RDS Proxy for connection pooling
-  database_url   = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${module.rds_proxy.proxy_endpoint}:${module.rds_proxy.proxy_port}/${aws_rds_cluster.database.database_name}"
-  cors_origin    = "https://${module.s3_website.cloudfront_domain_name}"
+  database_url     = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${module.rds_proxy.proxy_endpoint}:${module.rds_proxy.proxy_port}/${aws_rds_cluster.database.database_name}"
+  cors_origin      = "https://${module.s3_website.cloudfront_domain_name}"
+  ml_sqs_queue_url = module.aws_batch_ml.sqs_queue_url
+  ml_sqs_queue_arn = module.aws_batch_ml.sqs_queue_arn
 
   # AWS resources
   database_secret_arn     = aws_secretsmanager_secret.database_password.arn
@@ -532,6 +534,40 @@ output "domain_name" {
   value       = local.website_domain
 }
 
+# AWS Batch ML Processing for AI/ML workloads
+module "aws_batch_ml" {
+  source = "../../modules/aws-batch-ml"
+
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  aws_region      = var.aws_region
+  common_tags     = local.common_tags
+
+  # Network configuration
+  vpc_id     = aws_vpc.main.id
+  subnet_ids = aws_subnet.private[*].id
+
+  # Database configuration
+  database_secret_arn = aws_secretsmanager_secret.database_password.arn
+
+  # Batch compute configuration (production optimized)
+  min_vcpus             = 0
+  max_vcpus             = 50
+  desired_vcpus         = 2  # Always-ready capacity for production
+  instance_types        = ["m5.large", "m5.xlarge", "m5.2xlarge", "c5.xlarge", "c5.2xlarge"]
+  use_spot_instances    = false  # On-demand for production reliability
+  spot_bid_percentage   = null
+
+  # Job configuration
+  job_vcpus  = 4
+  job_memory = 8192
+
+  # Logging
+  log_retention_days = 90
+  log_level         = "WARN"  # Production logging
+}
+
 # RDS Proxy outputs
 output "rds_proxy_endpoint" {
   description = "RDS Proxy endpoint for database connections"
@@ -547,4 +583,21 @@ output "rds_proxy_name" {
 output "rds_proxy_port" {
   description = "RDS Proxy port"
   value       = module.rds_proxy.proxy_port
+}
+
+# AWS Batch ML outputs
+output "ml_sqs_queue_url" {
+  description = "SQS queue URL for ML job requests"
+  value       = module.aws_batch_ml.sqs_queue_url
+  sensitive   = true
+}
+
+output "ml_ecr_repository_url" {
+  description = "ECR repository URL for ML service container images"
+  value       = module.aws_batch_ml.ecr_repository_url
+}
+
+output "ml_batch_job_queue_name" {
+  description = "Batch job queue name for ML processing"
+  value       = module.aws_batch_ml.batch_job_queue_name
 } 
