@@ -62,18 +62,9 @@ variable "project_name" {
   default     = "dpp"
 }
 
-# Legacy variables (not used in serverless architecture but kept for compatibility)
-variable "ecr_repository_url" {
-  description = "ECR repository URL for backend (legacy - not used in serverless)"
-  type        = string
-  default     = ""
-}
-
-variable "frontend_ecr_repository_url" {
-  description = "ECR repository URL for frontend (legacy - not used in serverless)"
-  type        = string
-  default     = ""
-}
+# Legacy ECR variables removed - ECR repositories are now created dynamically by modules
+# AWS Batch ML module creates: module.aws_batch_ml.ecr_repository_url 
+# Backend/Frontend ECR repos would be created by their respective modules when needed
 
 variable "image_tag" {
   description = "Image tag (legacy - not used in serverless)"

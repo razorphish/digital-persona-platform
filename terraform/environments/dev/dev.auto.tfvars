@@ -2,9 +2,8 @@
 # environment and sub_environment are set dynamically by the workflow
 domain_name = "hibiji.com"
 
-# ECR Repository URLs (will be created by Terraform)
-ecr_repository_url = "570827307849.dkr.ecr.us-west-1.amazonaws.com/dpp-backend"
-frontend_ecr_repository_url = "570827307849.dkr.ecr.us-west-1.amazonaws.com/dpp-frontend"
+# ECR Repository URLs will be created dynamically by Terraform
+# No hardcoded values needed - URLs are constructed from AWS account ID, region, and project name
 
 # Image tags
 image_tag = "latest"
