@@ -323,42 +323,12 @@ jobs:
           echo "📋 Step 3: Terraform Planning..."
           terraform plan -var-file="environment.auto.tfvars" -out=tfplan
 
-      - name: Import Existing Resources
+            - name: Skip Import Step (Non-blocking)
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
-        env:
-          ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
-          MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
-          PROJECT_NAME: "dpp"
         run: |
-          echo "📥 Step 3: Importing existing resources into Terraform state..."
-
-          # Helper function for safe imports
-          safe_import() {
-            local resource_address="$1"
-            local resource_id="$2"
-            local resource_type="$3"
-            local description="$4"
-            
-            echo "🔍 Checking if $description exists in state..."
-            if ! terraform state show "$resource_address" >/dev/null 2>&1; then
-              echo "📥 Importing $description: $resource_id"
-              if terraform import "$resource_address" "$resource_id" 2>/dev/null; then
-                echo "✅ Successfully imported $description"
-              else
-                echo "⚠️ Failed to import $description (may not exist or lack permissions)"
-              fi
-            else
-              echo "✅ $description already in state"
-            fi
-          }
-
-          # Import Route53 hosted zone (shared across environments)
-          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones --query 'HostedZones[?Name==`hibiji.com.`].Id' --output text | sed 's|/hostedzone/||')
-          if [ ! -z "$HOSTED_ZONE_ID" ] && [ "$HOSTED_ZONE_ID" != "None" ]; then
-            safe_import "data.aws_route53_zone.main" "$HOSTED_ZONE_ID" "hosted_zone" "Route53 hosted zone"
-          fi
-
-          echo "✅ Resource import completed"
+          echo "📥 Step 3: Skipping optional resource import..."
+          echo "ℹ️ Import step removed to prevent blocking infrastructure deployment"
+          echo "✅ Proceeding to terraform apply"
 
       - name: Apply Terraform Configuration
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
