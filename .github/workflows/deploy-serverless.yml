@@ -107,11 +107,16 @@ jobs:
           FUNCTION_NAME="$MAIN_ENV-$ENVIRONMENT-dpp-api"
           S3_BUCKET="$MAIN_ENV-$ENVIRONMENT-dpp-website"
 
-          # Generate API URL dynamically based on environment pattern
-          DOMAIN_NAME="${ENVIRONMENT}.hibiji.com"
-
-          # Determine HIBIJI_API_URL based on existing resources or prediction
-          API_URL="https://${ENVIRONMENT}-api.hibiji.com/v1"
+          # Generate URLs based on environment
+          if [[ "$ENVIRONMENT" == "prod" ]]; then
+            # Production URLs for main branch
+            DOMAIN_NAME="www.hibiji.com"
+            API_URL="https://api.hibiji.com/v1"
+          else
+            # Standard pattern for numbered environments
+            DOMAIN_NAME="${ENVIRONMENT}.hibiji.com"
+            API_URL="https://${ENVIRONMENT}-api.hibiji.com/v1"
+          fi
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
