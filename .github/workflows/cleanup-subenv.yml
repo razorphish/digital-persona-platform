@@ -101,6 +101,9 @@ jobs:
       - name: Clean up orphaned AWS resources
         if: github.event.inputs.dry_run != 'true' && github.event.inputs.force_cleanup == 'true'
         run: |
+          # Install jq for JSON processing
+          sudo apt-get update && sudo apt-get install -y jq
+
           echo "🧹 Cleaning up orphaned AWS resources for ${{ env.ENVIRONMENT }}..."
 
           ENVIRONMENT="${{ env.ENVIRONMENT }}"
@@ -341,7 +344,165 @@ jobs:
             echo "💡 These should finish deleting automatically within a few minutes"
           fi
 
-          echo "✅ Orphaned resource cleanup completed!"
+          # Clean up Route53 DNS Records  
+          echo "🧹 Cleaning up Route53 DNS Records..."
+          WEBSITE_RECORD="${ENVIRONMENT}.hibiji.com"
+          API_RECORD="${ENVIRONMENT}-api.hibiji.com"
+
+          # Get the hosted zone ID for hibiji.com
+          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones \
+            --query "HostedZones[?Name=='hibiji.com.'].Id" \
+            --output text | sed 's|/hostedzone/||')
+
+          if [ -n "$HOSTED_ZONE_ID" ] && [ "$HOSTED_ZONE_ID" != "None" ]; then
+            # Delete website DNS record
+            if aws route53 list-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" \
+               --query "ResourceRecordSets[?Name=='${WEBSITE_RECORD}.']" | grep -q "CNAME"; then
+              echo "🗑️ Deleting Route53 record: $WEBSITE_RECORD"
+              aws route53 change-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" \
+                --change-batch "{
+                  \"Changes\": [{
+                    \"Action\": \"DELETE\",
+                    \"ResourceRecordSet\": $(aws route53 list-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" \
+                      --query "ResourceRecordSets[?Name=='${WEBSITE_RECORD}.']" --output json | jq '.[0]')
+                  }]
+                }" || echo "⚠️ Failed to delete website record: $WEBSITE_RECORD"
+            fi
+            
+            # Delete API DNS record
+            if aws route53 list-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" \
+               --query "ResourceRecordSets[?Name=='${API_RECORD}.']" | grep -q "CNAME"; then
+              echo "🗑️ Deleting Route53 record: $API_RECORD"
+              aws route53 change-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" \
+                --change-batch "{
+                  \"Changes\": [{
+                    \"Action\": \"DELETE\",
+                    \"ResourceRecordSet\": $(aws route53 list-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" \
+                      --query "ResourceRecordSets[?Name=='${API_RECORD}.']" --output json | jq '.[0]')
+                  }]
+                }" || echo "⚠️ Failed to delete API record: $API_RECORD"
+            fi
+          fi
+
+          # Clean up DB Subnet Groups
+          echo "🧹 Cleaning up DB Subnet Groups..."
+          DB_SUBNET_GROUPS=$(aws rds describe-db-subnet-groups \
+            --query "DBSubnetGroups[?starts_with(DBSubnetGroupName, '${MAIN_ENV}-${ENVIRONMENT}')].DBSubnetGroupName" \
+            --output text)
+
+          for subnet_group in $DB_SUBNET_GROUPS; do
+            if [ -n "$subnet_group" ] && [ "$subnet_group" != "None" ]; then
+              echo "🗑️ Deleting DB subnet group: $subnet_group"
+              aws rds delete-db-subnet-group --db-subnet-group-name "$subnet_group" || echo "⚠️ Failed to delete DB subnet group: $subnet_group"
+            fi
+          done
+
+          # Clean up Security Groups (after other resources)
+          echo "🧹 Cleaning up Security Groups..."
+          SECURITY_GROUPS=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=${MAIN_ENV}-${ENVIRONMENT}-*" \
+            --query "SecurityGroups[].GroupId" --output text)
+
+          for sg_id in $SECURITY_GROUPS; do
+            if [ -n "$sg_id" ] && [ "$sg_id" != "None" ]; then
+              echo "🗑️ Deleting security group: $sg_id"
+              aws ec2 delete-security-group --group-id "$sg_id" || echo "⚠️ Failed to delete security group: $sg_id (may have dependencies)"
+            fi
+          done
+
+          # Clean up Subnets
+          echo "🧹 Cleaning up Subnets..."
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-vpc" \
+            --query "Vpcs[0].VpcId" --output text)
+
+          if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+            SUBNETS=$(aws ec2 describe-subnets \
+              --filters "Name=vpc-id,Values=$VPC_ID" \
+              --query "Subnets[].SubnetId" --output text)
+
+            for subnet_id in $SUBNETS; do
+              if [ -n "$subnet_id" ] && [ "$subnet_id" != "None" ]; then
+                echo "🗑️ Deleting subnet: $subnet_id"
+                aws ec2 delete-subnet --subnet-id "$subnet_id" || echo "⚠️ Failed to delete subnet: $subnet_id"
+              fi
+            done
+
+            # Clean up Internet Gateway
+            echo "🧹 Cleaning up Internet Gateway..."
+            IGW_ID=$(aws ec2 describe-internet-gateways \
+              --filters "Name=attachment.vpc-id,Values=$VPC_ID" \
+              --query "InternetGateways[0].InternetGatewayId" --output text)
+
+            if [ -n "$IGW_ID" ] && [ "$IGW_ID" != "None" ]; then
+              echo "🗑️ Detaching and deleting Internet Gateway: $IGW_ID"
+              aws ec2 detach-internet-gateway --internet-gateway-id "$IGW_ID" --vpc-id "$VPC_ID" || echo "⚠️ Failed to detach IGW"
+              aws ec2 delete-internet-gateway --internet-gateway-id "$IGW_ID" || echo "⚠️ Failed to delete IGW: $IGW_ID"
+            fi
+
+            # Clean up VPC (last)
+            echo "🗑️ Deleting VPC: $VPC_ID"
+            aws ec2 delete-vpc --vpc-id "$VPC_ID" || echo "⚠️ Failed to delete VPC: $VPC_ID"
+          fi
+
+          # Clean up IAM Roles (environment-specific)
+          echo "🧹 Cleaning up IAM Roles..."
+          IAM_ROLES=$(aws iam list-roles \
+            --query "Roles[?starts_with(RoleName, '${MAIN_ENV}-${ENVIRONMENT}')].RoleName" \
+            --output text)
+
+          for role in $IAM_ROLES; do
+            if [ -n "$role" ] && [ "$role" != "None" ]; then
+              echo "🗑️ Cleaning up IAM role: $role"
+              
+              # Detach policies first
+              ATTACHED_POLICIES=$(aws iam list-attached-role-policies --role-name "$role" \
+                --query "AttachedPolicies[].PolicyArn" --output text)
+              for policy_arn in $ATTACHED_POLICIES; do
+                if [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ]; then
+                  aws iam detach-role-policy --role-name "$role" --policy-arn "$policy_arn" || echo "⚠️ Failed to detach policy: $policy_arn"
+                fi
+              done
+              
+              # Delete inline policies
+              INLINE_POLICIES=$(aws iam list-role-policies --role-name "$role" \
+                --query "PolicyNames" --output text)
+              for policy_name in $INLINE_POLICIES; do
+                if [ -n "$policy_name" ] && [ "$policy_name" != "None" ]; then
+                  aws iam delete-role-policy --role-name "$role" --policy-name "$policy_name" || echo "⚠️ Failed to delete inline policy: $policy_name"
+                fi
+              done
+              
+              # Delete instance profiles
+              INSTANCE_PROFILES=$(aws iam list-instance-profiles-for-role --role-name "$role" \
+                --query "InstanceProfiles[].InstanceProfileName" --output text)
+              for profile_name in $INSTANCE_PROFILES; do
+                if [ -n "$profile_name" ] && [ "$profile_name" != "None" ]; then
+                  aws iam remove-role-from-instance-profile --instance-profile-name "$profile_name" --role-name "$role" || echo "⚠️ Failed to remove role from instance profile"
+                  aws iam delete-instance-profile --instance-profile-name "$profile_name" || echo "⚠️ Failed to delete instance profile: $profile_name"
+                fi
+              done
+              
+              # Delete the role
+              aws iam delete-role --role-name "$role" || echo "⚠️ Failed to delete IAM role: $role"
+            fi
+          done
+
+          # Clean up Network Interfaces (ENIs)
+          echo "🧹 Cleaning up Network Interfaces..."
+          ENI_IDS=$(aws ec2 describe-network-interfaces \
+            --filters "Name=description,Values=*${ENVIRONMENT}*" \
+            --query "NetworkInterfaces[?State=='available'].NetworkInterfaceId" \
+            --output text)
+
+          for eni_id in $ENI_IDS; do
+            if [ -n "$eni_id" ] && [ "$eni_id" != "None" ]; then
+              echo "🗑️ Deleting network interface: $eni_id"
+              aws ec2 delete-network-interface --network-interface-id "$eni_id" || echo "⚠️ Failed to delete ENI: $eni_id"
+            fi
+          done
+
+          echo "✅ Comprehensive resource cleanup completed!"
 
       - name: Cleanup Summary
         if: always()
@@ -361,6 +522,12 @@ jobs:
             echo ""
             echo "📋 Resources cleaned up:"
             echo "  • Terraform-managed infrastructure"
+            echo "  • Route53 DNS records (${ENVIRONMENT}.hibiji.com, ${ENVIRONMENT}-api.hibiji.com)"
+            echo "  • VPC infrastructure (VPC, subnets, internet gateways)"
+            echo "  • Security groups (database and lambda security groups)"
+            echo "  • DB subnet groups"
+            echo "  • IAM roles, policies, and instance profiles" 
+            echo "  • Network interfaces (ENIs)"
             echo "  • AWS Batch job definitions, queues, and compute environments"
             echo "  • SQS queues (main queue + dead letter queue)"
             echo "  • ECR repositories (ML service container images)"
