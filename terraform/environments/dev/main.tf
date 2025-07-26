@@ -15,8 +15,9 @@ terraform {
   
   backend "s3" {
     bucket = "hibiji-terraform-state"
-    key    = "dev/serverless/terraform.tfstate"
     region = "us-west-1"
+    # Key will be provided via -backend-config at runtime for proper isolation
+    # Format: dev/{sub_environment}/terraform.tfstate
   }
 }
 

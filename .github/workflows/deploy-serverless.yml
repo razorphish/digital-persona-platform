@@ -302,8 +302,9 @@ jobs:
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
           PROJECT_NAME: "dpp"
         run: |
-          echo "🚀 Step 1: Terraform Initialization..."
-          terraform init
+          echo "🚀 Step 1: Terraform Initialization with isolated backend..."
+          # Use dynamic backend key for proper sub-environment isolation
+          terraform init -backend-config="key=$MAIN_ENV/$ENVIRONMENT/terraform.tfstate"
 
           echo "🎯 Step 2: Variables Configuration..."
           echo "Environment: $ENVIRONMENT"
