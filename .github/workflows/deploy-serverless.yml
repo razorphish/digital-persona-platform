@@ -323,7 +323,7 @@ jobs:
           echo "📋 Step 3: Terraform Planning..."
           terraform plan -var-file="environment.auto.tfvars" -out=tfplan
 
-            - name: Import Existing Resources
+      - name: Import Existing Resources
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
           ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
@@ -331,16 +331,16 @@ jobs:
           PROJECT_NAME: "dpp"
         run: |
           echo "📥 Step 3: Checking for existing resources to import..."
-          
+
           # Note: Data sources (like data.aws_route53_zone.main) cannot be imported
           # They automatically query existing resources when terraform runs
           # Only managed resources need importing
-          
+
           echo "ℹ️ Route53 hosted zone is a data source - no import needed"
           echo "ℹ️ New Route53 records will be created for this environment:"
           echo "   • $ENVIRONMENT-api.hibiji.com"
           echo "   • $ENVIRONMENT.hibiji.com"
-          
+
           echo "✅ Resource import check completed"
 
       - name: Apply Terraform Configuration
