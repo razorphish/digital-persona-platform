@@ -385,12 +385,24 @@ jobs:
           if aws rds describe-db-subnet-groups --db-subnet-group-name "$SUBNET_GROUP_NAME" --output text >/dev/null 2>&1; then
             echo "📦 DB Subnet Group exists: $SUBNET_GROUP_NAME"
             
-            # Check if already in Terraform state
-            if terraform state list | grep -q "aws_db_subnet_group.database"; then
+            # Robust check if already in Terraform state
+            echo "🔍 Checking Terraform state for DB Subnet Group..."
+            
+            # Try to show the resource from state - if it exists, this will succeed
+            if terraform state show aws_db_subnet_group.database >/dev/null 2>&1; then
               echo "✅ DB Subnet Group already managed by Terraform, skipping import"
+              # Show current state for debugging
+              echo "📋 Current state:"
+              terraform state show aws_db_subnet_group.database | head -5
             else
-              echo "📥 Importing DB Subnet Group to Terraform state..."
-              terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME" || echo "⚠️ Import failed"
+              echo "📥 DB Subnet Group not in Terraform state, importing..."
+              if terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME"; then
+                echo "✅ Successfully imported DB Subnet Group"
+              else
+                echo "❌ Failed to import DB Subnet Group"
+                echo "🔍 Debug: Checking if resource was already in state..."
+                terraform state show aws_db_subnet_group.database >/dev/null 2>&1 && echo "   Resource now exists in state" || echo "   Resource still not in state"
+              fi
             fi
           else
             echo "✅ DB Subnet Group does not exist, will be created"
@@ -406,12 +418,22 @@ jobs:
           if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
             echo "📦 Origin Access Control exists with ID: $OAC_ID"
             
-            # Check if already in Terraform state
-            if terraform state list | grep -q "module.s3_website.aws_cloudfront_origin_access_control.website"; then
+            # Robust check if already in Terraform state
+            echo "🔍 Checking Terraform state for Origin Access Control..."
+            
+            if terraform state show module.s3_website.aws_cloudfront_origin_access_control.website >/dev/null 2>&1; then
               echo "✅ Origin Access Control already managed by Terraform, skipping import"
+              echo "📋 Current state:"
+              terraform state show module.s3_website.aws_cloudfront_origin_access_control.website | head -5
             else
-              echo "📥 Importing Origin Access Control to Terraform state..."
-              terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$OAC_ID" || echo "⚠️ Import failed"
+              echo "📥 Origin Access Control not in Terraform state, importing..."
+              if terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$OAC_ID"; then
+                echo "✅ Successfully imported Origin Access Control"
+              else
+                echo "❌ Failed to import Origin Access Control"
+                echo "🔍 Debug: Checking if resource was already in state..."
+                terraform state show module.s3_website.aws_cloudfront_origin_access_control.website >/dev/null 2>&1 && echo "   Resource now exists in state" || echo "   Resource still not in state"
+              fi
             fi
           else
             echo "✅ Origin Access Control does not exist, will be created"
@@ -425,12 +447,22 @@ jobs:
           if aws s3api head-bucket --bucket "$WEBSITE_BUCKET" >/dev/null 2>&1; then
             echo "📦 S3 bucket $WEBSITE_BUCKET exists"
             
-            # Check if already in Terraform state
-            if terraform state list | grep -q "module.s3_website.aws_s3_bucket.website"; then
+            # Robust check if already in Terraform state
+            echo "🔍 Checking Terraform state for S3 bucket..."
+            
+            if terraform state show module.s3_website.aws_s3_bucket.website >/dev/null 2>&1; then
               echo "✅ S3 bucket already managed by Terraform, skipping import"
+              echo "📋 Current state:"
+              terraform state show module.s3_website.aws_s3_bucket.website | head -5
             else
-              echo "📥 Importing S3 bucket to Terraform state..."
-              terraform import module.s3_website.aws_s3_bucket.website "$WEBSITE_BUCKET" || echo "⚠️ Import failed"
+              echo "📥 S3 bucket not in Terraform state, importing..."
+              if terraform import module.s3_website.aws_s3_bucket.website "$WEBSITE_BUCKET"; then
+                echo "✅ Successfully imported S3 bucket"
+              else
+                echo "❌ Failed to import S3 bucket"
+                echo "🔍 Debug: Checking if resource was already in state..."
+                terraform state show module.s3_website.aws_s3_bucket.website >/dev/null 2>&1 && echo "   Resource now exists in state" || echo "   Resource still not in state"
+              fi
             fi
           fi
 
