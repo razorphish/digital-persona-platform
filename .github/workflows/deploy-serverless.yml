@@ -383,8 +383,15 @@ jobs:
           echo "🔍 Checking for existing DB Subnet Group: $SUBNET_GROUP_NAME"
 
           if aws rds describe-db-subnet-groups --db-subnet-group-name "$SUBNET_GROUP_NAME" --output text >/dev/null 2>&1; then
-            echo "📦 DB Subnet Group exists, importing to Terraform state..."
-            terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME" || echo "⚠️ Import failed or already in state"
+            echo "📦 DB Subnet Group exists: $SUBNET_GROUP_NAME"
+            
+            # Check if already in Terraform state
+            if terraform state list | grep -q "aws_db_subnet_group.database"; then
+              echo "✅ DB Subnet Group already managed by Terraform, skipping import"
+            else
+              echo "📥 Importing DB Subnet Group to Terraform state..."
+              terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME" || echo "⚠️ Import failed"
+            fi
           else
             echo "✅ DB Subnet Group does not exist, will be created"
           fi
@@ -397,8 +404,15 @@ jobs:
           OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" --output text 2>/dev/null || echo "")
 
           if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
-            echo "📦 Origin Access Control exists with ID: $OAC_ID, importing to Terraform state..."
-            terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$OAC_ID" || echo "⚠️ Import failed or already in state"
+            echo "📦 Origin Access Control exists with ID: $OAC_ID"
+            
+            # Check if already in Terraform state
+            if terraform state list | grep -q "module.s3_website.aws_cloudfront_origin_access_control.website"; then
+              echo "✅ Origin Access Control already managed by Terraform, skipping import"
+            else
+              echo "📥 Importing Origin Access Control to Terraform state..."
+              terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$OAC_ID" || echo "⚠️ Import failed"
+            fi
           else
             echo "✅ Origin Access Control does not exist, will be created"
           fi
@@ -409,8 +423,15 @@ jobs:
           # Check S3 buckets
           WEBSITE_BUCKET="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-website"
           if aws s3api head-bucket --bucket "$WEBSITE_BUCKET" >/dev/null 2>&1; then
-            echo "📦 S3 bucket $WEBSITE_BUCKET exists, importing..."
-            terraform import module.s3_website.aws_s3_bucket.website "$WEBSITE_BUCKET" || echo "⚠️ Import failed or already in state"
+            echo "📦 S3 bucket $WEBSITE_BUCKET exists"
+            
+            # Check if already in Terraform state
+            if terraform state list | grep -q "module.s3_website.aws_s3_bucket.website"; then
+              echo "✅ S3 bucket already managed by Terraform, skipping import"
+            else
+              echo "📥 Importing S3 bucket to Terraform state..."
+              terraform import module.s3_website.aws_s3_bucket.website "$WEBSITE_BUCKET" || echo "⚠️ Import failed"
+            fi
           fi
 
           echo "✅ Resource conflict handling completed"
