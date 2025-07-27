@@ -6,6 +6,7 @@ import { createTRPCReact } from "@trpc/react-query";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthUtils } from "@/lib/auth";
+import { ErrorHandler } from "@/lib/errorHandling";
 import superjson from "superjson";
 
 // Import the actual AppRouter type from the server
@@ -40,46 +41,57 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
             staleTime: 60 * 1000,
             // Global error handling for queries
             onError: (error) => {
-              handleAuthError(error);
+              handleGlobalError(error);
             },
           },
           mutations: {
             // Global error handling for mutations
             onError: (error) => {
-              handleAuthError(error);
+              handleGlobalError(error);
             },
           },
         },
       })
   );
 
-  // Authentication error handler
-  const handleAuthError = (error: unknown) => {
+  // Global error handler with user-friendly messages
+  const handleGlobalError = (error: unknown) => {
     if (typeof window === "undefined") return;
+
+    // Get user-friendly error message
+    const friendlyMessage = ErrorHandler.getUserFriendlyMessage(error);
+
+    // Log technical details for debugging (only in development)
+    if (process.env.NODE_ENV === "development") {
+      console.error("Technical error details:", error);
+    }
+
+    // Log user-friendly message
+    console.error("User-facing error:", friendlyMessage);
 
     // Check if error is a tRPC error with authentication issues
     const isTRPCError = error instanceof TRPCClientError;
-    if (!isTRPCError) return;
+    if (isTRPCError) {
+      const status = error.data?.httpStatus;
+      const isAuthError = status === 401 || status === 403;
 
-    const status = error.data?.httpStatus;
-    const isAuthError = status === 401 || status === 403;
+      // Don't handle auth errors if we're already on auth pages
+      // This prevents redirects during login/register attempts with invalid credentials
+      const isOnAuthPage = window.location.pathname.startsWith("/auth/");
+      if (isOnAuthPage) {
+        return;
+      }
 
-    // Don't handle auth errors if we're already on auth pages
-    // This prevents redirects during login/register attempts with invalid credentials
-    const isOnAuthPage = window.location.pathname.startsWith("/auth/");
-    if (isOnAuthPage) {
-      return;
-    }
+      // Handle authentication/authorization errors for authenticated sessions only
+      if (isAuthError) {
+        console.warn("Session expired or invalid. Redirecting to login.");
 
-    // Handle authentication/authorization errors for authenticated sessions only
-    if (isAuthError) {
-      console.warn("Authentication session error detected:", error.message);
+        // Clear corrupted/invalid tokens
+        AuthUtils.clearTokens();
 
-      // Clear corrupted/invalid tokens
-      AuthUtils.clearTokens();
-
-      // Redirect to login page
-      window.location.href = "/auth/login";
+        // Redirect to login page
+        window.location.href = "/auth/login";
+      }
     }
   };
 

@@ -11,6 +11,7 @@ import React, {
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { AuthUtils, User } from "@/lib/auth";
+import { ErrorHandler } from "@/lib/errorHandling";
 
 interface AuthContextType {
   user: User | null;
@@ -146,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // This prevents race conditions between login redirect and middleware redirect
     } catch (err: any) {
       console.error("Login failed:", err);
-      const errorMessage = err?.message || "Login failed. Please try again.";
+      const errorMessage = ErrorHandler.getAuthErrorMessage(err);
       setError(errorMessage);
 
       // Clear any potentially corrupted tokens
@@ -181,8 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Don't redirect here - let AuthMiddleware handle all auth-based redirects
       // This prevents race conditions between register redirect and middleware redirect
     } catch (err: any) {
-      const errorMessage =
-        err?.message || "Registration failed. Please try again.";
+      console.error("Registration failed:", err);
+      const errorMessage = ErrorHandler.getAuthErrorMessage(err);
       setError(errorMessage);
 
       // Clear any potentially corrupted tokens
