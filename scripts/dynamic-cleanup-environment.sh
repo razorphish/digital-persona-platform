@@ -122,7 +122,32 @@ for func in $LAMBDA_FUNCTIONS; do
   fi
 done
 
-# 4. RDS Clusters
+# 4. RDS Resources (instances first, then clusters)
+print_status "🧹 Cleaning up RDS resources..."
+
+# 4.1 First delete RDS instances
+print_status "🧹 Cleaning up RDS instances..."
+RDS_INSTANCES=$(aws rds describe-db-instances \
+  --query "DBInstances[?starts_with(DBInstanceIdentifier, '${MAIN_ENV}-${TARGET_ENV}-${PROJECT_NAME}')].DBInstanceIdentifier" \
+  --output text)
+
+for instance in $RDS_INSTANCES; do
+  if [ -n "$instance" ] && [ "$instance" != "None" ]; then
+    print_status "🗑️ Deleting RDS instance: $instance"
+    aws rds delete-db-instance \
+      --db-instance-identifier "$instance" \
+      --skip-final-snapshot \
+      --delete-automated-backups || echo "⚠️ Failed to delete RDS instance: $instance"
+  fi
+done
+
+# Wait for instances to be deleted before proceeding to clusters
+if [ -n "$RDS_INSTANCES" ] && [ "$RDS_INSTANCES" != "None" ]; then
+  print_status "⏳ Waiting for RDS instances to be deleted (this may take a few minutes)..."
+  sleep 60
+fi
+
+# 4.2 Then delete RDS clusters
 print_status "🧹 Cleaning up RDS clusters..."
 RDS_CLUSTERS=$(aws rds describe-db-clusters \
   --query "DBClusters[?starts_with(DBClusterIdentifier, '${MAIN_ENV}-${TARGET_ENV}-${PROJECT_NAME}')].DBClusterIdentifier" \
@@ -137,6 +162,12 @@ for cluster in $RDS_CLUSTERS; do
       --delete-automated-backups || echo "⚠️ Failed to delete: $cluster"
   fi
 done
+
+# Wait for RDS resources to be fully deleted before VPC cleanup
+if [ -n "$RDS_CLUSTERS" ] && [ "$RDS_CLUSTERS" != "None" ]; then
+  print_status "⏳ Waiting for RDS clusters to be deleted (this may take a few minutes)..."
+  sleep 120  # RDS clusters can take longer to delete
+fi
 
 # 5. S3 Buckets (Empty first, then delete)
 print_status "🧹 Cleaning up S3 buckets..."
@@ -276,7 +307,7 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
     fi
   done
 
-  # 7.6 Clean up Security Groups (except default)
+  # 7.6 Clean up Security Groups (except default) with retry
   print_status "🧹 Cleaning up Security Groups..."
   SECURITY_GROUPS=$(aws ec2 describe-security-groups \
     --filters "Name=vpc-id,Values=$VPC_ID" \
@@ -285,7 +316,21 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
   for sg_id in $SECURITY_GROUPS; do
     if [ -n "$sg_id" ] && [ "$sg_id" != "None" ]; then
       print_status "🗑️ Deleting security group: $sg_id"
-      aws ec2 delete-security-group --group-id "$sg_id" || echo "⚠️ Failed to delete security group: $sg_id (may have dependencies)"
+      
+      # Try up to 3 times with delays (dependencies may be clearing)
+      for attempt in 1 2 3; do
+        if aws ec2 delete-security-group --group-id "$sg_id" 2>/dev/null; then
+          print_success "✅ Deleted security group: $sg_id"
+          break
+        else
+          if [ $attempt -lt 3 ]; then
+            print_warning "⚠️ Attempt $attempt failed for security group $sg_id, retrying in 30s..."
+            sleep 30
+          else
+            print_warning "⚠️ Failed to delete security group: $sg_id after 3 attempts (may have dependencies)"
+          fi
+        fi
+      done
     fi
   done
 
@@ -302,7 +347,7 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
     fi
   done
 
-  # 7.8 Clean up Subnets
+  # 7.8 Clean up Subnets with retry
   print_status "🧹 Cleaning up Subnets..."
   SUBNETS=$(aws ec2 describe-subnets \
     --filters "Name=vpc-id,Values=$VPC_ID" \
@@ -311,7 +356,21 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
   for subnet_id in $SUBNETS; do
     if [ -n "$subnet_id" ] && [ "$subnet_id" != "None" ]; then
       print_status "🗑️ Deleting subnet: $subnet_id"
-      aws ec2 delete-subnet --subnet-id "$subnet_id" || echo "⚠️ Failed to delete subnet: $subnet_id"
+      
+      # Try up to 3 times with delays (dependencies may be clearing)
+      for attempt in 1 2 3; do
+        if aws ec2 delete-subnet --subnet-id "$subnet_id" 2>/dev/null; then
+          print_success "✅ Deleted subnet: $subnet_id"
+          break
+        else
+          if [ $attempt -lt 3 ]; then
+            print_warning "⚠️ Attempt $attempt failed for subnet $subnet_id, retrying in 30s..."
+            sleep 30
+          else
+            print_warning "⚠️ Failed to delete subnet: $subnet_id after 3 attempts (may have dependencies)"
+          fi
+        fi
+      done
     fi
   done
 
@@ -329,13 +388,27 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
     aws ec2 delete-internet-gateway --internet-gateway-id "$IGW_ID" || echo "⚠️ Failed to delete IGW: $IGW_ID"
   fi
 
-  # 7.10 Finally, delete the VPC itself
+  # 7.10 Finally, delete the VPC itself with retry
   print_status "🗑️ Deleting VPC: $VPC_ID"
-  aws ec2 delete-vpc --vpc-id "$VPC_ID" || echo "⚠️ Failed to delete VPC: $VPC_ID"
   
-  if [ $? -eq 0 ]; then
-    print_success "✅ VPC $VPC_ID deleted successfully!"
-  else
+  # Try up to 3 times with delays (all dependencies should be clearing)
+  VPC_DELETED=false
+  for attempt in 1 2 3; do
+    if aws ec2 delete-vpc --vpc-id "$VPC_ID" 2>/dev/null; then
+      print_success "✅ VPC $VPC_ID deleted successfully!"
+      VPC_DELETED=true
+      break
+    else
+      if [ $attempt -lt 3 ]; then
+        print_warning "⚠️ Attempt $attempt failed for VPC $VPC_ID, retrying in 60s..."
+        sleep 60
+      else
+        print_warning "⚠️ Failed to delete VPC: $VPC_ID after 3 attempts"
+      fi
+    fi
+  done
+  
+  if [ "$VPC_DELETED" = "false" ]; then
     print_warning "⚠️ VPC deletion failed - may still have dependencies"
     print_status "🔍 Checking for remaining dependencies..."
     
@@ -388,15 +461,20 @@ for role in $IAM_ROLES; do
       fi
     done
     
-    # Delete instance profiles
+    # Delete instance profiles (with permission error handling)
     INSTANCE_PROFILES=$(aws iam list-instance-profiles-for-role --role-name "$role" \
-      --query "InstanceProfiles[].InstanceProfileName" --output text)
-    for profile_name in $INSTANCE_PROFILES; do
-      if [ -n "$profile_name" ] && [ "$profile_name" != "None" ]; then
-        aws iam remove-role-from-instance-profile --instance-profile-name "$profile_name" --role-name "$role" || echo "⚠️ Failed to remove role from instance profile"
-        aws iam delete-instance-profile --instance-profile-name "$profile_name" || echo "⚠️ Failed to delete instance profile: $profile_name"
-      fi
-    done
+      --query "InstanceProfiles[].InstanceProfileName" --output text 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+      for profile_name in $INSTANCE_PROFILES; do
+        if [ -n "$profile_name" ] && [ "$profile_name" != "None" ]; then
+          aws iam remove-role-from-instance-profile --instance-profile-name "$profile_name" --role-name "$role" || echo "⚠️ Failed to remove role from instance profile"
+          aws iam delete-instance-profile --instance-profile-name "$profile_name" || echo "⚠️ Failed to delete instance profile: $profile_name"
+        fi
+      done
+    else
+      print_warning "⚠️ Insufficient permissions to list instance profiles for role: $role (skipping)"
+    fi
     
     # Delete the role
     aws iam delete-role --role-name "$role" || echo "⚠️ Failed to delete IAM role: $role"
