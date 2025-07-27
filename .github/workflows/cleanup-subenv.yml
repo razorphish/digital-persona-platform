@@ -87,13 +87,13 @@ jobs:
 
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "🔍 DRY RUN: Showing what would be destroyed..."
-            timeout 600 terraform plan -destroy -var-file="environment.auto.tfvars"
+            timeout 900 terraform plan -destroy -var-file="environment.auto.tfvars"
           else
             echo "🚨 DESTROYING infrastructure..."
             
             if [ "${{ github.event.inputs.force_cleanup }}" = "true" ]; then
-              echo "⏰ Running terraform destroy with 15-minute timeout..."
-              timeout 900 terraform destroy -auto-approve -var-file="environment.auto.tfvars" -lock-timeout=300s
+              echo "⏰ Running terraform destroy with 30-minute timeout..."
+              timeout 1800 terraform destroy -auto-approve -var-file="environment.auto.tfvars" -lock-timeout=600s
             else
               echo "❌ Manual approval required. Set force_cleanup=true to proceed."
               exit 1
