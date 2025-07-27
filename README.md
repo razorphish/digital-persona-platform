@@ -459,6 +459,49 @@ docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
 - [ ] Mobile app development
 - [ ] Advanced AI learning capabilities
 
+## 🚀 Production Readiness TODOs
+
+### 🔐 SSL Certificate Management
+
+**Current Status**: Using AWS default certificates (working but unprofessional URLs)  
+**Production Need**: Custom domain SSL certificates for professional deployment
+
+**📋 Implementation Plan:**
+
+- [ ] **Wildcard SSL Certificates** (Recommended AWS Best Practice)
+  - `*.hibiji.com` → All environment websites (qa10.hibiji.com, dev01.hibiji.com)
+  - `*-api.hibiji.com` → All API endpoints (qa10-api.hibiji.com, dev01-api.hibiji.com)
+  - `hibiji.com` → Production apex domain
+
+**💰 Benefits:**
+
+- **78% cost savings** vs individual certificates ($328/year vs $1,500/year)
+- **Professional URLs** with valid SSL (no certificate warnings)
+- **SEO improvement** with custom domain structure
+- **Automatic coverage** for new environments
+- **Future-proof** infrastructure
+
+**🔧 Technical Details:**
+
+```terraform
+# Wildcard certificates for production
+resource "aws_acm_certificate" "wildcard_website" {
+  domain_name               = "*.hibiji.com"
+  subject_alternative_names = ["hibiji.com"]
+  validation_method         = "DNS"
+}
+
+resource "aws_acm_certificate" "wildcard_api" {
+  domain_name       = "*-api.hibiji.com"
+  validation_method = "DNS"
+}
+```
+
+**📈 Priority**: High for production launch  
+**📚 Reference**: [AWS ACM Best Practices](https://docs.aws.amazon.com/acm/latest/userguide/best-practices.html)
+
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
