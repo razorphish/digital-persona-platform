@@ -107,6 +107,9 @@ jobs:
         run: |
           echo "🧹 Using dynamic cleanup script for ${{ env.ENVIRONMENT }}..."
 
+          # Install jq for JSON processing (needed for Route53 record cleanup)
+          sudo apt-get update && sudo apt-get install -y jq
+
           # Make the script executable
           chmod +x scripts/dynamic-cleanup-environment.sh
 
