@@ -56,8 +56,36 @@ function LearningPageContent() {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
   // tRPC queries
-  const { data: personas } = trpc.personas.list.useQuery();
-  const { data: mainPersona } = trpc.personas.getMain.useQuery();
+  const {
+    data: personas,
+    isLoading: personasLoading,
+    error: personasError,
+  } = trpc.personas.list.useQuery();
+  const {
+    data: mainPersona,
+    isLoading: mainPersonaLoading,
+    error: mainPersonaError,
+  } = trpc.personas.getMain.useQuery();
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log("Personas loading:", personasLoading, "Error:", personasError);
+    console.log("Personas data:", personas);
+    console.log(
+      "Main persona loading:",
+      mainPersonaLoading,
+      "Error:",
+      mainPersonaError
+    );
+    console.log("Main persona data:", mainPersona);
+  }, [
+    personas,
+    personasLoading,
+    personasError,
+    mainPersona,
+    mainPersonaLoading,
+    mainPersonaError,
+  ]);
 
   // tRPC mutations
   const startInterviewMutation = trpc.learning.startInterview.useMutation();
@@ -72,15 +100,45 @@ function LearningPageContent() {
   }, [mainPersona, selectedPersonaId]);
 
   const handleStartInterview = async () => {
-    if (!selectedPersonaId) return;
+    if (!selectedPersonaId) {
+      console.log("No persona selected");
+      return;
+    }
+
+    console.log(
+      "Starting interview for persona:",
+      selectedPersonaId,
+      "Type:",
+      selectedSessionType
+    );
 
     try {
-      await startInterviewMutation.mutateAsync({
+      const interview = await startInterviewMutation.mutateAsync({
         personaId: selectedPersonaId,
         sessionType: selectedSessionType,
       });
+
+      console.log("Interview started:", interview);
+
+      // Set the current interview to start the session
+      setCurrentInterview({
+        id: interview.id,
+        personaId: selectedPersonaId,
+        sessionType: selectedSessionType,
+        status: interview.status,
+        questions: interview.questions,
+        progress: {
+          currentQuestionIndex: 0,
+          totalQuestions: interview.questions.length,
+          completedQuestions: 0,
+        },
+      });
+
+      // Clear any previous response
+      setCurrentResponse("");
     } catch (error) {
       console.error("Failed to start interview:", error);
+      alert("Failed to start learning session. Please try again.");
     }
   };
 
@@ -93,13 +151,46 @@ function LearningPageContent() {
       ];
 
     try {
-      await answerQuestionMutation.mutateAsync({
+      const updatedInterview = await answerQuestionMutation.mutateAsync({
         interviewId: currentInterview.id,
         questionId: currentQuestion.id,
         response: skipQuestion ? undefined : currentResponse,
         mediaFiles: uploadedFiles,
         skipQuestion,
       });
+
+      // Update the interview progress
+      const nextQuestionIndex =
+        currentInterview.progress.currentQuestionIndex + 1;
+      const isCompleted =
+        nextQuestionIndex >= currentInterview.questions.length;
+
+      if (isCompleted) {
+        // Interview completed - update status but keep interview to show completion screen
+        setCurrentInterview({
+          ...currentInterview,
+          status: "completed",
+          progress: {
+            currentQuestionIndex: currentInterview.questions.length,
+            totalQuestions: currentInterview.questions.length,
+            completedQuestions: currentInterview.questions.length,
+          },
+        });
+      } else {
+        // Move to next question
+        setCurrentInterview({
+          ...currentInterview,
+          progress: {
+            currentQuestionIndex: nextQuestionIndex,
+            totalQuestions: currentInterview.questions.length,
+            completedQuestions: nextQuestionIndex,
+          },
+        });
+      }
+
+      // Clear response for next question
+      setCurrentResponse("");
+      setUploadedFiles([]);
     } catch (error) {
       console.error("Failed to answer question:", error);
     }
@@ -108,11 +199,15 @@ function LearningPageContent() {
   const getCurrentQuestion = (): InterviewQuestion | null => {
     if (!currentInterview || currentInterview.questions.length === 0)
       return null;
-    return (
-      currentInterview.questions[
-        currentInterview.progress.currentQuestionIndex
-      ] || null
-    );
+
+    const questionIndex = currentInterview.progress?.currentQuestionIndex ?? 0;
+
+    // If we've reached the end of questions, return null (completed)
+    if (questionIndex >= currentInterview.questions.length) {
+      return null;
+    }
+
+    return currentInterview.questions[questionIndex] || null;
   };
 
   const getSessionTypeInfo = (type: string) => {
@@ -153,9 +248,10 @@ function LearningPageContent() {
 
   const currentQuestion = getCurrentQuestion();
   const progress = currentInterview?.progress;
-  const progressPercentage = progress
-    ? (progress.completedQuestions / progress.totalQuestions) * 100
-    : 0;
+  const progressPercentage =
+    progress && progress.totalQuestions > 0
+      ? (progress.completedQuestions / progress.totalQuestions) * 100
+      : 0;
 
   if (currentInterview) {
     return (
@@ -640,16 +736,27 @@ function LearningPageContent() {
           <div className="text-center">
             <button
               onClick={handleStartInterview}
-              disabled={!selectedPersonaId || startInterviewMutation.isLoading}
+              disabled={
+                !selectedPersonaId ||
+                startInterviewMutation.isLoading ||
+                personasLoading
+              }
               className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-lg font-semibold rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {startInterviewMutation.isLoading
                 ? "Starting Session..."
+                : personasLoading
+                ? "Loading Personas..."
                 : "Begin Learning Session"}
             </button>
             <p className="text-sm text-gray-600 mt-3">
               Sessions are adaptive and can be paused at any time
             </p>
+            {personasError && (
+              <p className="text-sm text-red-600 mt-2">
+                Error loading personas: {personasError.message}
+              </p>
+            )}
           </div>
         </div>
       </main>
