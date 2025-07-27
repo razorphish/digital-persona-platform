@@ -244,9 +244,23 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
   
   # 7.1 Clean up DB Subnet Groups first (they reference subnets)
   print_status "🧹 Cleaning up DB Subnet Groups..."
-  DB_SUBNET_GROUPS=$(aws rds describe-db-subnet-groups \
+  
+  # Handle both naming patterns for comprehensive cleanup:
+  # Current pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
+  # Legacy pattern: target_env-target_env-project (e.g., dev01-dev01-dpp)
+  
+  print_status "🔍 Searching for DB subnet groups with current pattern: ${MAIN_ENV}-${TARGET_ENV}-*"
+  DB_SUBNET_GROUPS_CURRENT=$(aws rds describe-db-subnet-groups \
     --query "DBSubnetGroups[?starts_with(DBSubnetGroupName, '${MAIN_ENV}-${TARGET_ENV}')].DBSubnetGroupName" \
     --output text)
+  
+  print_status "🔍 Searching for DB subnet groups with legacy pattern: ${TARGET_ENV}-${TARGET_ENV}-*"
+  DB_SUBNET_GROUPS_LEGACY=$(aws rds describe-db-subnet-groups \
+    --query "DBSubnetGroups[?starts_with(DBSubnetGroupName, '${TARGET_ENV}-${TARGET_ENV}')].DBSubnetGroupName" \
+    --output text)
+  
+  # Combine both patterns
+  DB_SUBNET_GROUPS="$DB_SUBNET_GROUPS_CURRENT $DB_SUBNET_GROUPS_LEGACY"
 
   for subnet_group in $DB_SUBNET_GROUPS; do
     if [ -n "$subnet_group" ] && [ "$subnet_group" != "None" ]; then
@@ -257,9 +271,23 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
 
   # 7.2 Clean up RDS Proxy endpoints
   print_status "🧹 Cleaning up RDS Proxy endpoints..."
-  RDS_PROXIES=$(aws rds describe-db-proxies \
+  
+  # Handle both naming patterns for RDS Proxies:
+  # Current pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
+  # Legacy pattern: target_env-target_env-project (e.g., dev01-dev01-dpp)
+  
+  print_status "🔍 Searching for RDS proxies with current pattern: ${MAIN_ENV}-${TARGET_ENV}-*"
+  RDS_PROXIES_CURRENT=$(aws rds describe-db-proxies \
     --query "DBProxies[?starts_with(DBProxyName, '${MAIN_ENV}-${TARGET_ENV}')].DBProxyName" \
     --output text)
+  
+  print_status "🔍 Searching for RDS proxies with legacy pattern: ${TARGET_ENV}-${TARGET_ENV}-*"
+  RDS_PROXIES_LEGACY=$(aws rds describe-db-proxies \
+    --query "DBProxies[?starts_with(DBProxyName, '${TARGET_ENV}-${TARGET_ENV}')].DBProxyName" \
+    --output text)
+  
+  # Combine both patterns
+  RDS_PROXIES="$RDS_PROXIES_CURRENT $RDS_PROXIES_LEGACY"
 
   for proxy in $RDS_PROXIES; do
     if [ -n "$proxy" ] && [ "$proxy" != "None" ]; then
