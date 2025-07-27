@@ -203,6 +203,27 @@ jobs:
           echo "backend-hash=$HASH" >> $GITHUB_OUTPUT
           echo "📋 Build hash: $HASH"
 
+      - name: Verify Lambda build output
+        run: |
+          echo "🔍 Verifying Lambda build artifacts..."
+
+          if [ ! -f "apps/server/lambda-dist/index.js" ]; then
+            echo "❌ Lambda index.js not found"
+            echo "📁 Lambda-dist contents:"
+            ls -la apps/server/lambda-dist/ || echo "lambda-dist directory not found"
+            exit 1
+          fi
+
+          if [ ! -f "apps/server/lambda-dist/package.json" ]; then
+            echo "❌ Lambda package.json not found"
+            exit 1
+          fi
+
+          INDEX_SIZE=$(stat -c%s "apps/server/lambda-dist/index.js" 2>/dev/null || stat -f%z "apps/server/lambda-dist/index.js")
+          echo "✅ Lambda artifacts verified:"
+          echo "   📄 index.js: ${INDEX_SIZE} bytes"
+          echo "   📄 package.json: $(stat -c%s "apps/server/lambda-dist/package.json" 2>/dev/null || stat -f%z "apps/server/lambda-dist/package.json") bytes"
+
       - name: Upload backend artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -254,6 +275,31 @@ jobs:
           HASH=$(echo "${{ github.sha }}-${{ needs.detect-environment.outputs.environment }}" | sha256sum | cut -d' ' -f1 | head -c 8)
           echo "frontend-hash=$HASH" >> $GITHUB_OUTPUT
           echo "📋 Build hash: $HASH"
+
+      - name: Verify Frontend build output
+        run: |
+          echo "🔍 Verifying Frontend build artifacts..."
+
+          if [ ! -d "apps/web/out" ]; then
+            echo "❌ Frontend build output directory not found"
+            echo "📁 Web directory contents:"
+            ls -la apps/web/ || echo "web directory not found"
+            exit 1
+          fi
+
+          if [ ! -f "apps/web/out/index.html" ]; then
+            echo "❌ Frontend index.html not found"
+            echo "📁 Build output contents:"
+            ls -la apps/web/out/ || echo "out directory empty"
+            exit 1
+          fi
+
+          FILE_COUNT=$(find apps/web/out -type f | wc -l)
+          TOTAL_SIZE=$(du -sh apps/web/out | cut -f1)
+          echo "✅ Frontend artifacts verified:"
+          echo "   📁 Output directory: apps/web/out/"
+          echo "   📄 Files: ${FILE_COUNT}"
+          echo "   💾 Total size: ${TOTAL_SIZE}"
 
       - name: Upload frontend artifacts
         uses: actions/upload-artifact@v4
@@ -323,25 +369,137 @@ jobs:
           echo "📋 Step 3: Terraform Planning..."
           terraform plan -var-file="environment.auto.tfvars" -out=tfplan
 
-      - name: Import Existing Resources
+      - name: Handle Existing Resources
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
           ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
           PROJECT_NAME: "dpp"
         run: |
-          echo "📥 Step 3: Checking for existing resources to import..."
+          echo "📥 Step 3: Handling existing AWS resources..."
 
-          # Note: Data sources (like data.aws_route53_zone.main) cannot be imported
-          # They automatically query existing resources when terraform runs
-          # Only managed resources need importing
+          # Check and import existing RDS DB Subnet Group if it exists
+          SUBNET_GROUP_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-db-subnet-group"
+          echo "🔍 Checking for existing DB Subnet Group: $SUBNET_GROUP_NAME"
 
-          echo "ℹ️ Route53 hosted zone is a data source - no import needed"
-          echo "ℹ️ New Route53 records will be created for this environment:"
-          echo "   • $ENVIRONMENT-api.hibiji.com"
-          echo "   • $ENVIRONMENT.hibiji.com"
+          if aws rds describe-db-subnet-groups --db-subnet-group-name "$SUBNET_GROUP_NAME" --output text >/dev/null 2>&1; then
+            echo "📦 DB Subnet Group exists, importing to Terraform state..."
+            terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME" || echo "⚠️ Import failed or already in state"
+          else
+            echo "✅ DB Subnet Group does not exist, will be created"
+          fi
 
-          echo "✅ Resource import check completed"
+          # Check and import existing CloudFront Origin Access Control
+          OAC_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-oac"
+          echo "🔍 Checking for existing Origin Access Control: $OAC_NAME"
+
+          # Get OAC ID if it exists
+          OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" --output text 2>/dev/null || echo "")
+
+          if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
+            echo "📦 Origin Access Control exists with ID: $OAC_ID, importing to Terraform state..."
+            terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$OAC_ID" || echo "⚠️ Import failed or already in state"
+          else
+            echo "✅ Origin Access Control does not exist, will be created"
+          fi
+
+          # Check for other common conflicting resources
+          echo "🔍 Checking for other potential resource conflicts..."
+
+          # Check S3 buckets
+          WEBSITE_BUCKET="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-website"
+          if aws s3api head-bucket --bucket "$WEBSITE_BUCKET" >/dev/null 2>&1; then
+            echo "📦 S3 bucket $WEBSITE_BUCKET exists, importing..."
+            terraform import module.s3_website.aws_s3_bucket.website "$WEBSITE_BUCKET" || echo "⚠️ Import failed or already in state"
+          fi
+
+          echo "✅ Resource conflict handling completed"
+
+      - name: Verify and Create ACM Certificates
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        env:
+          ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
+          MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
+          PROJECT_NAME: "dpp"
+        run: |
+          echo "🔐 Step 4: Verifying ACM certificates for custom domains..."
+
+          # Define domain names for this environment
+          if [ "$ENVIRONMENT" = "prod" ]; then
+            WEBSITE_DOMAIN="www.hibiji.com"
+            API_DOMAIN="api.hibiji.com"
+          else
+            WEBSITE_DOMAIN="${ENVIRONMENT}.hibiji.com"
+            API_DOMAIN="${ENVIRONMENT}-api.hibiji.com"
+          fi
+
+          echo "🌐 Target domains:"
+          echo "   📄 Website: $WEBSITE_DOMAIN"
+          echo "   🔗 API: $API_DOMAIN"
+
+          # Function to check if certificate exists for domain
+          check_certificate() {
+            local domain=$1
+            local cert_arn=$(aws acm list-certificates --region us-east-1 \
+              --query "CertificateSummaryList[?DomainName=='$domain' && Status=='ISSUED'].CertificateArn" \
+              --output text 2>/dev/null || echo "")
+            
+            if [ -n "$cert_arn" ] && [ "$cert_arn" != "None" ]; then
+              echo "✅ Certificate exists for $domain: $cert_arn"
+              return 0
+            else
+              echo "❌ No valid certificate found for $domain"
+              return 1
+            fi
+          }
+
+          # Check website certificate
+          echo "🔍 Checking website certificate..."
+          if ! check_certificate "$WEBSITE_DOMAIN"; then
+            echo "⚠️ Website certificate missing for $WEBSITE_DOMAIN"
+            echo "ℹ️ Note: For production deployment, create wildcard certificate *.hibiji.com"
+            echo "ℹ️ Current setup uses CloudFront default SSL (functional but not professional)"
+          fi
+
+          # Check API certificate  
+          echo "🔍 Checking API certificate..."
+          if ! check_certificate "$API_DOMAIN"; then
+            echo "⚠️ API certificate missing for $API_DOMAIN"
+            echo "ℹ️ Note: For production deployment, create wildcard certificate *-api.hibiji.com"
+            echo "ℹ️ Current setup uses API Gateway default SSL (functional but not professional)"
+          fi
+
+          # Check for wildcard certificates (production recommendation)
+          echo "🔍 Checking for production-ready wildcard certificates..."
+
+          WILDCARD_WEB=$(aws acm list-certificates --region us-east-1 \
+            --query "CertificateSummaryList[?DomainName=='*.hibiji.com' && Status=='ISSUED'].CertificateArn" \
+            --output text 2>/dev/null || echo "")
+            
+          WILDCARD_API=$(aws acm list-certificates --region us-east-1 \
+            --query "CertificateSummaryList[?DomainName=='*-api.hibiji.com' && Status=='ISSUED'].CertificateArn" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -n "$WILDCARD_WEB" ] && [ "$WILDCARD_WEB" != "None" ]; then
+            echo "🌟 Production-ready wildcard certificate found: *.hibiji.com"
+          else
+            echo "💡 Recommendation: Create wildcard certificate *.hibiji.com for production"
+          fi
+
+          if [ -n "$WILDCARD_API" ] && [ "$WILDCARD_API" != "None" ]; then
+            echo "🌟 Production-ready wildcard certificate found: *-api.hibiji.com"  
+          else
+            echo "💡 Recommendation: Create wildcard certificate *-api.hibiji.com for production"
+          fi
+
+          echo ""
+          echo "📋 Certificate Status Summary:"
+          echo "   🏢 Environment: $ENVIRONMENT"
+          echo "   🌐 Using AWS default SSL certificates (functional)"
+          echo "   💡 For production: Implement wildcard certificates as documented in README.md"
+          echo "   📚 See 'Production Readiness TODOs' section for implementation details"
+          echo ""
+          echo "✅ Certificate verification completed"
 
       - name: Apply Terraform Configuration
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}

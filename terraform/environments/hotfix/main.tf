@@ -5,14 +5,14 @@
 
 terraform {
   required_version = ">= 1.0"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
   }
-  
+
   backend "s3" {
     bucket = "hibiji-terraform-state"
     region = "us-west-1"
@@ -82,7 +82,7 @@ variable "alert_emails" {
 # Local values
 locals {
   resource_prefix = "${var.environment}-${var.sub_environment}-${var.project_name}"
-  
+
   common_tags = {
     Environment    = var.environment
     SubEnvironment = var.sub_environment
@@ -91,7 +91,7 @@ locals {
     Architecture   = "Serverless"
     CreatedAt      = timestamp()
   }
-  
+
   # Domain configuration
   api_domain     = "${var.sub_environment}-api.${var.domain_name}"
   website_domain = "${var.sub_environment}.${var.domain_name}"
@@ -172,6 +172,11 @@ resource "aws_db_subnet_group" "database" {
     Name = "${local.resource_prefix}-db-subnet-group"
     Type = "DatabaseSubnetGroup"
   })
+
+  lifecycle {
+    # Prevent recreation if subnet group already exists
+    ignore_changes = [name]
+  }
 }
 
 # Database security group
@@ -208,25 +213,25 @@ resource "aws_security_group" "database" {
 
 # Aurora Serverless v2 cluster
 resource "aws_rds_cluster" "database" {
-  cluster_identifier     = "${local.resource_prefix}-cluster"
-  engine                = "aurora-postgresql"
-  engine_mode           = "provisioned"
-  engine_version        = "15.10"
-  database_name         = "digital_persona"
-  master_username       = "dpp_admin"
-  master_password       = random_password.database_password.result
-  backup_retention_period = 7
-  preferred_backup_window = "07:00-09:00"
+  cluster_identifier           = "${local.resource_prefix}-cluster"
+  engine                       = "aurora-postgresql"
+  engine_mode                  = "provisioned"
+  engine_version               = "15.10"
+  database_name                = "digital_persona"
+  master_username              = "dpp_admin"
+  master_password              = random_password.database_password.result
+  backup_retention_period      = 7
+  preferred_backup_window      = "07:00-09:00"
   preferred_maintenance_window = "sun:09:00-sun:10:00"
-  
+
   db_subnet_group_name   = aws_db_subnet_group.database.name
   vpc_security_group_ids = [aws_security_group.database.id]
-  
+
   serverlessv2_scaling_configuration {
     max_capacity = 1
     min_capacity = 0.5
   }
-  
+
   skip_final_snapshot = var.environment != "prod"
   deletion_protection = var.environment == "prod"
 
@@ -259,8 +264,8 @@ resource "aws_s3_bucket" "uploads" {
   bucket = "${local.resource_prefix}-uploads"
 
   tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-uploads"
-    Type = "S3Bucket"
+    Name    = "${local.resource_prefix}-uploads"
+    Type    = "S3Bucket"
     Purpose = "FileUploads"
   })
 }
@@ -354,10 +359,10 @@ module "rds_proxy" {
   common_tags     = local.common_tags
 
   # Network configuration
-  vpc_id                        = aws_vpc.main.id
-  subnet_ids                    = aws_subnet.private[*].id
-  lambda_security_group_ids     = [aws_security_group.lambda.id]
-  database_security_group_ids   = [aws_security_group.database.id]
+  vpc_id                      = aws_vpc.main.id
+  subnet_ids                  = aws_subnet.private[*].id
+  lambda_security_group_ids   = [aws_security_group.lambda.id]
+  database_security_group_ids = [aws_security_group.database.id]
 
   # Database configuration
   database_cluster_identifier = aws_rds_cluster.database.cluster_identifier
@@ -365,11 +370,11 @@ module "rds_proxy" {
 
   # RDS Proxy settings optimized for serverless
   idle_client_timeout          = 1800  # 30 minutes
-  max_connections_percent      = 75     # Reserve 25% for direct connections
-  max_idle_connections_percent = 50     # Keep idle connections reasonable
-  connection_borrow_timeout    = 120    # 2 minutes
-  require_tls                  = false  # Can be enabled for production
-  log_retention_days          = 14
+  max_connections_percent      = 75    # Reserve 25% for direct connections
+  max_idle_connections_percent = 50    # Keep idle connections reasonable
+  connection_borrow_timeout    = 120   # 2 minutes
+  require_tls                  = false # Can be enabled for production
+  log_retention_days           = 14
 }
 
 # Lambda Backend
@@ -393,7 +398,7 @@ module "lambda_backend" {
   ml_sqs_queue_arn = module.aws_batch_ml.sqs_queue_arn
 
   # AWS resources
-  database_secret_arn     = aws_secretsmanager_secret.database_password.arn
+  database_secret_arn    = aws_secretsmanager_secret.database_password.arn
   jwt_secret_arn         = aws_secretsmanager_secret.jwt_secret.arn
   s3_uploads_bucket_arn  = aws_s3_bucket.uploads.arn
   s3_uploads_bucket_name = aws_s3_bucket.uploads.bucket
@@ -447,9 +452,9 @@ module "api_gateway" {
   # CORS configuration
   cors_allow_origins = [
     "https://${module.s3_website.cloudfront_domain_name}",
-    "https://${local.website_domain}",  # Custom domain
-    "http://localhost:3000",  # Development
-    "http://localhost:3100"   # Docker development
+    "https://${local.website_domain}", # Custom domain
+    "http://localhost:3000",           # Development
+    "http://localhost:3100"            # Docker development
   ]
 
   stage_name         = "v1"
@@ -463,11 +468,11 @@ module "api_gateway" {
 # DNS Records for this sub-environment
 resource "aws_route53_record" "website" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.website_domain  # qa03.hibiji.com
+  name    = local.website_domain # qa03.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [module.s3_website.cloudfront_domain_name]
-  
+
   lifecycle {
     ignore_changes = [records]
   }
@@ -475,11 +480,11 @@ resource "aws_route53_record" "website" {
 
 resource "aws_route53_record" "api" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.api_domain  # qa03-api.hibiji.com
+  name    = local.api_domain # qa03-api.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
-  
+
   lifecycle {
     ignore_changes = [records]
   }
@@ -543,12 +548,12 @@ module "aws_batch_ml" {
   database_secret_arn = aws_secretsmanager_secret.database_password.arn
 
   # Batch compute configuration (minimal for Hotfix)
-  min_vcpus             = 0
-  max_vcpus             = 3
-  desired_vcpus         = 0
-  instance_types        = ["m5.large"]
-  use_spot_instances    = true
-  spot_bid_percentage   = 60
+  min_vcpus           = 0
+  max_vcpus           = 3
+  desired_vcpus       = 0
+  instance_types      = ["m5.large"]
+  use_spot_instances  = true
+  spot_bid_percentage = 60
 
   # Job configuration
   job_vcpus  = 1
@@ -556,7 +561,7 @@ module "aws_batch_ml" {
 
   # Logging
   log_retention_days = 7
-  log_level         = "INFO"
+  log_level          = "INFO"
 }
 
 # RDS Proxy outputs

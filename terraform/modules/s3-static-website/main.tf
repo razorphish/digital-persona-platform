@@ -63,6 +63,11 @@ resource "aws_cloudfront_origin_access_control" "website" {
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
+
+  lifecycle {
+    # Prevent recreation if OAC already exists
+    ignore_changes = [name]
+  }
 }
 
 # CloudFront Distribution
@@ -94,8 +99,8 @@ resource "aws_cloudfront_distribution" "website" {
       }
     }
 
-    min_ttl     = 86400   # 1 day
-    default_ttl = 604800  # 7 days
+    min_ttl     = 86400    # 1 day
+    default_ttl = 604800   # 7 days
     max_ttl     = 31536000 # 1 year
   }
 
@@ -136,8 +141,8 @@ resource "aws_cloudfront_distribution" "website" {
     }
 
     min_ttl     = 0
-    default_ttl = 3600    # 1 hour
-    max_ttl     = 86400   # 1 day
+    default_ttl = 3600  # 1 hour
+    max_ttl     = 86400 # 1 day
   }
 
   # Custom error responses for SPA routing
