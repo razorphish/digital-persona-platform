@@ -5,6 +5,11 @@ import { TRPCClientError } from "@trpc/client";
  */
 export class ErrorHandler {
   static getUserFriendlyMessage(error: any): string {
+    // Only handle complex errors in browser environment to avoid static generation issues
+    if (typeof window === "undefined") {
+      return "Something went wrong. Please try again.";
+    }
+
     // Handle network errors
     if (
       error?.message?.includes("NetworkError") ||
@@ -14,8 +19,11 @@ export class ErrorHandler {
       return "Unable to connect to the server. Please check your internet connection and try again.";
     }
 
-    // Handle tRPC errors
-    if (error instanceof TRPCClientError) {
+    // Handle tRPC errors (with runtime check)
+    if (
+      typeof TRPCClientError !== "undefined" &&
+      error instanceof TRPCClientError
+    ) {
       const httpStatus = error.data?.httpStatus;
 
       switch (httpStatus) {
@@ -121,6 +129,11 @@ export class ErrorHandler {
    * Handles authentication-specific errors
    */
   static getAuthErrorMessage(error: any): string {
+    // Handle in browser environment only
+    if (typeof window === "undefined") {
+      return "Authentication failed. Please try again.";
+    }
+
     if (
       error?.message?.includes("email already exists") ||
       error?.message?.includes("CONFLICT")
