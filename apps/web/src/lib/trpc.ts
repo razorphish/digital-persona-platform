@@ -3,8 +3,8 @@ import { httpBatchLink, loggerLink } from "@trpc/client";
 import { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import superjson from "superjson";
 
-// Temporary: Use any type to avoid server dependencies during build
-type AppRouter = any;
+// Import the actual AppRouter type from the server
+import type { AppRouter } from "../../../server/src/router.js";
 
 const getBaseUrl = () => {
   if (typeof window !== "undefined")
@@ -13,35 +13,11 @@ const getBaseUrl = () => {
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001"; // dev SSR should use correct API URL
 };
 
-export const trpc = createTRPCNext<AppRouter>({
-  config() {
-    return {
-      transformer: superjson,
-      links: [
-        loggerLink({
-          enabled: (opts) =>
-            process.env.NODE_ENV === "development" ||
-            (opts.direction === "down" && opts.result instanceof Error),
-        }),
-        httpBatchLink({
-          url: `${getBaseUrl()}/api/trpc`,
-          headers() {
-            if (typeof window === "undefined") {
-              // During SSR, don't access localStorage
-              return {};
-            }
-            return {
-              authorization: localStorage.getItem("accessToken")
-                ? `Bearer ${localStorage.getItem("accessToken")}`
-                : "",
-            };
-          },
-        }),
-      ],
-    };
-  },
-  ssr: false,
-});
+// Re-export the trpc instance from TRPCProvider to avoid conflicts
+export { trpc } from "../components/providers/TRPCProvider";
+
+// Note: The main tRPC client is now configured in TRPCProvider.tsx
+// This maintains compatibility while using the React Query based setup
 
 export type RouterInputs = inferRouterInputs<AppRouter>;
 export type RouterOutputs = inferRouterOutputs<AppRouter>;

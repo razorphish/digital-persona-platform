@@ -1,17 +1,135 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { trpc } from "@/lib/trpc";
+
+// Types for personas
+interface Persona {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  avatar: string | null;
+  personaType: "main" | "child" | "public" | "premium";
+  isMainPersona: boolean;
+  parentPersonaId: string | null;
+  traits: any;
+  preferences: any;
+  memoryContext: string | null;
+  personalityProfile: any;
+  privacyLevel: "public" | "friends" | "subscribers" | "private";
+  isPubliclyListed: boolean;
+  allowConnections: boolean;
+  requiresSubscription: boolean;
+  subscriptionPrice: string | null;
+  learningEnabled: boolean;
+  interactionCount: number;
+  lastInteraction: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  isDeletable: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 function PersonasPageContent() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedPersonaType, setSelectedPersonaType] = useState<
+    "child" | "public" | "premium"
+  >("child");
+
+  // tRPC queries with type assertions for build compatibility
+  const { data: personas, isLoading, refetch } = trpc.personas.list.useQuery();
+  const { data: mainPersona } = trpc.personas.getMain.useQuery();
+
+  // Type-safe persona arrays
+  const typedPersonas = personas as Persona[] | undefined;
+  const typedMainPersona = mainPersona as Persona | undefined;
+
+  // tRPC mutations
+  const createPersonaMutation = trpc.personas.create.useMutation();
+  const deletePersonaMutation = trpc.personas.delete.useMutation();
 
   const handleLogout = () => {
     logout();
   };
+
+  const handleCreatePersona = async (formData: any) => {
+    try {
+      await createPersonaMutation.mutateAsync({
+        name: formData.name,
+        description: formData.description,
+        personaType: selectedPersonaType,
+        privacyLevel: formData.privacyLevel || "friends",
+        isPubliclyListed: formData.isPubliclyListed || false,
+        requiresSubscription: formData.requiresSubscription || false,
+        subscriptionPrice: formData.subscriptionPrice || null,
+      });
+    } catch (error) {
+      console.error("Failed to create persona:", error);
+    }
+  };
+
+  const handleDeletePersona = async (personaId: string) => {
+    if (confirm("Are you sure you want to delete this persona?")) {
+      try {
+        await deletePersonaMutation.mutateAsync({ id: personaId });
+      } catch (error) {
+        console.error("Failed to delete persona:", error);
+      }
+    }
+  };
+
+  const getPersonaTypeIcon = (type: string) => {
+    switch (type) {
+      case "main":
+        return "👤";
+      case "child":
+        return "👶";
+      case "public":
+        return "🌍";
+      case "premium":
+        return "💎";
+      default:
+        return "🤖";
+    }
+  };
+
+  const getPrivacyColor = (level: string) => {
+    switch (level) {
+      case "public":
+        return "bg-green-100 text-green-800";
+      case "friends":
+        return "bg-blue-100 text-blue-800";
+      case "subscribers":
+        return "bg-purple-100 text-purple-800";
+      case "private":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your personas...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const childPersonas =
+    personas?.filter((p) => p.personaType !== "main" && !p.isDefault) || [];
+  const totalInteractions =
+    personas?.reduce((sum, p) => sum + (p.interactionCount || 0), 0) || 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -22,7 +140,7 @@ function PersonasPageContent() {
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => router.push("/dashboard")}
-                className="text-gray-600 hover:text-gray-900"
+                className="text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <svg
                   className="w-6 h-6"
@@ -38,9 +156,14 @@ function PersonasPageContent() {
                   />
                 </svg>
               </button>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Personas Management
-              </h1>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Persona Dashboard
+                </h1>
+                <p className="text-sm text-gray-600">
+                  Manage your digital personalities
+                </p>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">Welcome, {user?.name}!</span>
@@ -56,78 +179,14 @@ function PersonasPageContent() {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg
-                className="w-8 h-8 text-indigo-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
-              </svg>
-            </div>
-
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              Digital Personas Management
-            </h2>
-
-            <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-              Create, customize, and manage your digital personas. Each persona
-              represents a different aspect of your personality and can be
-              tailored for specific contexts.
-            </p>
-          </div>
-
-          {/* Current Persona */}
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-6 mb-8">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-indigo-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xl font-bold">
-                    {user?.name?.charAt(0) || "U"}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900">
-                    Primary Persona
-                  </h3>
-                  <p className="text-gray-600">
-                    Your main digital persona based on interactions and
-                    preferences
-                  </p>
-                  <div className="flex items-center mt-2">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      Active
-                    </span>
-                    <span className="ml-2 text-sm text-gray-500">
-                      85% Complete
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-gray-500">Created</div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {new Date().toLocaleDateString()}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Persona Types */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
-              <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mb-4">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Dashboard Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-blue-100">
                 <svg
-                  className="w-6 h-6 text-white"
+                  className="w-6 h-6 text-blue-600"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -136,25 +195,26 @@ function PersonasPageContent() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0V6a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2V6z"
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Professional Persona
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Optimized for business communications and networking
-              </p>
-              <button className="text-blue-600 hover:text-blue-500 font-medium text-sm">
-                Create Professional →
-              </button>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">
+                  Total Personas
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {personas?.length || 0}
+                </p>
+              </div>
             </div>
+          </div>
 
-            <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
-              <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mb-4">
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-green-100">
                 <svg
-                  className="w-6 h-6 text-white"
+                  className="w-6 h-6 text-green-600"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -163,25 +223,26 @@ function PersonasPageContent() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Social Persona
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Casual and friendly for personal interactions
-              </p>
-              <button className="text-green-600 hover:text-green-500 font-medium text-sm">
-                Create Social →
-              </button>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">
+                  Interactions
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {totalInteractions}
+                </p>
+              </div>
             </div>
+          </div>
 
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-6">
-              <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center mb-4">
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-purple-100">
                 <svg
-                  className="w-6 h-6 text-white"
+                  className="w-6 h-6 text-purple-600"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -190,182 +251,671 @@ function PersonasPageContent() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Creative Persona
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Expressive and innovative for artistic endeavors
-              </p>
-              <button className="text-purple-600 hover:text-purple-500 font-medium text-sm">
-                Create Creative →
-              </button>
-            </div>
-          </div>
-
-          {/* Features */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                Persona Features
-              </h3>
-              <ul className="space-y-3">
-                <li className="flex items-center">
-                  <svg
-                    className="w-5 h-5 text-green-500 mr-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <span className="text-gray-700">
-                    Customizable personality traits
-                  </span>
-                </li>
-                <li className="flex items-center">
-                  <svg
-                    className="w-5 h-5 text-green-500 mr-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <span className="text-gray-700">Context-aware responses</span>
-                </li>
-                <li className="flex items-center">
-                  <svg
-                    className="w-5 h-5 text-green-500 mr-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <span className="text-gray-700">
-                    Learning from interactions
-                  </span>
-                </li>
-                <li className="flex items-center">
-                  <svg
-                    className="w-5 h-5 text-green-500 mr-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <span className="text-gray-700">
-                    Multi-platform compatibility
-                  </span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                Usage Statistics
-              </h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Conversations</span>
-                  <span className="text-xl font-bold text-gray-900">--</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Active Personas</span>
-                  <span className="text-xl font-bold text-gray-900">1</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Learning Progress</span>
-                  <span className="text-xl font-bold text-gray-900">85%</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Last Updated</span>
-                  <span className="text-xl font-bold text-gray-900">Today</span>
-                </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">
+                  Learning Active
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {personas?.filter((p) => p.learningEnabled).length || 0}
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
-            <div className="flex items-center mb-4">
-              <svg
-                className="w-6 h-6 text-green-600 mr-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <h3 className="text-lg font-semibold text-green-900">
-                Coming Soon
-              </h3>
-            </div>
-            <p className="text-green-800">
-              Advanced persona management is currently under development. This
-              feature will allow you to:
-            </p>
-            <ul className="list-disc list-inside text-green-800 mt-2 space-y-1">
-              <li>
-                Create multiple specialized personas for different contexts
-              </li>
-              <li>
-                Customize personality traits, communication styles, and
-                preferences
-              </li>
-              <li>Train personas on specific datasets and interactions</li>
-              <li>Switch between personas seamlessly during conversations</li>
-              <li>Export and share personas with others</li>
-            </ul>
-          </div>
-
-          <div className="text-center">
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={() => router.push("/dashboard")}
-                className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Back to Dashboard
-              </button>
-              <button
-                onClick={() => router.push("/chat")}
-                className="bg-gray-200 text-gray-800 px-6 py-3 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Start Chatting
-              </button>
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-orange-100">
+                <svg
+                  className="w-6 h-6 text-orange-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
+                  />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Monetized</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {personas?.filter((p) => p.requiresSubscription).length || 0}
+                </p>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Main Persona Section */}
+        {mainPersona && (
+          <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Your Main Persona
+              </h2>
+              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                Primary Brain
+              </span>
+            </div>
+
+            <div className="flex items-start space-x-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-2xl text-white font-bold">
+                {mainPersona.name?.charAt(0) || "M"}
+              </div>
+
+              <div className="flex-1">
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {mainPersona.name}
+                </h3>
+                <p className="text-gray-600 mb-4">{mainPersona.description}</p>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-indigo-600">
+                      {mainPersona.interactionCount || 0}
+                    </p>
+                    <p className="text-sm text-gray-600">Interactions</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-green-600">85%</p>
+                    <p className="text-sm text-gray-600">Learning</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-purple-600">
+                      Private
+                    </p>
+                    <p className="text-sm text-gray-600">Privacy</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-blue-600">Active</p>
+                    <p className="text-sm text-gray-600">Status</p>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => router.push("/learning")}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Start Learning Session
+                  </button>
+                  <button
+                    onClick={() => router.push("/chat")}
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Chat with Persona
+                  </button>
+                  <button
+                    onClick={() => router.push("/privacy")}
+                    className="px-4 py-2 bg-orange-100 text-orange-800 rounded-lg hover:bg-orange-200 transition-colors"
+                  >
+                    Privacy Settings
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Child Personas Section */}
+        <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Child Personas
+              </h2>
+              <p className="text-gray-600">
+                Specialized personas derived from your main persona
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span>Create Persona</span>
+            </button>
+          </div>
+
+          {childPersonas.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg
+                  className="w-8 h-8 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No child personas yet
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Create specialized personas for different contexts and audiences
+              </p>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Create Your First Persona
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {childPersonas.map((persona) => (
+                <div
+                  key={persona.id}
+                  className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white text-lg font-semibold">
+                        {getPersonaTypeIcon(persona.personaType)}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {persona.name}
+                        </h3>
+                        <p className="text-sm text-gray-600 capitalize">
+                          {persona.personaType}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={() =>
+                          router.push(`/personas/${persona.id}/edit`)
+                        }
+                        className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                        title="Edit persona"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                      </button>
+                      {persona.isDeletable && (
+                        <button
+                          onClick={() => handleDeletePersona(persona.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete persona"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-gray-600 text-sm mb-4">
+                    {persona.description}
+                  </p>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Privacy</span>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${getPrivacyColor(
+                          persona.privacyLevel
+                        )}`}
+                      >
+                        {persona.privacyLevel}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">
+                        Interactions
+                      </span>
+                      <span className="text-sm font-semibold">
+                        {persona.interactionCount || 0}
+                      </span>
+                    </div>
+                    {persona.requiresSubscription && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Price</span>
+                        <span className="text-sm font-semibold text-green-600">
+                          ${persona.subscriptionPrice || "0"}/month
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => router.push(`/chat?persona=${persona.id}`)}
+                      className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Chat
+                    </button>
+                    <button
+                      onClick={() =>
+                        router.push(`/personas/${persona.id}/analytics`)
+                      }
+                      className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      Analytics
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 ml-3">
+                Start Learning
+              </h3>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Begin an AI learning session to improve your personas
+            </p>
+            <button
+              onClick={() => router.push("/learning")}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Begin Interview
+            </button>
+          </div>
+
+          <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 ml-3">
+                Social Network
+              </h3>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Connect with other personas and discover new friends
+            </p>
+            <button
+              onClick={() => router.push("/social")}
+              className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Explore Network
+            </button>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-6">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 ml-3">
+                Monetization
+              </h3>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Set up subscription tiers and pricing for your personas
+            </p>
+            <button
+              onClick={() => router.push("/monetization")}
+              className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              Setup Pricing
+            </button>
+          </div>
+        </div>
       </main>
+
+      {/* Create Persona Modal */}
+      {showCreateModal && (
+        <CreatePersonaModal
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreatePersona}
+          selectedType={selectedPersonaType}
+          onTypeChange={setSelectedPersonaType}
+          isLoading={createPersonaMutation.isLoading}
+        />
+      )}
+    </div>
+  );
+}
+
+// Create Persona Modal Component
+function CreatePersonaModal({
+  onClose,
+  onSubmit,
+  selectedType,
+  onTypeChange,
+  isLoading,
+}: {
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+  selectedType: "child" | "public" | "premium";
+  onTypeChange: (type: "child" | "public" | "premium") => void;
+  isLoading: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    privacyLevel: "friends" as "public" | "friends" | "subscribers" | "private",
+    isPubliclyListed: false,
+    requiresSubscription: false,
+    subscriptionPrice: "",
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-2xl p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-2xl font-bold text-gray-900">
+            Create New Persona
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Persona Type Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Persona Type
+            </label>
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                {
+                  type: "child" as const,
+                  label: "Child Persona",
+                  desc: "Private, inherits from main",
+                  icon: "👶",
+                },
+                {
+                  type: "public" as const,
+                  label: "Public Persona",
+                  desc: "Discoverable by others",
+                  icon: "🌍",
+                },
+                {
+                  type: "premium" as const,
+                  label: "Premium Persona",
+                  desc: "Monetized with subscriptions",
+                  icon: "💎",
+                },
+              ].map((option) => (
+                <button
+                  key={option.type}
+                  type="button"
+                  onClick={() => onTypeChange(option.type)}
+                  className={`p-4 border-2 rounded-lg text-left transition-colors ${
+                    selectedType === option.type
+                      ? "border-indigo-500 bg-indigo-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="text-2xl mb-2">{option.icon}</div>
+                  <div className="font-medium text-gray-900">
+                    {option.label}
+                  </div>
+                  <div className="text-sm text-gray-600">{option.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Basic Information */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Persona Name
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, name: e.target.value }))
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="e.g., Professional Assistant, Creative Writer, Social Butterfly"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={formData.description}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
+              }
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="Describe this persona's purpose and personality..."
+            />
+          </div>
+
+          {/* Privacy Settings */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Privacy Level
+            </label>
+            <select
+              value={formData.privacyLevel}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  privacyLevel: e.target.value as any,
+                }))
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="private">Private - Only you can access</option>
+              <option value="friends">
+                Friends - Connected users can access
+              </option>
+              <option value="subscribers">
+                Subscribers - Paid subscribers can access
+              </option>
+              <option value="public">Public - Anyone can access</option>
+            </select>
+          </div>
+
+          {/* Public Listing */}
+          {selectedType === "public" && (
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isPubliclyListed"
+                checked={formData.isPubliclyListed}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    isPubliclyListed: e.target.checked,
+                  }))
+                }
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              />
+              <label
+                htmlFor="isPubliclyListed"
+                className="ml-2 block text-sm text-gray-900"
+              >
+                List in persona directory for discovery
+              </label>
+            </div>
+          )}
+
+          {/* Monetization */}
+          {selectedType === "premium" && (
+            <>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="requiresSubscription"
+                  checked={formData.requiresSubscription}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      requiresSubscription: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
+                <label
+                  htmlFor="requiresSubscription"
+                  className="ml-2 block text-sm text-gray-900"
+                >
+                  Require subscription for access
+                </label>
+              </div>
+
+              {formData.requiresSubscription && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Monthly Subscription Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.subscriptionPrice}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        subscriptionPrice: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="9.99"
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Actions */}
+          <div className="flex space-x-4 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? "Creating..." : "Create Persona"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

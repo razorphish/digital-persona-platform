@@ -8,8 +8,10 @@ import { useRouter } from "next/navigation";
 import { AuthUtils } from "@/lib/auth";
 import superjson from "superjson";
 
-// Temporary: Use any type to avoid server dependencies during build
-export const trpc = createTRPCReact<any>();
+// Import the actual AppRouter type from the server
+import type { AppRouter } from "../../../../server/src/router.js";
+
+export const trpc = createTRPCReact<AppRouter>();
 
 function getBaseUrl() {
   if (typeof window !== "undefined") {
@@ -81,13 +83,8 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Temporarily disable tRPC client for build
-  const [trpcClient] = useState(
-    () =>
-      // trpc.createClient({
-      ({} as any)
-    // Commented out due to router naming conflicts:
-    /*
+  // Re-enable tRPC client for proper API calls
+  const [trpcClient] = useState(() =>
     trpc.createClient({
       transformer: superjson,
       links: [
@@ -142,13 +139,11 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         }),
       ],
     })
-    */
   );
 
   return (
-    // Temporarily disable tRPC Provider for build
-    // <trpc.Provider client={trpcClient} queryClient={queryClient}>
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    // </trpc.Provider>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </trpc.Provider>
   );
 }
