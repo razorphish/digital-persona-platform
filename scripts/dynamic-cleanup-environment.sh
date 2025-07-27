@@ -2,22 +2,22 @@
 
 # Dynamic Environment Cleanup Script
 # 
-# PURPOSE: Comprehensive cleanup of AWS resources for specific environments
+# PURPOSE: Safe cleanup of AWS resources for specific environments
 # 
 # USAGE: ./scripts/dynamic-cleanup-environment.sh <environment>
 # EXAMPLE: ./scripts/dynamic-cleanup-environment.sh qa10
 #
 # FEATURES:
-# • VPC-Aware Cleanup: Detects and removes orphaned resources across VPCs
-# • Dual Naming Pattern Support: Handles both current and legacy resource naming
-# • Orphaned Resource Detection: Finds resources that may exist outside current infrastructure
-# • Safe Scoping: Only removes resources matching the specific environment pattern
+# • Safe Pattern Matching: Only removes current naming pattern resources
+# • VPC-Aware Cleanup: Logs VPC information for debugging
+# • Wildcard Environment Safe: Won't interfere with other environments (dev010, dev011, etc.)
+# • Precise Scoping: Only removes resources matching exact environment pattern
 # 
-# ENHANCED CAPABILITIES:
-# • DB Subnet Groups: Removes resources in wrong VPCs that cause deployment conflicts
-# • RDS Proxies: Comprehensive cleanup including orphaned proxy endpoints
-# • Legacy Pattern Support: Cleans up resources from previous naming conventions
-# • VPC Mismatch Resolution: Prevents 'resource in wrong VPC' deployment errors
+# CURRENT PATTERN SUPPORT:
+# • Only handles: ${MAIN_ENV}-${TARGET_ENV}-${PROJECT_NAME} (e.g., dev-dev01-dpp)
+# • Legacy resources (dev01-dev01-dpp, etc.) are cleaned up manually
+# • Prevents accidental deletion of other wildcard environments
+# • VPC mismatch detection in deployment workflow handles conflicts
 
 set -e
 
@@ -258,30 +258,15 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
   print_status "🎯 Found VPC to cleanup: $VPC_ID"
   
   # 7.1 Clean up DB Subnet Groups first (they reference subnets)
-  print_status "🧹 Cleaning up DB Subnet Groups (including orphaned ones)..."
+  print_status "🧹 Cleaning up DB Subnet Groups..."
   
-  # Handle both naming patterns for comprehensive cleanup:
-  # Current pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
-  # Legacy pattern: target_env-target_env-project (e.g., dev01-dev01-dpp)
+  # Only handle current naming pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
+  # Legacy resources will be cleaned up manually
   
-  print_status "🔍 Searching for DB subnet groups with current pattern: ${MAIN_ENV}-${TARGET_ENV}-*"
-  DB_SUBNET_GROUPS_CURRENT=$(aws rds describe-db-subnet-groups \
+  print_status "🔍 Searching for DB subnet groups: ${MAIN_ENV}-${TARGET_ENV}-*"
+  DB_SUBNET_GROUPS=$(aws rds describe-db-subnet-groups \
     --query "DBSubnetGroups[?starts_with(DBSubnetGroupName, '${MAIN_ENV}-${TARGET_ENV}')].DBSubnetGroupName" \
     --output text)
-  
-  print_status "🔍 Searching for DB subnet groups with legacy pattern: ${TARGET_ENV}-${TARGET_ENV}-*"
-  DB_SUBNET_GROUPS_LEGACY=$(aws rds describe-db-subnet-groups \
-    --query "DBSubnetGroups[?starts_with(DBSubnetGroupName, '${TARGET_ENV}-${TARGET_ENV}')].DBSubnetGroupName" \
-    --output text)
-  
-  # Also search for any subnet groups containing the target environment (catch orphaned resources)
-  print_status "🔍 Searching for any orphaned DB subnet groups containing '${TARGET_ENV}'..."
-  DB_SUBNET_GROUPS_ORPHANED=$(aws rds describe-db-subnet-groups \
-    --query "DBSubnetGroups[?contains(DBSubnetGroupName, '${TARGET_ENV}') && contains(DBSubnetGroupName, '${PROJECT_NAME}')].DBSubnetGroupName" \
-    --output text)
-  
-  # Combine all patterns and remove duplicates
-  DB_SUBNET_GROUPS=$(echo "$DB_SUBNET_GROUPS_CURRENT $DB_SUBNET_GROUPS_LEGACY $DB_SUBNET_GROUPS_ORPHANED" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
   for subnet_group in $DB_SUBNET_GROUPS; do
     if [ -n "$subnet_group" ] && [ "$subnet_group" != "None" ]; then
@@ -295,30 +280,15 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
   done
 
   # 7.2 Clean up RDS Proxy endpoints
-  print_status "🧹 Cleaning up RDS Proxy endpoints (including orphaned ones)..."
+  print_status "🧹 Cleaning up RDS Proxy endpoints..."
   
-  # Handle both naming patterns for RDS Proxies:
-  # Current pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
-  # Legacy pattern: target_env-target_env-project (e.g., dev01-dev01-dpp)
+  # Only handle current naming pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
+  # Legacy resources will be cleaned up manually
   
-  print_status "🔍 Searching for RDS proxies with current pattern: ${MAIN_ENV}-${TARGET_ENV}-*"
-  RDS_PROXIES_CURRENT=$(aws rds describe-db-proxies \
+  print_status "🔍 Searching for RDS proxies: ${MAIN_ENV}-${TARGET_ENV}-*"
+  RDS_PROXIES=$(aws rds describe-db-proxies \
     --query "DBProxies[?starts_with(DBProxyName, '${MAIN_ENV}-${TARGET_ENV}')].DBProxyName" \
     --output text)
-  
-  print_status "🔍 Searching for RDS proxies with legacy pattern: ${TARGET_ENV}-${TARGET_ENV}-*"
-  RDS_PROXIES_LEGACY=$(aws rds describe-db-proxies \
-    --query "DBProxies[?starts_with(DBProxyName, '${TARGET_ENV}-${TARGET_ENV}')].DBProxyName" \
-    --output text)
-  
-  # Also search for any RDS proxies containing the target environment (catch orphaned resources)
-  print_status "🔍 Searching for any orphaned RDS proxies containing '${TARGET_ENV}'..."
-  RDS_PROXIES_ORPHANED=$(aws rds describe-db-proxies \
-    --query "DBProxies[?contains(DBProxyName, '${TARGET_ENV}') && contains(DBProxyName, '${PROJECT_NAME}')].DBProxyName" \
-    --output text)
-  
-  # Combine all patterns and remove duplicates
-  RDS_PROXIES=$(echo "$RDS_PROXIES_CURRENT $RDS_PROXIES_LEGACY $RDS_PROXIES_ORPHANED" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
   for proxy in $RDS_PROXIES; do
     if [ -n "$proxy" ] && [ "$proxy" != "None" ]; then

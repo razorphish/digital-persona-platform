@@ -404,14 +404,7 @@ jobs:
             echo "✅ DB Subnet Group does not exist, will be created"
           fi
 
-          # Also check for legacy pattern subnet groups and clean them up
-          LEGACY_SUBNET_GROUP_NAME="${ENVIRONMENT}-${ENVIRONMENT}-${PROJECT_NAME}-db-subnet-group"
-          echo "🔍 Checking for legacy pattern DB Subnet Group: $LEGACY_SUBNET_GROUP_NAME"
-
-          if aws rds describe-db-subnet-groups --db-subnet-group-name "$LEGACY_SUBNET_GROUP_NAME" --output text >/dev/null 2>&1; then
-            echo "🗑️ Found legacy subnet group, deleting to prevent conflicts..."
-            aws rds delete-db-subnet-group --db-subnet-group-name "$LEGACY_SUBNET_GROUP_NAME" || echo "⚠️ Failed to delete legacy subnet group"
-          fi
+                    # Legacy resource cleanup will be handled manually
 
           # Check and import existing CloudFront Origin Access Control
           OAC_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-oac"
