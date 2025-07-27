@@ -71,8 +71,9 @@ jobs:
         run: |
           echo "🧹 Destroying infrastructure for ${{ env.ENVIRONMENT }}..."
 
-          # Initialize Terraform
-          terraform init
+          # Initialize Terraform with proper backend configuration
+          echo "🔧 Configuring Terraform backend for ${{ env.MAIN_ENV }}/${{ env.ENVIRONMENT }}..."
+          terraform init -backend-config="key=${{ env.MAIN_ENV }}/${{ env.ENVIRONMENT }}/terraform.tfstate" -reconfigure
 
           # Create tfvars file
           cat > environment.auto.tfvars << EOF
@@ -86,12 +87,13 @@ jobs:
 
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "🔍 DRY RUN: Showing what would be destroyed..."
-            terraform plan -destroy -var-file="environment.auto.tfvars"
+            timeout 600 terraform plan -destroy -var-file="environment.auto.tfvars"
           else
             echo "🚨 DESTROYING infrastructure..."
             
             if [ "${{ github.event.inputs.force_cleanup }}" = "true" ]; then
-              terraform destroy -auto-approve -var-file="environment.auto.tfvars"
+              echo "⏰ Running terraform destroy with 15-minute timeout..."
+              timeout 900 terraform destroy -auto-approve -var-file="environment.auto.tfvars" -lock-timeout=300s
             else
               echo "❌ Manual approval required. Set force_cleanup=true to proceed."
               exit 1
