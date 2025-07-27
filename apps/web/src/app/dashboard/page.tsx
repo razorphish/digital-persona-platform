@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadFile, FileUploadResult } from "@/services/fileUpload";
 import { AuthUtils } from "@/lib/auth";
@@ -350,9 +351,11 @@ function DashboardPageContent() {
                           {/* File Icon/Preview */}
                           {uploadedFile.type === "image" &&
                           uploadedFile.preview ? (
-                            <img
-                              src={uploadedFile.preview}
+                            <Image
+                              src={uploadedFile.preview || ""}
                               alt={uploadedFile.file.name}
+                              width={32}
+                              height={32}
                               className="w-8 h-8 object-cover rounded"
                             />
                           ) : uploadedFile.type === "video" ? (

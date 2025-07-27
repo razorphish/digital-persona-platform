@@ -52,3 +52,4 @@
 2025-07-27T23:22:55.493907Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/web/.next"), AnchoredSystemPathBuf(".turbo/cookies")}
 2025-07-27T23:22:55.493933Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("web"), path: AnchoredSystemPathBuf("apps/web") }}))
 2025-07-27T23:22:55.536061Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-27T23:25:23.682315Z  INFO turborepo_lib::daemon::server: triggering shutdown

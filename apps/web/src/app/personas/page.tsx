@@ -47,9 +47,9 @@ function PersonasPageContent() {
   const { data: personas, isLoading, refetch } = trpc.personas.list.useQuery();
   const { data: mainPersona } = trpc.personas.getMain.useQuery();
 
-  // Type-safe persona arrays
-  const typedPersonas = personas as Persona[] | undefined;
-  const typedMainPersona = mainPersona as Persona | undefined;
+  // Type-safe persona arrays (using unknown for build compatibility)
+  const typedPersonas = personas as unknown as Persona[] | undefined;
+  const typedMainPersona = mainPersona as unknown as Persona | undefined;
 
   // tRPC mutations
   const createPersonaMutation = trpc.personas.create.useMutation();

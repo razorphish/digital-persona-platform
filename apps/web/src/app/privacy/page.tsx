@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -108,60 +108,63 @@ function PrivacyPageContent() {
       },
     });
 
+  const loadPersonaPrivacySettings = useCallback(
+    (personaId: string) => {
+      // Mock implementation - would load from tRPC
+      const persona = personas?.find((p) => p.id === personaId);
+      if (persona) {
+        setPrivacySettings({
+          id: persona.id,
+          name: persona.name,
+          privacyLevel: (persona as any).privacyLevel || "friends",
+          guardRails: (persona.traits as any)?.guardRails || {
+            allowedUsers: [],
+            blockedUsers: [],
+            allowedTopics: [],
+            blockedTopics: [],
+            maxInteractionDepth: 10,
+          },
+          contentFilter: (persona.traits as any)?.contentFilter || {
+            allowExplicit: false,
+            allowPersonalInfo: true,
+            allowSecrets: false,
+            allowPhotos: true,
+            allowVideos: true,
+            customRules: [],
+          },
+          accessPermissions: {
+            friends: {
+              canViewProfile: true,
+              canSendMessages: true,
+              canViewMedia: true,
+              canViewPersonalInfo: true,
+            },
+            subscribers: {
+              canViewProfile: true,
+              canSendMessages: true,
+              canViewMedia: true,
+              canViewPersonalInfo: true,
+            },
+            public: {
+              canViewProfile: true,
+              canSendMessages: false,
+              canViewMedia: false,
+              canViewPersonalInfo: false,
+            },
+          },
+        });
+      }
+    },
+    [personas]
+  );
+
   // Initialize with main persona
   useEffect(() => {
     if (mainPersona && !selectedPersonaId) {
       setSelectedPersonaId(mainPersona.id);
       loadPersonaPrivacySettings(mainPersona.id);
     }
-  }, [mainPersona, selectedPersonaId]);
-
-  const loadPersonaPrivacySettings = (personaId: string) => {
-    // Mock implementation - would load from tRPC
-    const persona = personas?.find((p) => p.id === personaId);
-    if (persona) {
-      setPrivacySettings({
-        id: persona.id,
-        name: persona.name,
-        privacyLevel: (persona as any).privacyLevel || "friends",
-        guardRails: (persona.traits as any)?.guardRails || {
-          allowedUsers: [],
-          blockedUsers: [],
-          allowedTopics: [],
-          blockedTopics: [],
-          maxInteractionDepth: 10,
-        },
-        contentFilter: (persona.traits as any)?.contentFilter || {
-          allowExplicit: false,
-          allowPersonalInfo: true,
-          allowSecrets: false,
-          allowPhotos: true,
-          allowVideos: true,
-          customRules: [],
-        },
-        accessPermissions: {
-          friends: {
-            canViewProfile: true,
-            canSendMessages: true,
-            canViewMedia: true,
-            canViewPersonalInfo: true,
-          },
-          subscribers: {
-            canViewProfile: true,
-            canSendMessages: true,
-            canViewMedia: true,
-            canViewPersonalInfo: true,
-          },
-          public: {
-            canViewProfile: true,
-            canSendMessages: false,
-            canViewMedia: false,
-            canViewPersonalInfo: false,
-          },
-        },
-      });
-    }
-  };
+  }, [mainPersona, selectedPersonaId, loadPersonaPrivacySettings]);
 
   const handlePersonaChange = (personaId: string) => {
     setSelectedPersonaId(personaId);

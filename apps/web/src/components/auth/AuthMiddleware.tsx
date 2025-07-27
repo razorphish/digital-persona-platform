@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthUtils } from "@/lib/auth";
@@ -17,23 +17,29 @@ export function AuthMiddleware() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Define protected routes that require authentication
-  const protectedRoutes = [
-    "/dashboard",
-    "/files",
-    "/chat",
-    "/social",
-    "/analytics",
-    "/personas",
-  ];
+  // Define protected routes that require authentication (memoized for performance)
+  const protectedRoutes = useMemo(
+    () => [
+      "/dashboard",
+      "/files",
+      "/chat",
+      "/social",
+      "/analytics",
+      "/personas",
+    ],
+    []
+  );
 
-  // Define public routes that don't require authentication
-  const publicRoutes = [
-    "/",
-    "/auth/login",
-    "/auth/register",
-    "/test", // Test page is publicly accessible
-  ];
+  // Define public routes that don't require authentication (memoized for performance)
+  const publicRoutes = useMemo(
+    () => [
+      "/",
+      "/auth/login",
+      "/auth/register",
+      "/test", // Test page is publicly accessible
+    ],
+    []
+  );
 
   useEffect(() => {
     // Skip redirect logic during initial loading
@@ -85,7 +91,16 @@ export function AuthMiddleware() {
         return;
       }
     }
-  }, [isLoading, isAuthenticated, user, pathname, router, logout]);
+  }, [
+    isLoading,
+    isAuthenticated,
+    user,
+    pathname,
+    router,
+    logout,
+    protectedRoutes,
+    publicRoutes,
+  ]);
 
   // Listen for browser navigation events that might bypass our auth checks
   useEffect(() => {
