@@ -627,4 +627,4 @@ export const mediaFilesRelations = relations(mediaFiles, ({ one }) => ({
 }));
 
 // Export the database connection
-export const drizzle = require("drizzle-orm/postgres-js");
+export { drizzle } from "drizzle-orm/postgres-js";
