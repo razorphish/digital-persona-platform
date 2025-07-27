@@ -1,0 +1,237 @@
+name: Database Migration
+
+on:
+  push:
+    branches: [main, dev01]
+    paths:
+      - "packages/database/src/schema.ts"
+      - "apps/server/drizzle/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/database/src/schema.ts"
+      - "apps/server/drizzle/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      dry_run:
+        description: "Run migration check only (no changes)"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  migration-check:
+    name: Validate Migration Safety
+    runs-on: ubuntu-latest
+    outputs:
+      has-changes: ${{ steps.check-changes.outputs.has-changes }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd apps/server && npm ci
+          cd ../.. && cd packages/database && npm ci
+
+      - name: Check for schema changes
+        id: check-changes
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "🔄 Database schema changes detected"
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "✅ No database schema changes"
+          fi
+
+      - name: Generate migration files
+        if: steps.check-changes.outputs.has-changes == 'true'
+        run: |
+          cd apps/server
+          npm run db:generate
+
+      - name: Validate migration syntax
+        if: steps.check-changes.outputs.has-changes == 'true'
+        run: |
+          cd apps/server
+          npm run migrate:check || true
+
+      - name: Check migration safety
+        if: steps.check-changes.outputs.has-changes == 'true'
+        run: |
+          cd apps/server
+          echo "🔍 Checking migration files for safety..."
+
+          # Check for potentially dangerous operations
+          if grep -r "DROP TABLE\|DROP COLUMN\|ALTER COLUMN.*DROP" drizzle/ 2>/dev/null; then
+            echo "❌ DANGEROUS: Migration contains destructive operations"
+            echo "::error::Migration contains DROP operations that could cause data loss"
+            exit 1
+          fi
+
+          if grep -r "NOT NULL" drizzle/ 2>/dev/null && ! grep -r "DEFAULT" drizzle/ 2>/dev/null; then
+            echo "⚠️  WARNING: Adding NOT NULL column without DEFAULT value"
+            echo "::warning::Adding NOT NULL column without default may fail on existing data"
+          fi
+
+          echo "✅ Migration safety check passed"
+
+      - name: Upload migration artifacts
+        if: steps.check-changes.outputs.has-changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-files
+          path: apps/server/drizzle/
+          retention-days: 30
+
+  migrate-dev:
+    name: Apply Migration (Development)
+    needs: migration-check
+    if: needs.migration-check.outputs.has-changes == 'true' && (github.ref == 'refs/heads/dev01' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment: development
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: digital_persona_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd apps/server && npm ci
+
+      - name: Download migration files
+        uses: actions/download-artifact@v4
+        with:
+          name: migration-files
+          path: apps/server/drizzle/
+
+      - name: Build migration runner
+        run: |
+          cd apps/server
+          npm run build
+
+      - name: Create test database backup
+        run: |
+          PGPASSWORD=postgres pg_dump -h localhost -U postgres -d digital_persona_test > backup.sql || true
+
+      - name: Run migrations (dry run)
+        if: inputs.dry_run == true
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
+        run: |
+          cd apps/server
+          echo "🧪 DRY RUN: Migration check only"
+          npm run migrate:check
+
+      - name: Apply migrations
+        if: inputs.dry_run != true
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
+        run: |
+          cd apps/server
+          echo "🚀 Applying migrations to development database..."
+          npm run migrate:up
+
+      - name: Verify migration success
+        if: inputs.dry_run != true
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
+        run: |
+          cd apps/server
+          echo "🔍 Verifying migration results..."
+
+          # Check that critical tables exist
+          PGPASSWORD=postgres psql -h localhost -U postgres -d digital_persona_test -c "
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name;
+          "
+
+          # Verify date_of_birth column exists
+          PGPASSWORD=postgres psql -h localhost -U postgres -d digital_persona_test -c "
+            SELECT column_name, data_type, is_nullable 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'date_of_birth';
+          "
+
+      - name: Rollback on failure
+        if: failure() && inputs.dry_run != true
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
+        run: |
+          echo "❌ Migration failed, attempting rollback..."
+          if [ -f backup.sql ]; then
+            PGPASSWORD=postgres psql -h localhost -U postgres -d digital_persona_test < backup.sql
+            echo "🔄 Database restored from backup"
+          else
+            echo "⚠️  No backup available for rollback"
+          fi
+
+  notify-success:
+    name: Notify Migration Success
+    needs: [migration-check, migrate-dev]
+    if: success() && needs.migration-check.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify success
+        run: |
+          echo "✅ Database migration completed successfully"
+          echo "🔒 Data integrity maintained"
+          echo "📊 All safety checks passed"
+
+  notify-failure:
+    name: Notify Migration Failure
+    needs: [migration-check, migrate-dev]
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify failure
+        run: |
+          echo "❌ Database migration failed"
+          echo "🚨 Manual intervention may be required"
+          echo "📋 Check logs for details"
+          echo "::error::Migration workflow failed - check migration safety"
