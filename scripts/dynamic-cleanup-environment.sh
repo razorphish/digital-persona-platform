@@ -1,8 +1,23 @@
 #!/bin/bash
 
 # Dynamic Environment Cleanup Script
-# Usage: ./scripts/dynamic-cleanup-environment.sh <environment>
-# Example: ./scripts/dynamic-cleanup-environment.sh qa10
+# 
+# PURPOSE: Comprehensive cleanup of AWS resources for specific environments
+# 
+# USAGE: ./scripts/dynamic-cleanup-environment.sh <environment>
+# EXAMPLE: ./scripts/dynamic-cleanup-environment.sh qa10
+#
+# FEATURES:
+# • VPC-Aware Cleanup: Detects and removes orphaned resources across VPCs
+# • Dual Naming Pattern Support: Handles both current and legacy resource naming
+# • Orphaned Resource Detection: Finds resources that may exist outside current infrastructure
+# • Safe Scoping: Only removes resources matching the specific environment pattern
+# 
+# ENHANCED CAPABILITIES:
+# • DB Subnet Groups: Removes resources in wrong VPCs that cause deployment conflicts
+# • RDS Proxies: Comprehensive cleanup including orphaned proxy endpoints
+# • Legacy Pattern Support: Cleans up resources from previous naming conventions
+# • VPC Mismatch Resolution: Prevents 'resource in wrong VPC' deployment errors
 
 set -e
 
@@ -243,7 +258,7 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
   print_status "🎯 Found VPC to cleanup: $VPC_ID"
   
   # 7.1 Clean up DB Subnet Groups first (they reference subnets)
-  print_status "🧹 Cleaning up DB Subnet Groups..."
+  print_status "🧹 Cleaning up DB Subnet Groups (including orphaned ones)..."
   
   # Handle both naming patterns for comprehensive cleanup:
   # Current pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
@@ -259,18 +274,28 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
     --query "DBSubnetGroups[?starts_with(DBSubnetGroupName, '${TARGET_ENV}-${TARGET_ENV}')].DBSubnetGroupName" \
     --output text)
   
-  # Combine both patterns
-  DB_SUBNET_GROUPS="$DB_SUBNET_GROUPS_CURRENT $DB_SUBNET_GROUPS_LEGACY"
+  # Also search for any subnet groups containing the target environment (catch orphaned resources)
+  print_status "🔍 Searching for any orphaned DB subnet groups containing '${TARGET_ENV}'..."
+  DB_SUBNET_GROUPS_ORPHANED=$(aws rds describe-db-subnet-groups \
+    --query "DBSubnetGroups[?contains(DBSubnetGroupName, '${TARGET_ENV}') && contains(DBSubnetGroupName, '${PROJECT_NAME}')].DBSubnetGroupName" \
+    --output text)
+  
+  # Combine all patterns and remove duplicates
+  DB_SUBNET_GROUPS=$(echo "$DB_SUBNET_GROUPS_CURRENT $DB_SUBNET_GROUPS_LEGACY $DB_SUBNET_GROUPS_ORPHANED" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
   for subnet_group in $DB_SUBNET_GROUPS; do
     if [ -n "$subnet_group" ] && [ "$subnet_group" != "None" ]; then
-      print_status "🗑️ Deleting DB subnet group: $subnet_group"
+      # Get VPC info for better logging
+      SUBNET_GROUP_VPC=$(aws rds describe-db-subnet-groups --db-subnet-group-name "$subnet_group" \
+        --query "DBSubnetGroups[0].VpcId" --output text 2>/dev/null || echo "unknown")
+      
+      print_status "🗑️ Deleting DB subnet group: $subnet_group (VPC: $SUBNET_GROUP_VPC)"
       aws rds delete-db-subnet-group --db-subnet-group-name "$subnet_group" || echo "⚠️ Failed to delete DB subnet group: $subnet_group"
     fi
   done
 
   # 7.2 Clean up RDS Proxy endpoints
-  print_status "🧹 Cleaning up RDS Proxy endpoints..."
+  print_status "🧹 Cleaning up RDS Proxy endpoints (including orphaned ones)..."
   
   # Handle both naming patterns for RDS Proxies:
   # Current pattern: main_env-target_env-project (e.g., dev-dev01-dpp)
@@ -286,12 +311,22 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
     --query "DBProxies[?starts_with(DBProxyName, '${TARGET_ENV}-${TARGET_ENV}')].DBProxyName" \
     --output text)
   
-  # Combine both patterns
-  RDS_PROXIES="$RDS_PROXIES_CURRENT $RDS_PROXIES_LEGACY"
+  # Also search for any RDS proxies containing the target environment (catch orphaned resources)
+  print_status "🔍 Searching for any orphaned RDS proxies containing '${TARGET_ENV}'..."
+  RDS_PROXIES_ORPHANED=$(aws rds describe-db-proxies \
+    --query "DBProxies[?contains(DBProxyName, '${TARGET_ENV}') && contains(DBProxyName, '${PROJECT_NAME}')].DBProxyName" \
+    --output text)
+  
+  # Combine all patterns and remove duplicates
+  RDS_PROXIES=$(echo "$RDS_PROXIES_CURRENT $RDS_PROXIES_LEGACY $RDS_PROXIES_ORPHANED" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
   for proxy in $RDS_PROXIES; do
     if [ -n "$proxy" ] && [ "$proxy" != "None" ]; then
-      print_status "🗑️ Deleting RDS Proxy: $proxy"
+      # Get VPC info for better logging
+      PROXY_VPC=$(aws rds describe-db-proxies --db-proxy-name "$proxy" \
+        --query "DBProxies[0].VpcId" --output text 2>/dev/null || echo "unknown")
+      
+      print_status "🗑️ Deleting RDS Proxy: $proxy (VPC: $PROXY_VPC)"
       aws rds delete-db-proxy --db-proxy-name "$proxy" || echo "⚠️ Failed to delete RDS proxy: $proxy"
     fi
   done

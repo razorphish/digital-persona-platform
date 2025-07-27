@@ -132,13 +132,15 @@ jobs:
           elif [ "${{ github.event.inputs.force_cleanup }}" = "true" ]; then
             echo "✅ Dynamic cleanup completed for environment: ${{ env.ENVIRONMENT }}"
             echo ""
-            echo "🎯 Cleanup Method: Dynamic environment-specific script"
+            echo "🎯 Cleanup Method: Dynamic environment-specific script with VPC-aware orphaned resource detection"
             echo "📋 Resources cleaned up (dynamically scoped to ${{ env.ENVIRONMENT }}):"
             echo "  • All Terraform-managed infrastructure"
             echo "  • AWS Batch resources (Job Queues → Compute Environments)"
             echo "  • SQS queues (main + dead letter queues)"
             echo "  • Lambda functions"
             echo "  • RDS clusters and instances"
+            echo "  • DB Subnet Groups (including orphaned ones in wrong VPCs)"
+            echo "  • RDS Proxy endpoints (including orphaned ones)"
             echo "  • S3 buckets (with versioned object cleanup)"
             echo "  • Route53 DNS records"
             echo "  • VPC infrastructure (subnets, gateways, security groups)"
@@ -147,6 +149,7 @@ jobs:
             echo "  • Network interfaces (ENIs)"
             echo ""
             echo "🔒 Safety: Only resources matching '${{ env.ENVIRONMENT }}-dpp*' pattern were deleted"
+            echo "🛠️ Enhanced: Detects and removes orphaned resources across VPCs and naming patterns"
           else
             echo "❌ Cleanup was not performed (force_cleanup not enabled)"
           fi

@@ -378,15 +378,39 @@ jobs:
         run: |
           echo "📥 Step 3: Handling existing AWS resources..."
 
-          # Check and import existing RDS DB Subnet Group if it exists
+                    # Check and import existing RDS DB Subnet Group if it exists
           SUBNET_GROUP_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-db-subnet-group"
           echo "🔍 Checking for existing DB Subnet Group: $SUBNET_GROUP_NAME"
 
+          # Get current VPC ID that Terraform will use
+          CURRENT_VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-vpc" --query "Vpcs[0].VpcId" --output text)
+          echo "🌐 Current VPC for this environment: $CURRENT_VPC_ID"
+
           if aws rds describe-db-subnet-groups --db-subnet-group-name "$SUBNET_GROUP_NAME" --output text >/dev/null 2>&1; then
-            echo "📦 DB Subnet Group exists, importing to Terraform state..."
-            terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME" || echo "⚠️ Import failed or already in state"
+            # Check if the existing subnet group is in the correct VPC
+            EXISTING_VPC_ID=$(aws rds describe-db-subnet-groups --db-subnet-group-name "$SUBNET_GROUP_NAME" --query "DBSubnetGroups[0].VpcId" --output text)
+            echo "🔍 Existing subnet group VPC: $EXISTING_VPC_ID"
+            
+            if [ "$EXISTING_VPC_ID" = "$CURRENT_VPC_ID" ]; then
+              echo "✅ DB Subnet Group is in correct VPC, importing to Terraform state..."
+              terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME" || echo "⚠️ Import failed or already in state"
+            else
+              echo "❌ DB Subnet Group is in wrong VPC (${EXISTING_VPC_ID} vs ${CURRENT_VPC_ID})"
+              echo "🗑️ Deleting orphaned subnet group to prevent conflicts..."
+              aws rds delete-db-subnet-group --db-subnet-group-name "$SUBNET_GROUP_NAME" || echo "⚠️ Failed to delete orphaned subnet group"
+              echo "✅ Will create new subnet group in correct VPC"
+            fi
           else
             echo "✅ DB Subnet Group does not exist, will be created"
+          fi
+
+          # Also check for legacy pattern subnet groups and clean them up
+          LEGACY_SUBNET_GROUP_NAME="${ENVIRONMENT}-${ENVIRONMENT}-${PROJECT_NAME}-db-subnet-group"
+          echo "🔍 Checking for legacy pattern DB Subnet Group: $LEGACY_SUBNET_GROUP_NAME"
+
+          if aws rds describe-db-subnet-groups --db-subnet-group-name "$LEGACY_SUBNET_GROUP_NAME" --output text >/dev/null 2>&1; then
+            echo "🗑️ Found legacy subnet group, deleting to prevent conflicts..."
+            aws rds delete-db-subnet-group --db-subnet-group-name "$LEGACY_SUBNET_GROUP_NAME" || echo "⚠️ Failed to delete legacy subnet group"
           fi
 
           # Check and import existing CloudFront Origin Access Control
