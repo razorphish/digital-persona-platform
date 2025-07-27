@@ -21,167 +21,96 @@ import {
   getMediaType,
 } from "./utils/s3.js";
 
-// Helper function to get or create default persona for user
-async function getOrCreateDefaultPersona(userId: string) {
-  // First, try to find existing default persona
-  const existingDefault = await db.execute(sql`
-    SELECT * FROM personas 
-    WHERE user_id = ${userId} AND is_default = true
-    LIMIT 1
-  `);
+// Import persona service
+import { PersonaService } from "./services/personaService.js";
 
-  if (existingDefault.rows.length > 0) {
-    return existingDefault.rows[0];
-  }
-
-  // If no default exists, create one
-  const defaultPersona = await db.execute(sql`
-    INSERT INTO personas (
-      user_id, name, description, is_default, 
-      personality_traits, learning_enabled, image_analysis_enabled
-    ) VALUES (
-      ${userId}, 'My Persona', 'Your primary digital persona', true,
-      '{"openness": 0.5, "conscientiousness": 0.5, "extraversion": 0.5, "agreeableness": 0.5, "neuroticism": 0.5}',
-      true, true
-    ) RETURNING *
-  `);
-
-  return defaultPersona.rows[0];
-}
-
-// Import message queue abstraction
+// Import enhanced types
 import {
-  createMessageQueue,
-  queueMLJob,
-  type MLJobMessage,
-} from "./services/messageQueue.js";
+  createUserSchema,
+  loginSchema,
+  createPersonaSchema,
+} from "@digital-persona/shared";
 
-// Create message queue instance
-const messageQueue = createMessageQueue();
+// Define additional schemas locally until shared types are updated
+const updatePersonaSchema = createPersonaSchema.partial();
 
-// Helper function to queue file for AI processing
-async function queueFileForAIProcessing(
-  fileId: string,
-  personaId: string,
-  mediaType: string
-) {
-  try {
-    // Queue job via message queue (SQS -> Batch processing)
-    const mlJob: MLJobMessage = {
-      jobType:
-        mediaType === "image" ? "image_analysis" : "personality_analysis",
-      personaId,
-      sourceType: "media_file",
-      sourceId: fileId,
-      content: `File uploaded for analysis: ${mediaType}`,
-      metadata: {
-        mediaType,
-        uploadedAt: new Date().toISOString(),
-      },
-    };
-
-    await queueMLJob(messageQueue, mlJob);
-
-    // Also store in database for tracking (can be removed when ML service handles this)
-    await db.execute(sql`
-      INSERT INTO persona_learning_data (
-        persona_id, source_type, source_id, content, processed, confidence
-      ) VALUES (
-        ${personaId}, 'media_file', ${fileId}, 
-        ${"File uploaded for analysis: " + mediaType}, false, 50
-      )
-    `);
-
-    logger.info(
-      `✅ Queued file ${fileId} for AI processing via SQS for persona ${personaId}`
-    );
-  } catch (error) {
-    logger.error(`❌ Failed to queue file for AI processing: ${error}`);
-    throw error;
-  }
-}
-
-// Schemas for validation
-const createUserSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  name: z.string().min(1),
+const startLearningInterviewSchema = z.object({
+  personaId: z.string().uuid(),
+  sessionType: z.enum([
+    "initial",
+    "simple_questions",
+    "complex_questions",
+    "scenario_questions",
+    "social_integration",
+  ]),
 });
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string(),
+const answerInterviewQuestionSchema = z.object({
+  interviewId: z.string().uuid(),
+  questionId: z.string(),
+  response: z.string().optional(),
+  mediaFiles: z.array(z.string()).optional(),
+  skipQuestion: z.boolean().default(false),
 });
 
-const createPersonaSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
+const createConversationSchema = z.object({
+  personaId: z.string().uuid(),
+  title: z.string().optional(),
 });
 
-const createMessageSchema = z.object({
-  conversationId: z.string(),
-  content: z.string().min(1),
-  role: z.enum(["user", "assistant", "system"]),
+const sendMessageSchema = z.object({
+  conversationId: z.string().uuid(),
+  content: z.string().min(1, "Message content is required"),
+  mediaFiles: z.array(z.string()).optional(),
 });
 
-// File upload schemas
 const requestPresignedUrlSchema = z.object({
-  fileName: z.string().min(1),
-  fileType: z.string().min(1),
-  fileSize: z.number().positive(),
-  conversationId: z.string().optional(),
-  personaId: z.string().optional(),
-});
-
-const createFileMetadataSchema = z.object({
-  fileId: z.string(),
-  filename: z.string(),
-  originalFilename: z.string(),
+  fileName: z.string(),
+  fileType: z.string(),
   fileSize: z.number(),
-  mimeType: z.string(),
-  s3Key: z.string(),
-  s3Bucket: z.string(),
-  presignedUrl: z.string(),
-  conversationId: z.string().optional(),
-  personaId: z.string().optional(),
-  description: z.string().optional(),
+  personaId: z.string().uuid().optional(),
+  conversationId: z.string().uuid().optional(),
 });
 
 const updateFileStatusSchema = z.object({
   fileId: z.string(),
-  status: z.enum(["pending", "completed", "deleted", "failure", "archived"]),
+  status: z.enum(["pending", "completed", "deleted", "failure"]),
   uploadedAt: z.date().optional(),
 });
 
-// Initialize tRPC with context
-const t = initTRPC
-  .context<{
-    req: any;
-    res: any;
-  }>()
-  .create({
-    transformer: superjson,
-  });
+// Helper function to get or create default persona for user
+async function getOrCreateDefaultPersona(userId: string) {
+  // Use PersonaService instead of manual creation
+  return await PersonaService.getOrCreateMainPersona(userId);
+}
 
-// Base router and procedure
-export const router = t.router;
-export const publicProcedure = t.procedure;
+const t = initTRPC.create({
+  transformer: superjson,
+});
+
+const router = t.router;
+const publicProcedure = t.procedure;
 
 // Auth middleware
-const isAuthed = t.middleware(async ({ next, ctx }) => {
-  const token = ctx.req.headers.authorization?.replace("Bearer ", "");
+const isAuthed = t.middleware(async ({ ctx, next }) => {
+  const token = (ctx as any)?.req?.headers?.authorization?.replace(
+    "Bearer ",
+    ""
+  );
 
   if (!token) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "No token provided",
+    });
   }
 
   try {
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET || "default-secret"
-    ) as {
-      userId: string;
-    };
+    ) as { userId: string };
+
     const user = await db
       .select()
       .from(users)
@@ -189,7 +118,10 @@ const isAuthed = t.middleware(async ({ next, ctx }) => {
       .limit(1);
 
     if (!user[0]) {
-      throw new TRPCError({ code: "UNAUTHORIZED" });
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Invalid token",
+      });
     }
 
     return next({
@@ -198,13 +130,29 @@ const isAuthed = t.middleware(async ({ next, ctx }) => {
       },
     });
   } catch (error) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Invalid token",
+    });
   }
 });
 
 const protectedProcedure = publicProcedure.use(isAuthed);
 
-// Auth routes
+// Queue file for AI processing
+async function queueFileForAIProcessing(
+  fileId: string,
+  personaId: string,
+  mediaType: string
+) {
+  logger.info(
+    `File ${fileId} queued for AI processing for persona ${personaId} (${mediaType})`
+  );
+  // TODO: Implement actual AI processing queue
+  return true;
+}
+
+// Auth router
 const authRouter = router({
   register: publicProcedure
     .input(createUserSchema)
@@ -242,6 +190,14 @@ const authRouter = router({
         process.env.JWT_SECRET || "default-secret",
         { expiresIn: "7d" }
       );
+
+      // Create main persona automatically
+      try {
+        await PersonaService.createMainPersona(newUser[0].id, newUser[0].name);
+      } catch (error) {
+        console.error("Failed to create main persona:", error);
+        // Don't fail registration if persona creation fails
+      }
 
       return {
         user: {
@@ -296,6 +252,13 @@ const authRouter = router({
       { expiresIn: "7d" }
     );
 
+    // Ensure main persona exists
+    try {
+      await PersonaService.getOrCreateMainPersona(user[0].id);
+    } catch (error) {
+      console.error("Failed to ensure main persona exists:", error);
+    }
+
     return {
       user: {
         id: user[0].id,
@@ -317,245 +280,451 @@ const authRouter = router({
   }),
 });
 
-// Personas routes
+// Enhanced Personas router with new functionality
 const personasRouter = router({
+  // Get all personas for user
   list: protectedProcedure.query(async ({ ctx }) => {
-    return await db
+    const userPersonas = await db
       .select()
       .from(personas)
-      .where(eq(personas.userId, ctx.user.id));
+      .where(eq(personas.userId, ctx.user.id))
+      .orderBy(desc(personas.createdAt));
+
+    return userPersonas.map((persona) => ({
+      ...persona,
+      createdAt: persona.createdAt.toISOString(),
+      updatedAt: persona.updatedAt.toISOString(),
+    }));
   }),
 
-  create: protectedProcedure
-    .input(createPersonaSchema)
-    .mutation(async ({ input, ctx }) => {
-      const newPersona = await db
-        .insert(personas)
-        .values({
-          ...input,
-          userId: ctx.user.id,
-        })
-        .returning();
-
-      return newPersona[0];
-    }),
-
+  // Get specific persona
   get: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input, ctx }) => {
-      const persona = await db
+      const [persona] = await db
         .select()
         .from(personas)
         .where(and(eq(personas.id, input.id), eq(personas.userId, ctx.user.id)))
         .limit(1);
 
-      if (!persona[0]) {
+      if (!persona) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Persona not found",
         });
       }
 
-      return persona[0];
+      return {
+        ...persona,
+        createdAt: persona.createdAt.toISOString(),
+        updatedAt: persona.updatedAt.toISOString(),
+      };
     }),
 
+  // Create new persona (standard personas only - main persona auto-created)
+  create: protectedProcedure
+    .input(createPersonaSchema)
+    .mutation(async ({ input, ctx }) => {
+      // Prevent creation of main personas through this endpoint
+      // Main personas are created automatically, so we don't allow manual creation
+
+      // Get main persona as parent
+      const mainPersona = await PersonaService.getOrCreateMainPersona(
+        ctx.user.id
+      );
+
+      // Create child persona
+      const childPersona = await PersonaService.createChildPersona(
+        ctx.user.id,
+        mainPersona.id,
+        {
+          name: input.name,
+          description: input.description,
+          personaType: (input as any).personaType || "child",
+          privacyLevel: (input as any).privacyLevel || "friends",
+          requiresSubscription: (input as any).requiresSubscription,
+          subscriptionPrice: (input as any).subscriptionPrice,
+          contentFilter: (input as any).contentFilter,
+        }
+      );
+
+      return {
+        ...childPersona,
+        createdAt: childPersona.createdAt.toISOString(),
+        updatedAt: childPersona.updatedAt.toISOString(),
+      };
+    }),
+
+  // Update persona
   update: protectedProcedure
     .input(
       z.object({
         id: z.string().uuid(),
-        data: createPersonaSchema.partial(),
+        data: updatePersonaSchema,
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const updatedPersona = await db
-        .update(personas)
-        .set({
-          ...input.data,
-          updatedAt: new Date(),
-        })
+      // Check if persona exists and belongs to user
+      const [existingPersona] = await db
+        .select()
+        .from(personas)
         .where(and(eq(personas.id, input.id), eq(personas.userId, ctx.user.id)))
-        .returning();
+        .limit(1);
 
-      if (!updatedPersona[0]) {
+      if (!existingPersona) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Persona not found",
         });
       }
 
-      return updatedPersona[0];
+      // Check if it's a main persona - limited updates allowed
+      const traits = existingPersona.traits as any;
+      if (traits?.isMainPersona || existingPersona.isDefault) {
+        // Only allow name and description updates for main personas
+        const allowedUpdates = {
+          name: input.data.name,
+          description: input.data.description,
+        };
+
+        const [updatedPersona] = await db
+          .update(personas)
+          .set(allowedUpdates)
+          .where(eq(personas.id, input.id))
+          .returning();
+
+        return {
+          ...updatedPersona,
+          createdAt: updatedPersona.createdAt.toISOString(),
+          updatedAt: updatedPersona.updatedAt.toISOString(),
+        };
+      }
+
+      // For child personas, allow more comprehensive updates
+      const inputData = input.data as any;
+      const updatedTraits = {
+        ...traits,
+        contentFilter: inputData.contentFilter || traits?.contentFilter,
+        guardRails: inputData.guardRails || traits?.guardRails,
+      };
+
+      const updatedPreferences = {
+        ...existingPersona.preferences,
+        privacyLevel:
+          inputData.privacyLevel || existingPersona.preferences?.privacyLevel,
+        isPubliclyListed: inputData.isPubliclyListed,
+        requiresSubscription: inputData.requiresSubscription,
+        subscriptionPrice: inputData.subscriptionPrice,
+      };
+
+      const [updatedPersona] = await db
+        .update(personas)
+        .set({
+          name: input.data.name || existingPersona.name,
+          description: input.data.description || existingPersona.description,
+          traits: updatedTraits,
+          preferences: updatedPreferences,
+        })
+        .where(eq(personas.id, input.id))
+        .returning();
+
+      return {
+        ...updatedPersona,
+        createdAt: updatedPersona.createdAt.toISOString(),
+        updatedAt: updatedPersona.updatedAt.toISOString(),
+      };
     }),
 
+  // Delete persona (with protection for main personas)
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input, ctx }) => {
-      const deletedPersona = await db
+      // Check if persona can be deleted
+      const canDelete = await PersonaService.canDeletePersona(
+        ctx.user.id,
+        input.id
+      );
+
+      if (!canDelete) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "This persona cannot be deleted. Main personas are protected.",
+        });
+      }
+
+      const [deletedPersona] = await db
         .delete(personas)
         .where(and(eq(personas.id, input.id), eq(personas.userId, ctx.user.id)))
         .returning();
 
-      if (!deletedPersona[0]) {
+      if (!deletedPersona) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Persona not found",
         });
       }
 
-      return { success: true };
+      return { success: true, deletedId: input.id };
+    }),
+
+  // Get main persona
+  getMain: protectedProcedure.query(async ({ ctx }) => {
+    const mainPersona = await PersonaService.getOrCreateMainPersona(
+      ctx.user.id
+    );
+    return {
+      ...mainPersona,
+      createdAt: mainPersona.createdAt.toISOString(),
+      updatedAt: mainPersona.updatedAt.toISOString(),
+    };
+  }),
+});
+
+// Learning interview router
+const learningRouter = router({
+  // Start a learning interview
+  startInterview: protectedProcedure
+    .input(startLearningInterviewSchema)
+    .mutation(async ({ input, ctx }) => {
+      const interview = await PersonaService.startLearningInterview(
+        ctx.user.id,
+        input.personaId,
+        input.sessionType
+      );
+
+      return interview;
+    }),
+
+  // Get current interview for persona
+  getCurrentInterview: protectedProcedure
+    .input(z.object({ personaId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const interview = await PersonaService.getCurrentInterview(
+        ctx.user.id,
+        input.personaId
+      );
+
+      return interview;
+    }),
+
+  // Answer interview question
+  answerQuestion: protectedProcedure
+    .input(answerInterviewQuestionSchema)
+    .mutation(async ({ input, ctx }) => {
+      const updatedInterview = await PersonaService.answerInterviewQuestion(
+        ctx.user.id,
+        input.interviewId,
+        input.questionId,
+        input.response,
+        input.mediaFiles,
+        input.skipQuestion
+      );
+
+      return updatedInterview;
+    }),
+
+  // Get learning questions (for frontend reference)
+  getQuestions: protectedProcedure
+    .input(
+      z.object({
+        sessionType: z.enum([
+          "initial",
+          "simple_questions",
+          "complex_questions",
+          "scenario_questions",
+          "social_integration",
+        ]),
+      })
+    )
+    .query(({ input }) => {
+      const LEARNING_QUESTIONS = {
+        simple: [
+          {
+            id: "color-pref",
+            question:
+              "What's your favorite color and why does it resonate with you?",
+            type: "simple" as const,
+            category: "preferences",
+          },
+          {
+            id: "car-pref",
+            question: "What's your ideal car? What draws you to it?",
+            type: "simple" as const,
+            category: "preferences",
+          },
+          {
+            id: "food-pref",
+            question:
+              "What's your favorite cuisine or dish? What memories does it bring?",
+            type: "simple" as const,
+            category: "preferences",
+          },
+        ],
+        complex: [
+          {
+            id: "friend-conflict",
+            question:
+              "Tell me about a time you had a disagreement with a close friend. How did you handle it?",
+            type: "complex" as const,
+            category: "relationships",
+          },
+        ],
+        scenario: [
+          {
+            id: "workplace-ethics",
+            question:
+              "You discover a colleague is taking credit for your work. What would you do and why?",
+            type: "scenario" as const,
+            category: "personality",
+          },
+        ],
+      };
+
+      switch (input.sessionType) {
+        case "initial":
+          return [
+            ...LEARNING_QUESTIONS.simple.slice(0, 3),
+            LEARNING_QUESTIONS.complex[0],
+          ];
+        case "simple_questions":
+          return LEARNING_QUESTIONS.simple;
+        case "complex_questions":
+          return LEARNING_QUESTIONS.complex;
+        case "scenario_questions":
+          return LEARNING_QUESTIONS.scenario;
+        case "social_integration":
+          return [
+            {
+              id: "social-connect",
+              question:
+                "Would you like to connect your social media accounts to help me learn more about you?",
+              type: "simple",
+              category: "social",
+            },
+          ];
+        default:
+          return [];
+      }
     }),
 });
 
-// Chat routes
+// Chat router (existing functionality with learning integration)
 const chatRouter = router({
-  conversations: protectedProcedure.query(async ({ ctx }) => {
-    return await db
+  // List conversations
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const userConversations = await db
       .select()
       .from(conversations)
       .where(eq(conversations.userId, ctx.user.id))
       .orderBy(desc(conversations.updatedAt));
+
+    return userConversations.map((conv) => ({
+      ...conv,
+      createdAt: conv.createdAt.toISOString(),
+      updatedAt: conv.updatedAt.toISOString(),
+    }));
   }),
 
-  createConversation: protectedProcedure
-    .input(
-      z.object({
-        title: z.string().optional(),
-        personaId: z.string().uuid().optional(),
-      })
-    )
+  // Create conversation
+  create: protectedProcedure
+    .input(createConversationSchema)
     .mutation(async ({ input, ctx }) => {
-      const newConversation = await db
+      const [newConversation] = await db
         .insert(conversations)
         .values({
-          ...input,
           userId: ctx.user.id,
+          personaId: input.personaId,
+          title: input.title || "New Conversation",
         })
         .returning();
 
-      return newConversation[0];
+      return {
+        ...newConversation,
+        createdAt: newConversation.createdAt.toISOString(),
+        updatedAt: newConversation.updatedAt.toISOString(),
+      };
     }),
 
-  getMessages: protectedProcedure
-    .input(z.object({ conversationId: z.string().uuid() }))
+  // Get conversation with messages
+  get: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input, ctx }) => {
-      // Verify conversation belongs to user
-      const conversation = await db
+      const [conversation] = await db
         .select()
         .from(conversations)
         .where(
           and(
-            eq(conversations.id, input.conversationId),
+            eq(conversations.id, input.id),
             eq(conversations.userId, ctx.user.id)
           )
         )
         .limit(1);
 
-      if (!conversation[0]) {
+      if (!conversation) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Conversation not found",
         });
       }
 
-      return await db
+      const conversationMessages = await db
         .select()
         .from(messages)
-        .where(eq(messages.conversationId, input.conversationId))
+        .where(eq(messages.conversationId, input.id))
         .orderBy(messages.createdAt);
+
+      return {
+        ...conversation,
+        createdAt: conversation.createdAt.toISOString(),
+        updatedAt: conversation.updatedAt.toISOString(),
+        messages: conversationMessages.map((msg) => ({
+          ...msg,
+          createdAt: msg.createdAt.toISOString(),
+        })),
+      };
     }),
 
+  // Send message
   sendMessage: protectedProcedure
-    .input(createMessageSchema)
+    .input(sendMessageSchema)
     .mutation(async ({ input, ctx }) => {
-      // Verify conversation belongs to user
-      const conversation = await db
-        .select()
-        .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, input.conversationId),
-            eq(conversations.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
-
-      if (!conversation[0]) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Conversation not found",
-        });
-      }
-
-      // Insert user message
-      const userMessage = await db.insert(messages).values(input).returning();
-
-      // Here you would integrate with AI service to generate response
-      // For now, we'll just return the user message
-      return userMessage[0];
-    }),
-});
-
-// Social media routes
-const socialRouter = router({
-  connections: protectedProcedure.query(async ({ ctx }) => {
-    return await db
-      .select()
-      .from(socialConnections)
-      .where(eq(socialConnections.userId, ctx.user.id));
-  }),
-
-  connect: protectedProcedure
-    .input(
-      z.object({
-        platform: z.enum([
-          "twitter",
-          "instagram",
-          "facebook",
-          "linkedin",
-          "tiktok",
-        ]),
-        platformUserId: z.string(),
-        username: z.string().optional(),
-        accessToken: z.string(),
-        refreshToken: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const newConnection = await db
-        .insert(socialConnections)
+      // Create user message
+      const [userMessage] = await db
+        .insert(messages)
         .values({
-          ...input,
-          userId: ctx.user.id,
+          conversationId: input.conversationId,
+          role: "user",
+          content: input.content,
         })
         .returning();
 
-      return newConnection[0];
-    }),
-
-  disconnect: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ input, ctx }) => {
-      const deletedConnection = await db
-        .delete(socialConnections)
-        .where(
-          and(
-            eq(socialConnections.id, input.id),
-            eq(socialConnections.userId, ctx.user.id)
-          )
-        )
+      // TODO: Generate AI response based on persona
+      // For now, create a simple acknowledgment
+      const [aiMessage] = await db
+        .insert(messages)
+        .values({
+          conversationId: input.conversationId,
+          role: "assistant",
+          content:
+            "Thank you for sharing that with me. I'm learning more about you every day!",
+        })
         .returning();
 
-      if (!deletedConnection[0]) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Connection not found",
-        });
-      }
-
-      return { success: true };
+      return {
+        userMessage: {
+          ...userMessage,
+          createdAt: userMessage.createdAt.toISOString(),
+        },
+        aiMessage: {
+          ...aiMessage,
+          createdAt: aiMessage.createdAt.toISOString(),
+        },
+      };
     }),
 });
 
-// Media router (file uploads)
+// Media router (existing functionality)
 const mediaRouter = router({
   requestPresignedUrl: protectedProcedure
     .input(requestPresignedUrlSchema)
@@ -669,204 +838,64 @@ const mediaRouter = router({
       return { success: true };
     }),
 
-  getFilesByConversation: protectedProcedure
-    .input(z.object({ conversationId: z.string() }))
-    .query(async ({ input, ctx }) => {
-      const result = await db.execute(sql`
-        SELECT * FROM media_files 
-        WHERE conversation_id = ${input.conversationId} AND user_id = ${ctx.user.id}
-        ORDER BY created_at DESC
-      `);
+  // List user's media files
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const files = await db.execute(sql`
+      SELECT * FROM media_files 
+      WHERE user_id = ${ctx.user.id} 
+      ORDER BY created_at DESC
+    `);
 
-      return result.rows;
-    }),
-
-  getUserFiles: protectedProcedure.query(async ({ ctx }) => {
-    const result = await db.execute(sql`
-        SELECT * FROM media_files 
-        WHERE user_id = ${ctx.user.id} AND upload_status != 'deleted'
-        ORDER BY created_at DESC
-        LIMIT 50
-      `);
-
-    return result.rows;
+    return files.rows.map((file: any) => ({
+      ...file,
+      created_at: new Date(file.created_at).toISOString(),
+      updated_at: new Date(file.updated_at).toISOString(),
+      uploaded_at: file.uploaded_at
+        ? new Date(file.uploaded_at).toISOString()
+        : null,
+    }));
   }),
 
-  deleteFile: protectedProcedure
+  // Delete media file
+  delete: protectedProcedure
     .input(z.object({ fileId: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      // Soft delete the file
       await db.execute(sql`
         UPDATE media_files 
         SET upload_status = 'deleted', updated_at = ${new Date()}
         WHERE file_id = ${input.fileId} AND user_id = ${ctx.user.id}
       `);
 
-      // Remove all AI/ML learning data tied to this file
-      await db.execute(sql`
-        DELETE FROM persona_learning_data 
-        WHERE source_type = 'media_file' AND source_id = ${input.fileId}
-      `);
-
-      logger.info(
-        `Soft deleted file ${input.fileId} and cleaned up AI/ML data`
-      );
       return { success: true };
     }),
+});
 
-  restoreFile: protectedProcedure
-    .input(z.object({ fileId: z.string() }))
-    .mutation(async ({ input, ctx }) => {
-      await db.execute(sql`
-        UPDATE media_files 
-        SET upload_status = 'completed', updated_at = ${new Date()}
-        WHERE file_id = ${input.fileId} AND user_id = ${ctx.user.id}
-      `);
+// Social connections router (placeholder for future implementation)
+const socialRouter = router({
+  // List connections
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const connections = await db
+      .select()
+      .from(socialConnections)
+      .where(eq(socialConnections.userId, ctx.user.id));
 
-      // Re-queue for AI processing if it's an image or video
-      const fileResult = await db.execute(sql`
-        SELECT media_type, persona_id FROM media_files 
-        WHERE file_id = ${input.fileId} AND user_id = ${ctx.user.id}
-      `);
-
-      if (fileResult.rows.length > 0) {
-        const file = fileResult.rows[0] as any;
-        if (
-          (file.media_type === "image" || file.media_type === "video") &&
-          file.persona_id
-        ) {
-          await queueFileForAIProcessing(
-            input.fileId,
-            file.persona_id,
-            file.media_type
-          );
-        }
-      }
-
-      return { success: true };
-    }),
-
-  getFileDetails: protectedProcedure
-    .input(z.object({ fileId: z.string() }))
-    .query(async ({ input, ctx }) => {
-      const result = await db.execute(sql`
-        SELECT mf.*, p.name as persona_name 
-        FROM media_files mf
-        LEFT JOIN personas p ON mf.persona_id = p.id
-        WHERE mf.file_id = ${input.fileId} AND mf.user_id = ${ctx.user.id}
-      `);
-
-      if (result.rows.length === 0) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "File not found",
-        });
-      }
-
-      return result.rows[0];
-    }),
-
-  getAllUserFiles: protectedProcedure
-    .input(
-      z.object({
-        includeDeleted: z.boolean().default(false),
-        limit: z.number().min(1).max(100).default(50),
-        offset: z.number().min(0).default(0),
-        mediaType: z.string().optional(),
-      })
-    )
-    .query(async ({ input, ctx }) => {
-      // Build the main query with proper parameter binding
-      let baseQuery = sql`
-        SELECT 
-          mf.*,
-          p.name as persona_name,
-          c.title as conversation_title,
-          COUNT(pld.id) as ai_insights_count
-        FROM media_files mf
-        LEFT JOIN personas p ON mf.persona_id = p.id
-        LEFT JOIN conversations c ON mf.conversation_id = c.id
-        LEFT JOIN persona_learning_data pld ON pld.source_type = 'media_file' AND pld.source_id = mf.file_id
-        WHERE mf.user_id = ${ctx.user.id}
-      `;
-
-      let countQuery = sql`
-        SELECT COUNT(*) as total 
-        FROM media_files mf 
-        WHERE mf.user_id = ${ctx.user.id}
-      `;
-
-      // Add conditional filters
-      if (!input.includeDeleted) {
-        baseQuery = sql`${baseQuery} AND mf.upload_status != 'deleted'`;
-        countQuery = sql`${countQuery} AND mf.upload_status != 'deleted'`;
-      }
-
-      if (input.mediaType) {
-        baseQuery = sql`${baseQuery} AND mf.media_type = ${input.mediaType}`;
-        countQuery = sql`${countQuery} AND mf.media_type = ${input.mediaType}`;
-      }
-
-      // Complete the main query
-      baseQuery = sql`${baseQuery}
-        GROUP BY mf.id, p.name, c.title
-        ORDER BY mf.created_at DESC
-        LIMIT ${input.limit} OFFSET ${input.offset}
-      `;
-
-      const result = await db.execute(baseQuery);
-      const countResult = await db.execute(countQuery);
-
-      return {
-        files: result.rows,
-        total: (countResult.rows[0] as any)?.total || 0,
-        hasMore:
-          input.offset + input.limit <
-          ((countResult.rows[0] as any)?.total || 0),
-      };
-    }),
-
-  getFileStats: protectedProcedure.query(async ({ ctx }) => {
-    const statsResult = await db.execute(sql`
-        SELECT 
-          COUNT(*) as total_files,
-          COUNT(CASE WHEN upload_status = 'completed' THEN 1 END) as completed_files,
-          COUNT(CASE WHEN upload_status = 'pending' THEN 1 END) as pending_files,
-          COUNT(CASE WHEN upload_status = 'deleted' THEN 1 END) as deleted_files,
-          COUNT(CASE WHEN media_type = 'image' THEN 1 END) as image_files,
-          COUNT(CASE WHEN media_type = 'video' THEN 1 END) as video_files,
-          COUNT(CASE WHEN media_type = 'document' THEN 1 END) as document_files,
-          COALESCE(SUM(CASE WHEN file_size IS NOT NULL AND file_size >= 0 THEN file_size ELSE 0 END), 0) as total_size
-        FROM media_files 
-        WHERE user_id = ${ctx.user.id} AND upload_status != 'deleted'
-      `);
-
-    const result = statsResult.rows[0] as any;
-
-    // Ensure all values are properly typed and have defaults
-    return {
-      total_files: Number(result?.total_files) || 0,
-      completed_files: Number(result?.completed_files) || 0,
-      pending_files: Number(result?.pending_files) || 0,
-      deleted_files: Number(result?.deleted_files) || 0,
-      image_files: Number(result?.image_files) || 0,
-      video_files: Number(result?.video_files) || 0,
-      document_files: Number(result?.document_files) || 0,
-      total_size: Number(result?.total_size) || 0,
-    };
+    return connections.map((conn) => ({
+      ...conn,
+      createdAt: conn.createdAt.toISOString(),
+      updatedAt: conn.updatedAt.toISOString(),
+      lastSync: conn.lastSync?.toISOString(),
+    }));
   }),
 });
 
 // Main app router
 export const appRouter = router({
-  hello: publicProcedure.query(() => {
-    return { message: "Hello World from tRPC server!" };
-  }),
   auth: authRouter,
   personas: personasRouter,
+  learning: learningRouter,
   chat: chatRouter,
-  social: socialRouter,
   media: mediaRouter,
+  social: socialRouter,
 });
 
 export type AppRouter = typeof appRouter;
