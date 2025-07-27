@@ -461,23 +461,39 @@ for role in $IAM_ROLES; do
       fi
     done
     
-    # Delete instance profiles (with permission error handling)
-    INSTANCE_PROFILES=$(aws iam list-instance-profiles-for-role --role-name "$role" \
-      --query "InstanceProfiles[].InstanceProfileName" --output text 2>/dev/null)
+    # Delete instance profiles (with timeout and permission error handling)
+    print_status "🔍 Checking instance profiles for role: $role"
     
-    if [ $? -eq 0 ]; then
-      for profile_name in $INSTANCE_PROFILES; do
-        if [ -n "$profile_name" ] && [ "$profile_name" != "None" ]; then
-          aws iam remove-role-from-instance-profile --instance-profile-name "$profile_name" --role-name "$role" || echo "⚠️ Failed to remove role from instance profile"
-          aws iam delete-instance-profile --instance-profile-name "$profile_name" || echo "⚠️ Failed to delete instance profile: $profile_name"
-        fi
-      done
+    # Use timeout to prevent hanging on permission errors
+    if timeout 30 aws iam list-instance-profiles-for-role --role-name "$role" \
+      --query "InstanceProfiles[].InstanceProfileName" --output text > /tmp/instance_profiles_$$ 2>/dev/null; then
+      
+      INSTANCE_PROFILES=$(cat /tmp/instance_profiles_$$)
+      rm -f /tmp/instance_profiles_$$
+      
+      if [ -n "$INSTANCE_PROFILES" ] && [ "$INSTANCE_PROFILES" != "None" ]; then
+        for profile_name in $INSTANCE_PROFILES; do
+          if [ -n "$profile_name" ] && [ "$profile_name" != "None" ]; then
+            print_status "🗑️ Removing role from instance profile: $profile_name"
+            aws iam remove-role-from-instance-profile --instance-profile-name "$profile_name" --role-name "$role" || echo "⚠️ Failed to remove role from instance profile"
+            aws iam delete-instance-profile --instance-profile-name "$profile_name" || echo "⚠️ Failed to delete instance profile: $profile_name"
+          fi
+        done
+      else
+        print_status "✅ No instance profiles found for role: $role"
+      fi
     else
-      print_warning "⚠️ Insufficient permissions to list instance profiles for role: $role (skipping)"
+      print_warning "⚠️ Insufficient permissions or timeout listing instance profiles for role: $role (skipping)"
+      rm -f /tmp/instance_profiles_$$
     fi
     
-    # Delete the role
-    aws iam delete-role --role-name "$role" || echo "⚠️ Failed to delete IAM role: $role"
+    # Delete the role (with timeout to prevent hanging)
+    print_status "🗑️ Deleting IAM role: $role"
+    if timeout 30 aws iam delete-role --role-name "$role" 2>/dev/null; then
+      print_success "✅ Deleted IAM role: $role"
+    else
+      print_warning "⚠️ Failed to delete IAM role: $role (timeout or permission denied)"
+    fi
   fi
 done
 
