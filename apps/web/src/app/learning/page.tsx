@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -264,13 +264,32 @@ function MicrophoneSetupInstructions({
           )}
         </div>
 
+        {/* Permission Request */}
+        <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+          <h5 className="font-semibold text-blue-800 mb-2">
+            🔐 Request Microphone Permission
+          </h5>
+          <p className="text-blue-700 text-sm mb-3">
+            Click to request microphone access from your browser:
+          </p>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={onTestMicrophone}
+              disabled={isTesting}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-300"
+            >
+              {isTesting ? "Requesting..." : "🔓 Request Microphone Access"}
+            </button>
+          </div>
+        </div>
+
         {/* Microphone Test */}
         <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
           <h5 className="font-semibold text-yellow-800 mb-2">
             🧪 Test Your Microphone
           </h5>
           <p className="text-yellow-700 text-sm mb-3">
-            Click the button below to test if your microphone is working
+            After granting permission, test if your microphone is working
             properly:
           </p>
           <div className="flex items-center space-x-3">
@@ -365,6 +384,10 @@ function LearningPageContent() {
   const [micTestResult, setMicTestResult] = useState<
     "success" | "failed" | null
   >(null);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(
+    null
+  );
   const isRecordingRef = useRef(false);
 
   // tRPC queries
@@ -420,17 +443,102 @@ function LearningPageContent() {
     }
   }, [mainPersona, selectedPersonaId]);
 
+  // Automatically request microphone permission when component loads
+  useEffect(() => {
+    const autoRequestMicPermission = async () => {
+      // Only auto-request if we haven't checked yet and user is authenticated
+      if (permissionGranted === null && user) {
+        console.log("Auto-requesting microphone permission on component load");
+        await requestMicrophonePermission();
+      }
+    };
+
+    // Add a delay to avoid requesting permission immediately on page load
+    const timer = setTimeout(autoRequestMicPermission, 1000);
+    return () => clearTimeout(timer);
+  }, [user, permissionGranted]);
+
+  // Request microphone permissions proactively
+  const requestMicrophonePermission = useCallback(async () => {
+    if (permissionGranted === true) {
+      console.log("Microphone permission already granted");
+      return true;
+    }
+
+    try {
+      console.log("Requesting microphone permission...");
+      setIsRequestingPermission(true);
+      setRecordingError(null);
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Audio recording is not supported in this browser");
+      }
+
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        },
+      });
+
+      // Stop the stream immediately - we just wanted to get permission
+      stream.getTracks().forEach((track) => track.stop());
+
+      console.log("Microphone permission granted successfully");
+      setPermissionGranted(true);
+      setIsRequestingPermission(false);
+      return true;
+    } catch (error) {
+      console.error("Microphone permission request failed:", error);
+
+      let errorMessage = "Could not access microphone.";
+
+      if (error instanceof Error) {
+        if (error.name === "NotAllowedError") {
+          errorMessage =
+            "Microphone access was denied. Please click the microphone icon in your browser's address bar and allow access, then try again.";
+        } else if (error.name === "NotFoundError") {
+          errorMessage =
+            "No microphone found. Please connect a microphone and click 'Test Microphone' below.";
+        } else if (error.name === "NotSupportedError") {
+          errorMessage =
+            "Audio recording is not supported in this browser. Try using Chrome, Firefox, or Safari.";
+        } else if (error.name === "OverconstrainedError") {
+          errorMessage =
+            "Microphone settings are not supported. Try a different microphone.";
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+
+      setRecordingError(errorMessage);
+      setPermissionGranted(false);
+      setIsRequestingPermission(false);
+      return false;
+    }
+  }, [permissionGranted]);
+
   // Audio recording functions
   const startRecording = async () => {
     try {
       setRecordingError(null);
-      console.log("Requesting microphone access...");
+      console.log("Starting recording...");
+
+      // First, ensure we have microphone permission
+      const hasPermission = await requestMicrophonePermission();
+      if (!hasPermission) {
+        console.log("Recording cancelled - no microphone permission");
+        return;
+      }
 
       // Check if mediaDevices is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Audio recording is not supported in this browser");
       }
 
+      console.log("Creating media stream for recording...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -1070,23 +1178,41 @@ function LearningPageContent() {
                           <p className="text-xs text-gray-600">
                             {isRecording
                               ? "Recording... Speak naturally"
+                              : isRequestingPermission
+                              ? "Requesting microphone permission..."
+                              : permissionGranted === false
+                              ? "Microphone access denied - check browser settings"
+                              : permissionGranted === true
+                              ? "Microphone ready - Record your thoughts for richer personality insights"
                               : "Record your thoughts for richer personality insights"}
                           </p>
                         </div>
                       </div>
                       <button
                         onClick={toggleRecording}
-                        disabled={!!recordingError}
+                        disabled={
+                          !!recordingError ||
+                          isRequestingPermission ||
+                          permissionGranted === false
+                        }
                         className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                           isRecording
                             ? "bg-red-600 text-white hover:bg-red-700"
                             : recordedAudio
                             ? "bg-green-600 text-white hover:bg-green-700"
+                            : permissionGranted === false
+                            ? "bg-gray-400 text-gray-700 cursor-not-allowed"
+                            : isRequestingPermission
+                            ? "bg-yellow-500 text-white cursor-wait"
                             : "bg-purple-600 text-white hover:bg-purple-700"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {isRecording
                           ? "🔴 Stop"
+                          : isRequestingPermission
+                          ? "🔄 Getting Permission..."
+                          : permissionGranted === false
+                          ? "🚫 Mic Blocked"
                           : recordedAudio
                           ? "🎵 Re-record"
                           : "🎤 Record"}
@@ -1383,23 +1509,41 @@ function LearningPageContent() {
                           <p className="text-xs text-gray-600">
                             {isRecording
                               ? "Recording... Speak clearly into your microphone"
+                              : isRequestingPermission
+                              ? "Requesting microphone permission..."
+                              : permissionGranted === false
+                              ? "Microphone access denied - check browser settings below"
+                              : permissionGranted === true
+                              ? "Microphone ready - Record your answer for better personality analysis"
                               : "Record your answer for better personality analysis"}
                           </p>
                         </div>
                       </div>
                       <button
                         onClick={toggleRecording}
-                        disabled={!!recordingError}
+                        disabled={
+                          !!recordingError ||
+                          isRequestingPermission ||
+                          permissionGranted === false
+                        }
                         className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                           isRecording
                             ? "bg-red-600 text-white hover:bg-red-700"
                             : recordedAudio
                             ? "bg-green-600 text-white hover:bg-green-700"
+                            : permissionGranted === false
+                            ? "bg-gray-400 text-gray-700 cursor-not-allowed"
+                            : isRequestingPermission
+                            ? "bg-yellow-500 text-white cursor-wait"
                             : "bg-purple-600 text-white hover:bg-purple-700"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {isRecording
                           ? "🔴 Stop Recording"
+                          : isRequestingPermission
+                          ? "🔄 Getting Permission..."
+                          : permissionGranted === false
+                          ? "🚫 Microphone Blocked"
                           : recordedAudio
                           ? "🎵 Re-record"
                           : "🎤 Start Recording"}
