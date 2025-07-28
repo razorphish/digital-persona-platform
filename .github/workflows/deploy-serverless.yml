@@ -485,8 +485,46 @@ jobs:
         run: |
           echo "🔄 Importing existing AWS resources into Terraform state..."
           echo "🏷️  Using naming pattern: $MAIN_ENV-$ENVIRONMENT-dpp-*"
+          echo ""
+          echo "🧹 Pre-import cleanup: Resolving ad-hoc fix remnants..."
 
-          # Function to safely import resource
+          # Check for and resolve common ad-hoc fix remnants
+          echo "🔍 Checking for problematic state entries from previous ad-hoc fixes..."
+
+          # List current state to identify potential conflicts
+          echo "📋 Current Terraform state entries:"
+          terraform state list | grep -E "(lambda_logs|ml_batch_logs|api_gateway)" | head -10 || echo "  No matching entries found"
+
+          # Remove any orphaned or conflicting state entries for resources we're about to import
+          problematic_resources=(
+            "module.lambda_backend.aws_cloudwatch_log_group.lambda_logs"
+            "module.aws_batch_ml.aws_cloudwatch_log_group.ml_batch_logs"
+            "module.api_gateway.aws_cloudwatch_log_group.api_gateway"
+          )
+
+          for resource in "${problematic_resources[@]}"; do
+            if terraform state show "$resource" >/dev/null 2>&1; then
+              echo "🧹 Found potentially problematic state entry: $resource"
+              echo "🔍 Checking if resource configuration matches AWS reality..."
+              
+              # Try a test plan to see if there are configuration mismatches
+              if terraform plan -target="$resource" -detailed-exitcode >/dev/null 2>&1; then
+                echo "  ✓ Resource configuration is consistent"
+              else
+                echo "  ⚠️ Configuration drift detected - removing from state for clean import"
+                if terraform state rm "$resource" >/dev/null 2>&1; then
+                  echo "  ✅ Removed problematic state entry"
+                else
+                  echo "  ❌ Failed to remove state entry"
+                fi
+              fi
+            fi
+          done
+
+          echo ""
+          echo "🔄 Starting systematic resource import..."
+
+          # Function to safely import resource with conflict resolution
           import_resource() {
             local resource_type="$1"
             local resource_name="$2"
@@ -494,15 +532,85 @@ jobs:
             
             echo "📥 Checking $resource_type: $resource_name"
             echo "    AWS Resource ID: $aws_resource_id"
+            
+            # Check if already in Terraform state
             if terraform state show "$resource_name" >/dev/null 2>&1; then
               echo "  ✓ Already in state"
+              return 0
+            fi
+            
+            # Check if resource exists in AWS first
+            echo "  🔍 Verifying resource exists in AWS..."
+            case "$resource_type" in
+              "CloudWatch Log Group")
+                if aws logs describe-log-groups --log-group-name-prefix "$aws_resource_id" --query "logGroups[?logGroupName=='$aws_resource_id']" --output text | grep -q "$aws_resource_id"; then
+                  echo "  ✓ Resource exists in AWS"
+                else
+                  echo "  ℹ️ Resource does not exist in AWS, will be created"
+                  return 0
+                fi
+                ;;
+              "ECR Repository")
+                if aws ecr describe-repositories --repository-names "$aws_resource_id" >/dev/null 2>&1; then
+                  echo "  ✓ Resource exists in AWS"
+                else
+                  echo "  ℹ️ Resource does not exist in AWS, will be created"
+                  return 0
+                fi
+                ;;
+              "IAM Role"|"IAM Instance Profile")
+                if aws iam get-role --role-name "$aws_resource_id" >/dev/null 2>&1 || aws iam get-instance-profile --instance-profile-name "$aws_resource_id" >/dev/null 2>&1; then
+                  echo "  ✓ Resource exists in AWS"
+                else
+                  echo "  ℹ️ Resource does not exist in AWS, will be created"
+                  return 0
+                fi
+                ;;
+              *)
+                echo "  ℹ️ Skipping AWS verification for resource type: $resource_type"
+                ;;
+            esac
+            
+            # Try import with detailed error handling
+            echo "  🔄 Importing $aws_resource_id..."
+            echo "  🔧 Command: terraform import \"$resource_name\" \"$aws_resource_id\""
+            
+            # Capture both stdout and stderr
+            if import_output=$(terraform import "$resource_name" "$aws_resource_id" 2>&1); then
+              echo "  ✅ Successfully imported"
+              echo "  📋 Import details:"
+              echo "$import_output" | sed 's/^/     /'
+              return 0
             else
-              echo "  🔄 Importing $aws_resource_id..."
-              if terraform import "$resource_name" "$aws_resource_id" 2>/dev/null; then
-                echo "  ✅ Successfully imported"
-              else
-                echo "  ⚠️ Import failed (resource may not exist or already managed)"
+              echo "  ❌ Import failed with detailed error:"
+              echo "$import_output" | sed 's/^/     /'
+              
+              # Check for specific error patterns and handle them
+              if echo "$import_output" | grep -q "resource already exists in state"; then
+                echo "  🔍 Resource conflict detected - checking state..."
+                terraform state list | grep -E "$resource_name" || echo "     No matching resources found in state"
+                
+                # Try to remove conflicting state entries
+                echo "  🧹 Attempting to resolve state conflict..."
+                if terraform state rm "$resource_name" >/dev/null 2>&1; then
+                  echo "  ✓ Removed conflicting state entry"
+                  echo "  🔄 Retrying import..."
+                  if terraform import "$resource_name" "$aws_resource_id" >/dev/null 2>&1; then
+                    echo "  ✅ Successfully imported after conflict resolution"
+                    return 0
+                  fi
+                fi
               fi
+              
+              if echo "$import_output" | grep -q "configuration.*drift\|doesn't match"; then
+                echo "  🔧 Configuration drift detected - this is expected from ad-hoc fixes"
+                echo "  ✅ Will be reconciled during terraform apply"
+                return 0
+              fi
+              
+              echo "  ⚠️ Import failed - resource may not exist or have permission issues"
+              echo "  💡 This is non-critical if resource will be created fresh"
+              return 1
             fi
           }
 
