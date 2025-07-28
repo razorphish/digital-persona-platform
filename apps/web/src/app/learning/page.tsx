@@ -2072,14 +2072,36 @@ function LearningPageContent() {
                           onDiagnoseAudio={async () => {
                             const diagnostics = await diagnoseAudioDevices();
                             console.log("🔍 Manual diagnostics:", diagnostics);
+
+                            // Type guard to check if devices has audioInputs property
+                            const hasAudioInputs =
+                              diagnostics.devices &&
+                              typeof diagnostics.devices === "object" &&
+                              !Array.isArray(diagnostics.devices) &&
+                              "audioInputs" in diagnostics.devices;
+
+                            // Type assertion for devices when hasAudioInputs is true
+                            const audioDevices = hasAudioInputs
+                              ? (diagnostics.devices as {
+                                  audioInputs: {
+                                    deviceId: string;
+                                    label: string;
+                                    groupId: string;
+                                  }[];
+                                  audioOutputs: number;
+                                  videoInputs: number;
+                                })
+                              : null;
+
                             alert(
                               `Audio Device Diagnostics:\n\n${
-                                diagnostics.success
+                                diagnostics.success &&
+                                hasAudioInputs &&
+                                audioDevices
                                   ? `✅ Found ${
-                                      diagnostics.devices.audioInputs?.length ||
-                                      0
+                                      audioDevices.audioInputs?.length || 0
                                     } microphone(s)\n\nDevices:\n${
-                                      diagnostics.devices.audioInputs
+                                      audioDevices.audioInputs
                                         ?.map((d) => `• ${d.label}`)
                                         .join("\n") || "None"
                                     }`
@@ -2434,14 +2456,36 @@ function LearningPageContent() {
                           onDiagnoseAudio={async () => {
                             const diagnostics = await diagnoseAudioDevices();
                             console.log("🔍 Manual diagnostics:", diagnostics);
+
+                            // Type guard to check if devices has audioInputs property
+                            const hasAudioInputs =
+                              diagnostics.devices &&
+                              typeof diagnostics.devices === "object" &&
+                              !Array.isArray(diagnostics.devices) &&
+                              "audioInputs" in diagnostics.devices;
+
+                            // Type assertion for devices when hasAudioInputs is true
+                            const audioDevices = hasAudioInputs
+                              ? (diagnostics.devices as {
+                                  audioInputs: {
+                                    deviceId: string;
+                                    label: string;
+                                    groupId: string;
+                                  }[];
+                                  audioOutputs: number;
+                                  videoInputs: number;
+                                })
+                              : null;
+
                             alert(
                               `Audio Device Diagnostics:\n\n${
-                                diagnostics.success
+                                diagnostics.success &&
+                                hasAudioInputs &&
+                                audioDevices
                                   ? `✅ Found ${
-                                      diagnostics.devices.audioInputs?.length ||
-                                      0
+                                      audioDevices.audioInputs?.length || 0
                                     } microphone(s)\n\nDevices:\n${
-                                      diagnostics.devices.audioInputs
+                                      audioDevices.audioInputs
                                         ?.map((d) => `• ${d.label}`)
                                         .join("\n") || "None"
                                     }`
