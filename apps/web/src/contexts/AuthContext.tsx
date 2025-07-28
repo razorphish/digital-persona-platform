@@ -31,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
 
   // Re-enable tRPC mutations for proper API calls
@@ -39,60 +40,119 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Centralized logout function
   const logout = useCallback(() => {
+    console.log("Logging out user");
     AuthUtils.clearTokens();
     setUser(null);
     setError(null);
+    setIsLoading(false);
+    // Keep isInitialized as true since we've explicitly logged out
     router.push("/");
   }, [router]);
 
-  // Enhanced authentication checking
+  // Enhanced authentication checking with better error handling
   const checkAuthState = useCallback(() => {
-    const tokens = AuthUtils.getTokens();
+    try {
+      console.log("Checking auth state...");
 
-    if (!tokens?.accessToken) {
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
+      // Ensure we're on the client side
+      if (typeof window === "undefined") {
+        console.log("Server side - skipping auth check");
+        setIsLoading(false);
+        return;
+      }
 
-    // Check if token is expired
-    if (AuthUtils.isTokenExpired(tokens.accessToken)) {
-      console.warn("Token expired, logging out");
-      AuthUtils.clearTokens();
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
-
-    // Extract user data from valid token
-    const userData = AuthUtils.getUserFromToken(tokens.accessToken);
-
-    // Be less strict - only require id and email, name is optional
-    if (userData && userData.id && userData.email) {
-      setUser({
-        id: userData.id,
-        email: userData.email,
-        name: userData.name || "User", // Fallback if name is missing
-        createdAt: new Date().toISOString(),
+      const tokens = AuthUtils.getTokens();
+      console.log("Retrieved tokens:", {
+        hasAccessToken: !!tokens?.accessToken,
       });
-    } else {
-      console.warn("Invalid token payload - missing id or email, logging out");
-      AuthUtils.clearTokens();
-      setUser(null);
-    }
 
-    setIsLoading(false);
+      if (!tokens?.accessToken) {
+        console.log("No access token found - user not authenticated");
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Check if token is expired (with more graceful error handling)
+      const isExpired = AuthUtils.isTokenExpired(tokens.accessToken);
+      console.log("Token expiration check:", { isExpired });
+
+      if (isExpired) {
+        console.warn("Token expired, clearing auth state");
+        AuthUtils.clearTokens();
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Extract user data from valid token (with better error handling)
+      const userData = AuthUtils.getUserFromToken(tokens.accessToken);
+      console.log("Extracted user data:", {
+        userData,
+        hasId: !!userData?.id,
+        hasEmail: !!userData?.email,
+      });
+
+      // More lenient validation - only require basic fields
+      if (userData && (userData.id || userData.sub) && userData.email) {
+        const authenticatedUser = {
+          id: userData.id || userData.sub || "unknown",
+          email: userData.email,
+          name: userData.name || userData.email.split("@")[0] || "User", // More fallbacks
+          createdAt: userData.createdAt || new Date().toISOString(),
+        };
+
+        console.log("Setting authenticated user:", authenticatedUser);
+        setUser(authenticatedUser);
+      } else {
+        console.warn("Invalid token payload - missing critical fields:", {
+          userData,
+        });
+        // Don't immediately clear tokens on first load - token might be valid but format different
+        // Instead, set user to null but keep token for potential recovery
+        setUser(null);
+      }
+
+      setIsLoading(false);
+      setIsInitialized(true);
+    } catch (error) {
+      console.error("Error checking auth state:", error);
+      // On error, don't clear tokens immediately - might be temporary issue
+      setUser(null);
+      setIsLoading(false);
+      setIsInitialized(true);
+    }
   }, []);
 
-  // Check for existing authentication on mount
+  // Check for existing authentication on mount (only once after hydration)
   useEffect(() => {
-    checkAuthState();
-  }, [checkAuthState]);
+    // Add a small delay to ensure client-side hydration is complete
+    const timer = setTimeout(() => {
+      if (!isInitialized) {
+        console.log("Initializing auth state on mount");
+        checkAuthState();
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, []); // Empty dependency array - only run once on mount
+
+  // Re-check auth state when explicitly requested
+  useEffect(() => {
+    if (isInitialized) {
+      console.log("Re-checking auth state on demand");
+      checkAuthState();
+    }
+  }, [checkAuthState, isInitialized]);
 
   // Periodic token validation (every 5 minutes)
   useEffect(() => {
+    // Only start periodic validation after initialization
+    if (!isInitialized) return;
+
     const interval = setInterval(() => {
       if (user) {
+        console.log("Periodic token validation check");
         const tokens = AuthUtils.getTokens();
         if (
           !tokens?.accessToken ||
@@ -105,17 +165,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 5 * 60 * 1000); // 5 minutes
 
     return () => clearInterval(interval);
-  }, [user, logout]);
+  }, [user, logout, isInitialized]);
 
   // Listen for storage changes (token updates in other tabs)
   useEffect(() => {
+    // Only listen for storage changes after initialization
+    if (!isInitialized) return;
+
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "accessToken") {
+        console.log("Storage change detected for accessToken:", {
+          newValue: !!e.newValue,
+          oldValue: !!e.oldValue,
+        });
+
         if (e.newValue === null) {
           // Token was removed in another tab
+          console.log("Token removed in another tab, logging out");
           setUser(null);
+          setError(null);
         } else {
           // Token was updated in another tab
+          console.log("Token updated in another tab, re-checking auth state");
           checkAuthState();
         }
       }
@@ -123,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, [checkAuthState]);
+  }, [checkAuthState, isInitialized]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -142,6 +213,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Set user state
       setUser(result.user);
+      setError(null);
+      setIsInitialized(true);
+
+      console.log("Login successful, user authenticated:", result.user);
 
       // Don't redirect here - let AuthMiddleware handle all auth-based redirects
       // This prevents race conditions between login redirect and middleware redirect
@@ -178,6 +253,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Set user state
       setUser(result.user);
+      setError(null);
+      setIsInitialized(true);
+
+      console.log("Registration successful, user authenticated:", result.user);
 
       // Don't redirect here - let AuthMiddleware handle all auth-based redirects
       // This prevents race conditions between register redirect and middleware redirect

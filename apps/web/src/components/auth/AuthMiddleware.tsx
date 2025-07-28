@@ -17,6 +17,15 @@ export function AuthMiddleware() {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Add debug logging
+  console.log("AuthMiddleware check:", {
+    pathname,
+    isLoading,
+    isAuthenticated,
+    hasUser: !!user,
+    currentTime: new Date().toISOString(),
+  });
+
   // Define protected routes that require authentication (memoized for performance)
   const protectedRoutes = useMemo(
     () => [
@@ -26,6 +35,9 @@ export function AuthMiddleware() {
       "/social",
       "/analytics",
       "/personas",
+      "/learning",
+      "/monetization",
+      "/privacy",
     ],
     []
   );
@@ -43,7 +55,10 @@ export function AuthMiddleware() {
 
   useEffect(() => {
     // Skip redirect logic during initial loading
-    if (isLoading) return;
+    if (isLoading) {
+      console.log("AuthMiddleware: Still loading, skipping redirects");
+      return;
+    }
 
     const isProtectedRoute = protectedRoutes.some((route) =>
       pathname.startsWith(route)
@@ -51,11 +66,26 @@ export function AuthMiddleware() {
     const isPublicRoute = publicRoutes.some((route) => pathname === route);
     const isAuthRoute = pathname.startsWith("/auth/");
 
-    // Handle protected routes
+    console.log("AuthMiddleware: Route analysis:", {
+      isProtectedRoute,
+      isPublicRoute,
+      isAuthRoute,
+      isAuthenticated,
+    });
+
+    // Handle protected routes - but be less aggressive on first load
     if (isProtectedRoute && !isAuthenticated) {
-      console.warn(`Access denied to protected route: ${pathname}`);
-      router.replace("/auth/login");
-      return;
+      // Give a small delay to allow for auth state restoration
+      const timer = setTimeout(() => {
+        // Re-check authentication state before redirecting
+        const tokens = AuthUtils.getTokens();
+        if (!tokens?.accessToken) {
+          console.warn(`Access denied to protected route: ${pathname}`);
+          router.replace("/auth/login");
+        }
+      }, 200);
+
+      return () => clearTimeout(timer);
     }
 
     // Redirect authenticated users away from auth pages
