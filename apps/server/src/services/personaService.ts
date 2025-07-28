@@ -194,6 +194,7 @@ export class PersonaService {
       | "complex_questions"
       | "scenario_questions"
       | "social_integration"
+      | "interactive_discussion"
   ) {
     console.log(
       `Learning interview started for persona ${personaId}, session type: ${sessionType}`
@@ -225,6 +226,19 @@ export class PersonaService {
               "Would you like to connect your social media accounts to help me learn more about you?",
             type: "simple",
             category: "social",
+          },
+        ];
+        break;
+      case "interactive_discussion":
+        questions = [
+          {
+            id: "open-discussion-start",
+            question:
+              "Hi! I'm here to have a natural conversation with you to better understand your personality. Feel free to talk about anything on your mind - your day, interests, thoughts, or ask me questions. What would you like to discuss?",
+            type: "discussion",
+            category: "open_conversation",
+            isOpenEnded: true,
+            allowFollowUp: true,
           },
         ];
         break;
@@ -552,6 +566,40 @@ export class PersonaService {
         }
       }
 
+      // Enhanced analysis for open conversation data
+      if (
+        question.category === "open_conversation" ||
+        question.type === "discussion"
+      ) {
+        insights.conversationalData = {
+          responseLength: response.length,
+          topicFreedom: "high", // User chose their own topic
+          naturalExpression: true,
+          conversationFlow: "organic",
+          hasAudioData: mediaFileIds && mediaFileIds.length > 0,
+          timestamp: new Date(),
+        };
+
+        // Analyze natural conversation patterns
+        const responseWords = response.toLowerCase();
+        const wordCount = response.split(/\s+/).length;
+
+        insights.communicationStyle = {
+          verbosity:
+            wordCount > 50
+              ? "detailed"
+              : wordCount > 20
+              ? "moderate"
+              : "concise",
+          emotionalExpression:
+            responseWords.includes("feel") || responseWords.includes("emotion")
+              ? "high"
+              : "moderate",
+          questionAsking: response.includes("?") ? "inquisitive" : "direct",
+          topicInitiation: "self_directed", // User initiated the topic
+        };
+      }
+
       // Analyze response for personality traits
       if (question.category === "preferences") {
         insights.preferences = {
@@ -560,7 +608,10 @@ export class PersonaService {
         };
       }
 
-      if (question.category === "personality") {
+      if (
+        question.category === "personality" ||
+        question.category === "open_conversation"
+      ) {
         // Extract personality indicators from response
         const responseWords = response.toLowerCase();
         if (

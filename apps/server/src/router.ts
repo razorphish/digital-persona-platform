@@ -42,6 +42,7 @@ const startLearningInterviewSchema = z.object({
     "complex_questions",
     "scenario_questions",
     "social_integration",
+    "interactive_discussion",
   ]),
 });
 

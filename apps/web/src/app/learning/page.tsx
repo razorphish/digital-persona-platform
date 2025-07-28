@@ -17,7 +17,8 @@ interface LearningInterview {
     | "simple_questions"
     | "complex_questions"
     | "scenario_questions"
-    | "social_integration";
+    | "social_integration"
+    | "interactive_discussion";
   status: string;
   progress?: {
     currentQuestionIndex: number;
@@ -32,12 +33,14 @@ interface LearningInterview {
 
 interface InterviewQuestion {
   id: string;
-  type: "simple" | "complex" | "scenario" | "choice" | "media";
+  type: "simple" | "complex" | "scenario" | "choice" | "media" | "discussion";
   question: string;
   options?: string[];
   description?: string;
   requiresMedia?: boolean;
   estimatedTime?: number;
+  isOpenEnded?: boolean;
+  allowFollowUp?: boolean;
 }
 
 function LearningPageContent() {
@@ -50,6 +53,7 @@ function LearningPageContent() {
     | "complex_questions"
     | "scenario_questions"
     | "social_integration"
+    | "interactive_discussion"
   >("simple_questions");
   const [currentInterview, setCurrentInterview] =
     useState<LearningInterview | null>(null);
@@ -67,6 +71,15 @@ function LearningPageContent() {
   const [uploadedAudioFileId, setUploadedAudioFileId] = useState<string | null>(
     null
   );
+  const [conversationHistory, setConversationHistory] = useState<
+    Array<{
+      role: "user" | "system";
+      content: string;
+      audioFileId?: string;
+      timestamp: Date;
+    }>
+  >([]);
+  const [isInteractiveSession, setIsInteractiveSession] = useState(false);
   const isRecordingRef = useRef(false);
 
   // tRPC queries
@@ -308,6 +321,10 @@ function LearningPageContent() {
 
       console.log("Interview started:", interview);
 
+      // Check if this is an interactive discussion session
+      const isInteractive = selectedSessionType === "interactive_discussion";
+      setIsInteractiveSession(isInteractive);
+
       // Set the current interview to start the session
       setCurrentInterview({
         id: interview.id,
@@ -322,8 +339,21 @@ function LearningPageContent() {
         },
       });
 
+      // For interactive sessions, add the initial system message to conversation history
+      if (isInteractive && interview.questions.length > 0) {
+        setConversationHistory([
+          {
+            role: "system",
+            content: interview.questions[0].question,
+            timestamp: new Date(),
+          },
+        ]);
+      }
+
       // Clear any previous response
       setCurrentResponse("");
+      setConversationHistory([]);
+      setIsInteractiveSession(false);
     } catch (error) {
       console.error("Failed to start interview:", error);
       alert("Failed to start learning session. Please try again.");
@@ -358,6 +388,65 @@ function LearningPageContent() {
       const allMediaFiles = audioFileId
         ? [...uploadedFiles, audioFileId]
         : uploadedFiles;
+
+      // Handle interactive discussion differently
+      if (isInteractiveSession && !skipQuestion) {
+        // Add user response to conversation history
+        const userMessage = {
+          role: "user" as const,
+          content: currentResponse,
+          audioFileId,
+          timestamp: new Date(),
+        };
+
+        const newHistory = [...conversationHistory, userMessage];
+        setConversationHistory(newHistory);
+
+        // Still send to backend for learning analysis
+        await answerQuestionMutation.mutateAsync({
+          interviewId: currentInterview.id,
+          questionId: currentQuestion.id,
+          response: currentResponse,
+          mediaFiles: allMediaFiles,
+          skipQuestion: false,
+        });
+
+        // Generate follow-up response for interactive session
+        const followUpResponses = [
+          "That's interesting! Can you tell me more about that?",
+          "I see. What made you feel that way about it?",
+          "How did that experience shape your perspective?",
+          "What do you think about when you reflect on that?",
+          "That sounds meaningful. Would you like to explore that further?",
+          "I'd love to hear more about your thoughts on this.",
+          "What's been on your mind lately about this topic?",
+        ];
+
+        const randomResponse =
+          followUpResponses[
+            Math.floor(Math.random() * followUpResponses.length)
+          ];
+
+        // Add system follow-up after a short delay
+        setTimeout(() => {
+          const systemResponse = {
+            role: "system" as const,
+            content: randomResponse,
+            timestamp: new Date(),
+          };
+          setConversationHistory((prev) => [...prev, systemResponse]);
+        }, 1000);
+
+        // Clear current response for next input
+        setCurrentResponse("");
+        setRecordedAudio(null);
+        setRecordingError(null);
+        setUploadedAudioFileId(null);
+        setAudioUploadProgress(0);
+        setIsUploadingAudio(false);
+
+        return; // Don't proceed with normal question progression
+      }
 
       const updatedInterview = await answerQuestionMutation.mutateAsync({
         interviewId: currentInterview.id,
@@ -455,6 +544,12 @@ function LearningPageContent() {
         icon: "🌐",
         duration: "15-30 min",
       },
+      interactive_discussion: {
+        label: "Interactive Discussion",
+        desc: "Natural conversation about anything you'd like to discuss",
+        icon: "💬",
+        duration: "10-45 min",
+      },
     };
     return types[type as keyof typeof types] || types.simple_questions;
   };
@@ -531,7 +626,259 @@ function LearningPageContent() {
 
         {/* Interview Interface */}
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {currentQuestion ? (
+          {isInteractiveSession ? (
+            // Interactive Discussion Interface
+            <div className="bg-white rounded-xl shadow-lg flex flex-col h-[600px]">
+              {/* Chat Header */}
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900 mb-2">
+                  Interactive Discussion
+                </h2>
+                <p className="text-gray-600">
+                  Have a natural conversation about anything you'd like. Your
+                  responses help build a more authentic personality profile.
+                </p>
+              </div>
+
+              {/* Conversation History */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {conversationHistory.map((message, index) => (
+                  <div
+                    key={index}
+                    className={`flex ${
+                      message.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`max-w-sm lg:max-w-md px-4 py-3 rounded-lg ${
+                        message.role === "user"
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-100 text-gray-900"
+                      }`}
+                    >
+                      <p className="text-sm">{message.content}</p>
+                      {message.audioFileId && (
+                        <div className="mt-2 flex items-center text-xs opacity-75">
+                          <svg
+                            className="w-3 h-3 mr-1"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM15.657 6.343a1 1 0 011.414 0A9.972 9.972 0 0119 12a9.972 9.972 0 01-1.929 5.657 1 1 0 11-1.414-1.414A7.971 7.971 0 0017 12a7.971 7.971 0 00-1.343-4.243 1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          Voice recorded
+                        </div>
+                      )}
+                      <div className="text-xs opacity-75 mt-1">
+                        {message.timestamp.toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Input Area */}
+              <div className="p-6 border-t border-gray-200 space-y-4">
+                {/* Text Input */}
+                <div>
+                  <textarea
+                    value={currentResponse}
+                    onChange={(e) => setCurrentResponse(e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                    placeholder="Share your thoughts, ask questions, or tell me about anything on your mind..."
+                  />
+                </div>
+
+                {/* Voice Recording */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                            isRecording
+                              ? "bg-red-500 animate-pulse"
+                              : "bg-gray-300"
+                          }`}
+                        >
+                          <svg
+                            className={`w-5 h-5 ${
+                              isRecording ? "text-white" : "text-gray-600"
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-gray-900">
+                            Voice Response (Optional)
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {isRecording
+                              ? "Recording... Speak naturally"
+                              : "Record your thoughts for richer personality insights"}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={toggleRecording}
+                        disabled={!!recordingError}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          isRecording
+                            ? "bg-red-600 text-white hover:bg-red-700"
+                            : recordedAudio
+                            ? "bg-green-600 text-white hover:bg-green-700"
+                            : "bg-purple-600 text-white hover:bg-purple-700"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {isRecording
+                          ? "🔴 Stop"
+                          : recordedAudio
+                          ? "🎵 Re-record"
+                          : "🎤 Record"}
+                      </button>
+                    </div>
+
+                    {/* Sound Level Meter */}
+                    {isRecording && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs text-gray-600">
+                          <span>Audio Level</span>
+                          <span>{Math.round(audioLevel)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-100 ${
+                              audioLevel > 50
+                                ? "bg-green-500"
+                                : audioLevel > 20
+                                ? "bg-yellow-500"
+                                : "bg-red-500"
+                            }`}
+                            style={{
+                              width: `${Math.min(audioLevel * 2, 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recording Status */}
+                    {recordedAudio && !isRecording && !isUploadingAudio && (
+                      <div className="flex items-center space-x-2 text-sm text-green-600">
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <span>
+                          Voice recorded! This will be analyzed for personality
+                          insights.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Audio Upload Progress */}
+                    {isUploadingAudio && (
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2 text-sm text-blue-600">
+                          <svg
+                            className="w-4 h-4 animate-spin"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M4 2a2 2 0 00-2 2v11a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v11H4V4z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <span>
+                            Uploading for AI analysis...{" "}
+                            {Math.round(audioUploadProgress)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${audioUploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recording Error */}
+                    {recordingError && (
+                      <div className="flex items-center space-x-2 text-sm text-red-600">
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <span>{recordingError}</span>
+                        <button
+                          onClick={() => setRecordingError(null)}
+                          className="text-red-800 hover:text-red-900 underline"
+                        >
+                          Try Again
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Send Button */}
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => setCurrentInterview(null)}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    End Discussion
+                  </button>
+                  <button
+                    onClick={() => handleAnswerQuestion(false)}
+                    disabled={
+                      !currentResponse.trim() ||
+                      isUploadingAudio ||
+                      answerQuestionMutation.isLoading
+                    }
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {answerQuestionMutation.isLoading
+                      ? "Processing..."
+                      : isUploadingAudio
+                      ? "Uploading Audio..."
+                      : "Share Response"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : currentQuestion ? (
             <div className="bg-white rounded-xl shadow-lg p-8">
               {/* Question Header */}
               <div className="text-center mb-8">
@@ -1029,6 +1376,7 @@ function LearningPageContent() {
                 "complex_questions",
                 "scenario_questions",
                 "social_integration",
+                "interactive_discussion",
               ].map((type) => {
                 const info = getSessionTypeInfo(type);
                 return (
