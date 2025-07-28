@@ -6,11 +6,15 @@ on:
     paths:
       - "packages/database/src/schema.ts"
       - "apps/server/drizzle/**"
+      - "apps/server/src/migrate.ts"
+      - ".github/workflows/migrate-database.yml"
   pull_request:
     branches: [main]
     paths:
       - "packages/database/src/schema.ts"
       - "apps/server/drizzle/**"
+      - "apps/server/src/migrate.ts"
+      - ".github/workflows/migrate-database.yml"
   workflow_dispatch:
     inputs:
       environment:
@@ -53,15 +57,58 @@ jobs:
           cd apps/server && npm ci
           cd ../.. && cd packages/database && npm ci
 
+      - name: Debug commit information
+        run: |
+          echo "🔍 Debug: Commit information"
+          echo "Event: ${{ github.event_name }}"
+          echo "Before: ${{ github.event.before }}"
+          echo "After: ${{ github.sha }}"
+          echo "Ref: ${{ github.ref }}"
+          echo ""
+          echo "📋 Recent commits:"
+          git log --oneline -n 5
+          echo ""
+
       - name: Check for schema changes
         id: check-changes
         run: |
-          if git diff --name-only HEAD^ HEAD | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
+          echo "🔍 Checking for schema changes in push..."
+
+          # For push events, check all commits in the push
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Get the range of commits in this push
+            if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+              # New branch - check last commit only
+              COMMIT_RANGE="HEAD^ HEAD"
+              echo "📝 New branch detected, checking last commit: $COMMIT_RANGE"
+            else
+              # Existing branch - check all commits in push
+              COMMIT_RANGE="${{ github.event.before }}..HEAD"
+              echo "📝 Checking commit range: $COMMIT_RANGE"
+            fi
+          else
+            # For PR events, check the PR diff
+            COMMIT_RANGE="${{ github.event.pull_request.base.sha }}..HEAD"
+            echo "📝 PR detected, checking range: $COMMIT_RANGE"
+          fi
+
+          echo "🔎 Commits in range:"
+          git log --oneline $COMMIT_RANGE || echo "No commits in range"
+          echo ""
+
+          echo "📁 All files changed in range:"
+          git diff --name-only $COMMIT_RANGE || echo "No files changed"
+          echo ""
+
+          # Check if any commits in the range modified schema files
+          if git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
             echo "has-changes=true" >> $GITHUB_OUTPUT
-            echo "🔄 Database schema changes detected"
+            echo "🔄 Database schema changes detected in commit range: $COMMIT_RANGE"
+            echo "📋 Modified schema files:"
+            git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" | sed 's/^/  - /'
           else
             echo "has-changes=false" >> $GITHUB_OUTPUT
-            echo "✅ No database schema changes"
+            echo "✅ No database schema changes in commit range: $COMMIT_RANGE"
           fi
 
       - name: Generate migration files
