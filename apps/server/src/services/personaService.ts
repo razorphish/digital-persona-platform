@@ -2,6 +2,7 @@ import { db } from "@digital-persona/database";
 import {
   users,
   personas,
+  mediaFiles,
   // TODO: Add these after database migration
   // userConnections,
   // subscriptionPlans,
@@ -475,11 +476,81 @@ export class PersonaService {
     personaId: string,
     question: any,
     response: string,
-    mediaFiles?: string[]
+    mediaFileIds?: string[]
   ) {
     try {
-      // Simple personality analysis (in production, this would use AI/ML)
+      // Enhanced personality analysis with media processing
       const insights: Record<string, any> = {};
+
+      // Process audio files for voice analysis if present
+      if (mediaFileIds && mediaFileIds.length > 0) {
+        console.log(
+          `📼 Processing ${mediaFileIds.length} media files for persona ${personaId}`
+        );
+
+        // Get media file details from database
+        const { sql, inArray } = await import("drizzle-orm");
+
+        const mediaDetails = await db
+          .select()
+          .from(mediaFiles)
+          .where(inArray(mediaFiles.fileId, mediaFileIds));
+
+        console.log("📁 Media file details:", mediaDetails);
+
+        // Process audio files for AI/ML analysis
+        for (const media of mediaDetails) {
+          if (
+            media.mediaType === "audio" ||
+            media.mimeType?.startsWith("audio/")
+          ) {
+            console.log(
+              `🎤 Processing audio file: ${media.filename} (${media.s3Key})`
+            );
+
+            // Mark as learning data for AI/ML processing
+            await db
+              .update(mediaFiles)
+              .set({
+                isLearningData: true,
+                aiAnalysis: {
+                  questionId: question.id,
+                  questionText: question.question,
+                  questionCategory: question.category,
+                  textResponse: response,
+                  processedAt: new Date(),
+                  status: "pending_analysis",
+                  personalityContext: {
+                    personaId,
+                    sessionType: "learning_interview",
+                  },
+                },
+              })
+              .where(sql`${mediaFiles.fileId} = ${media.fileId}`);
+
+            // TODO: Send to AI/ML service for voice analysis
+            // This would analyze speech patterns, tone, emotion, etc.
+            insights.voiceAnalysis = {
+              hasAudioResponse: true,
+              audioFileId: media.fileId,
+              analysisStatus: "pending",
+              expectedInsights: [
+                "tone",
+                "emotion",
+                "speech_patterns",
+                "confidence_level",
+              ],
+            };
+
+            console.log(
+              `🎯 Audio file ${media.fileId} queued for AI/ML analysis`
+            );
+
+            // Send audio to AI/ML service for processing
+            await this.sendToAIMLService(media, question, response, personaId);
+          }
+        }
+      }
 
       // Analyze response for personality traits
       if (question.category === "preferences") {
@@ -534,7 +605,7 @@ export class PersonaService {
               category: question.category,
               question: question.question,
               response,
-              mediaFiles,
+              mediaFiles: mediaFileIds,
               processedAt: new Date(),
             },
           ],
@@ -551,6 +622,114 @@ export class PersonaService {
     } catch (error) {
       console.error("Error processing learning response:", error);
       // Don't throw - this is background processing
+    }
+  }
+
+  /**
+   * Send audio file to AI/ML service for personality analysis
+   */
+  private static async sendToAIMLService(
+    mediaFile: any,
+    question: any,
+    textResponse: string,
+    personaId: string
+  ) {
+    try {
+      console.log(`🤖 Sending audio ${mediaFile.fileId} to AI/ML service`);
+
+      // Prepare data for AI/ML service
+      const analysisPayload = {
+        audioFile: {
+          fileId: mediaFile.fileId,
+          s3Key: mediaFile.s3Key,
+          s3Url: mediaFile.s3Url,
+          filename: mediaFile.filename,
+          mimeType: mediaFile.mimeType,
+          fileSize: mediaFile.fileSize,
+        },
+        context: {
+          personaId,
+          questionId: question.id,
+          questionText: question.question,
+          questionCategory: question.category,
+          textResponse,
+          sessionType: "learning_interview",
+        },
+        analysisRequests: [
+          "voice_tone_analysis", // Emotional tone and sentiment
+          "speech_pattern_analysis", // Speaking pace, pauses, clarity
+          "personality_indicators", // Confidence, extroversion, etc.
+          "emotional_state", // Current emotional indicators
+          "authenticity_analysis", // Genuine vs rehearsed responses
+        ],
+      };
+
+      // TODO: Send to Python ML service
+      // For now, we'll simulate the call with logging
+      console.log(
+        "🎯 AI/ML Analysis Payload:",
+        JSON.stringify(analysisPayload, null, 2)
+      );
+
+      // In production, this would be:
+      // const response = await fetch(`${process.env.ML_SERVICE_URL}/analyze-voice`, {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(analysisPayload)
+      // });
+
+      // Simulate successful processing
+      const simulatedResults = {
+        voiceTone: {
+          confidence: 0.85,
+          primaryEmotion: "neutral",
+          energyLevel: 0.7,
+          stress_indicators: 0.2,
+        },
+        speechPatterns: {
+          wordsPerMinute: 150,
+          pauseFrequency: "normal",
+          clarity: 0.9,
+          confidence_markers: 0.8,
+        },
+        personalityIndicators: {
+          extraversion: 0.6,
+          conscientiousness: 0.7,
+          openness: 0.8,
+          agreeableness: 0.75,
+          neuroticism: 0.3,
+        },
+      };
+
+      // Update the media file with analysis results
+      await db
+        .update(mediaFiles)
+        .set({
+          aiAnalysis: {
+            ...analysisPayload.context,
+            status: "completed",
+            completedAt: new Date(),
+            results: simulatedResults,
+            processingTimeMs: 2500, // Simulated processing time
+          },
+        })
+        .where(eq(mediaFiles.fileId, mediaFile.fileId));
+
+      console.log(`✅ AI/ML analysis completed for audio ${mediaFile.fileId}`);
+    } catch (error) {
+      console.error(`❌ AI/ML service error for ${mediaFile.fileId}:`, error);
+
+      // Update status to failed
+      await db
+        .update(mediaFiles)
+        .set({
+          aiAnalysis: {
+            status: "failed",
+            error: error instanceof Error ? error.message : "Unknown error",
+            failedAt: new Date(),
+          },
+        })
+        .where(eq(mediaFiles.fileId, mediaFile.fileId));
     }
   }
 

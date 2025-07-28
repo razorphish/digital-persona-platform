@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { trpc } from "@/lib/trpc";
+import { uploadFile } from "@/services/fileUpload";
+import { AuthUtils } from "@/lib/auth";
 
 // Types for learning interviews (matching backend response)
 interface LearningInterview {
@@ -60,6 +62,11 @@ function LearningPageContent() {
   );
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [audioUploadProgress, setAudioUploadProgress] = useState<number>(0);
+  const [isUploadingAudio, setIsUploadingAudio] = useState<boolean>(false);
+  const [uploadedAudioFileId, setUploadedAudioFileId] = useState<string | null>(
+    null
+  );
   const isRecordingRef = useRef(false);
 
   // tRPC queries
@@ -222,6 +229,64 @@ function LearningPageContent() {
     }
   };
 
+  // Upload recorded audio to S3
+  const uploadAudioFile = async (audioBlob: Blob): Promise<string | null> => {
+    const tokens = AuthUtils.getTokens();
+    if (!tokens?.accessToken) {
+      console.error("No authentication token available");
+      return null;
+    }
+
+    try {
+      setIsUploadingAudio(true);
+      setAudioUploadProgress(0);
+
+      // Convert blob to File object
+      const timestamp = Date.now();
+      const audioFile = new File(
+        [audioBlob],
+        `voice-response-${timestamp}.webm`,
+        {
+          type: "audio/webm",
+          lastModified: timestamp,
+        }
+      );
+
+      console.log(
+        "Uploading audio file:",
+        audioFile.name,
+        "Size:",
+        audioFile.size
+      );
+
+      // Upload to S3 using existing file upload service
+      const uploadResult = await uploadFile(
+        audioFile,
+        tokens.accessToken,
+        undefined, // conversationId
+        selectedPersonaId, // personaId for learning context
+        (progress) => setAudioUploadProgress(progress)
+      );
+
+      if (uploadResult.success) {
+        console.log("Audio uploaded successfully:", uploadResult.fileId);
+        setUploadedAudioFileId(uploadResult.fileId);
+        return uploadResult.fileId;
+      } else {
+        console.error("Audio upload failed:", uploadResult.error);
+        setRecordingError(`Failed to upload audio: ${uploadResult.error}`);
+        return null;
+      }
+    } catch (error) {
+      console.error("Error uploading audio:", error);
+      setRecordingError("Failed to upload audio file");
+      return null;
+    } finally {
+      setIsUploadingAudio(false);
+      setAudioUploadProgress(0);
+    }
+  };
+
   const handleStartInterview = async () => {
     if (!selectedPersonaId) {
       console.log("No persona selected");
@@ -274,17 +339,31 @@ function LearningPageContent() {
       ];
 
     try {
-      // TODO: Upload recorded audio to S3 and include in mediaFiles
+      let audioFileId: string | null = null;
+
+      // Upload recorded audio to S3 if available
       if (recordedAudio && !skipQuestion) {
-        console.log("Audio recorded for this response:", recordedAudio);
-        // For now, we'll just log it - need to implement audio upload to S3
+        console.log("Uploading audio for this response:", recordedAudio);
+        audioFileId = await uploadAudioFile(recordedAudio);
+
+        if (!audioFileId) {
+          // If audio upload fails, warn user but continue with text response
+          console.warn(
+            "Audio upload failed, continuing with text response only"
+          );
+        }
       }
+
+      // Include audio file ID in media files if upload was successful
+      const allMediaFiles = audioFileId
+        ? [...uploadedFiles, audioFileId]
+        : uploadedFiles;
 
       const updatedInterview = await answerQuestionMutation.mutateAsync({
         interviewId: currentInterview.id,
         questionId: currentQuestion.id,
         response: skipQuestion ? undefined : currentResponse,
-        mediaFiles: uploadedFiles, // TODO: Include uploaded audio file
+        mediaFiles: allMediaFiles,
         skipQuestion,
       });
 
@@ -322,6 +401,9 @@ function LearningPageContent() {
       setUploadedFiles([]);
       setRecordedAudio(null);
       setRecordingError(null);
+      setUploadedAudioFileId(null);
+      setAudioUploadProgress(0);
+      setIsUploadingAudio(false);
     } catch (error) {
       console.error("Failed to answer question:", error);
     }
@@ -657,7 +739,7 @@ function LearningPageContent() {
                     )}
 
                     {/* Recording Status */}
-                    {recordedAudio && !isRecording && (
+                    {recordedAudio && !isRecording && !isUploadingAudio && (
                       <div className="flex items-center space-x-2 text-sm text-green-600">
                         <svg
                           className="w-4 h-4"
@@ -671,9 +753,38 @@ function LearningPageContent() {
                           />
                         </svg>
                         <span>
-                          Audio recorded successfully! This will be included
-                          with your response.
+                          Audio recorded successfully! This will be uploaded and
+                          analyzed for personality insights.
                         </span>
+                      </div>
+                    )}
+
+                    {/* Audio Upload Progress */}
+                    {isUploadingAudio && (
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2 text-sm text-blue-600">
+                          <svg
+                            className="w-4 h-4 animate-spin"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M4 2a2 2 0 00-2 2v11a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v11H4V4z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <span>
+                            Uploading audio for AI analysis...{" "}
+                            {Math.round(audioUploadProgress)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${audioUploadProgress}%` }}
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -715,12 +826,19 @@ function LearningPageContent() {
                 <button
                   onClick={() => handleAnswerQuestion(false)}
                   disabled={
-                    !currentResponse.trim() && currentQuestion.type !== "choice"
+                    (!currentResponse.trim() &&
+                      currentQuestion.type !== "choice") ||
+                    isUploadingAudio ||
+                    answerQuestionMutation.isLoading
                   }
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {progress?.currentQuestionIndex ===
-                  (progress?.totalQuestions || 0) - 1
+                  {answerQuestionMutation.isLoading
+                    ? "Processing..."
+                    : isUploadingAudio
+                    ? "Uploading Audio..."
+                    : progress?.currentQuestionIndex ===
+                      (progress?.totalQuestions || 0) - 1
                     ? "Complete Session"
                     : "Next Question"}
                 </button>
