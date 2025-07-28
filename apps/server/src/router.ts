@@ -185,9 +185,15 @@ const authRouter = router({
         })
         .returning();
 
-      // Generate JWT token
+      // Generate JWT token with essential user information
       const token = jwt.sign(
-        { userId: newUser[0].id },
+        {
+          userId: newUser[0].id,
+          id: newUser[0].id, // Alternative field name for compatibility
+          email: newUser[0].email,
+          name: newUser[0].name,
+          createdAt: newUser[0].createdAt.toISOString(),
+        },
         process.env.JWT_SECRET || "default-secret",
         { expiresIn: "7d" }
       );
@@ -246,9 +252,15 @@ const authRouter = router({
       });
     }
 
-    // Generate JWT token
+    // Generate JWT token with essential user information
     const token = jwt.sign(
-      { userId: user[0].id },
+      {
+        userId: user[0].id,
+        id: user[0].id, // Alternative field name for compatibility
+        email: user[0].email,
+        name: user[0].name,
+        createdAt: user[0].createdAt.toISOString(),
+      },
       process.env.JWT_SECRET || "default-secret",
       { expiresIn: "7d" }
     );
