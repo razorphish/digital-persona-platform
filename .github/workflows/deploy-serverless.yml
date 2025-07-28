@@ -36,8 +36,11 @@ permissions:
 
 env:
   AWS_REGION: us-west-1
+  AWS_CERT_REGION: us-east-1 # CloudFront certificates must be in us-east-1
   NODE_VERSION: 20
-  # Remove hardcoded DOMAIN - will be determined dynamically
+  BASE_DOMAIN: hibiji.com # Can be overridden via secrets or environment variables
+  PROJECT_NAME: dpp
+  ORGANIZATION_NAME: hibiji
 
 # Prevent multiple runs from conflicting
 concurrency:
@@ -110,12 +113,12 @@ jobs:
           # Generate URLs based on environment
           if [[ "$ENVIRONMENT" == "prod" ]]; then
             # Production URLs for main branch
-            DOMAIN_NAME="www.hibiji.com"
-            API_URL="https://api.hibiji.com/v1"
+            DOMAIN_NAME="www.${BASE_DOMAIN}"
+            API_URL="https://api.${BASE_DOMAIN}"
           else
             # Standard pattern for numbered environments
-            DOMAIN_NAME="${ENVIRONMENT}.hibiji.com"
-            API_URL="https://${ENVIRONMENT}-api.hibiji.com/v1"
+            DOMAIN_NAME="${ENVIRONMENT}.${BASE_DOMAIN}"
+            API_URL="https://${ENVIRONMENT}-api.${BASE_DOMAIN}"
           fi
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
@@ -369,8 +372,8 @@ jobs:
           cat > environment.auto.tfvars << EOF
           environment = "$MAIN_ENV"
           sub_environment = "$ENVIRONMENT"
-          project_name = "$PROJECT_NAME"
-          domain_name = "hibiji.com"
+          project_name = "${{ env.PROJECT_NAME }}"
+          domain_name = "${{ env.BASE_DOMAIN }}"
           aws_region = "${{ env.AWS_REGION }}"
           alert_emails = ["alerts@maras.co"]
           EOF
@@ -674,9 +677,10 @@ jobs:
           import_resource "CloudWatch Log Group" "module.lambda_backend.aws_cloudwatch_log_group.lambda_logs" "/aws/lambda/$MAIN_ENV-$ENVIRONMENT-dpp-api"
           import_resource "CloudWatch Log Group" "module.rds_proxy.aws_cloudwatch_log_group.rds_proxy" "/aws/rds-proxy/$MAIN_ENV-$ENVIRONMENT-dpp-rds-proxy"
 
-          # Import SQS Queues
-          import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs" "https://sqs.us-west-1.amazonaws.com/570827307849/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs"
-          import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs_dlq" "https://sqs.us-west-1.amazonaws.com/570827307849/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs-dlq"
+          # Import SQS Queues  
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs" "https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs"
+          import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs_dlq" "https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs-dlq"
 
           # Import AWS Batch Compute Environments (commonly orphaned from failed cleanups)
           echo "🔍 Checking AWS Batch Compute Environment..."
@@ -705,7 +709,7 @@ jobs:
 
           # Import API CloudFront Distribution (if exists)
           echo "🔍 Checking API CloudFront Distribution..."
-          API_CF_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[0]=='${ENVIRONMENT}-api.hibiji.com'].Id" --output text 2>/dev/null || echo "")
+          API_CF_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[0]=='${ENVIRONMENT}-api.${BASE_DOMAIN}'].Id" --output text 2>/dev/null || echo "")
           if [ -n "$API_CF_ID" ] && [ "$API_CF_ID" != "None" ]; then
             echo "📋 API CloudFront distribution exists: $API_CF_ID"
             import_resource "CloudFront Distribution" "module.api_gateway.aws_cloudfront_distribution.api[0]" "$API_CF_ID"
@@ -713,13 +717,13 @@ jobs:
 
           # Import SSL Certificates (if they exist)
           echo "🔍 Checking SSL Certificates..."
-          WEBSITE_CERT_ARN=$(aws acm list-certificates --region us-east-1 --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}.hibiji.com'].CertificateArn" --output text 2>/dev/null || echo "")
+          WEBSITE_CERT_ARN=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}.${BASE_DOMAIN}'].CertificateArn" --output text 2>/dev/null || echo "")
           if [ -n "$WEBSITE_CERT_ARN" ] && [ "$WEBSITE_CERT_ARN" != "None" ]; then
             echo "📋 Website SSL certificate exists: $WEBSITE_CERT_ARN"
             import_resource "SSL Certificate" "aws_acm_certificate.website" "$WEBSITE_CERT_ARN"
           fi
 
-          API_CERT_ARN=$(aws acm list-certificates --region us-east-1 --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}-api.hibiji.com'].CertificateArn" --output text 2>/dev/null || echo "")
+          API_CERT_ARN=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}-api.${BASE_DOMAIN}'].CertificateArn" --output text 2>/dev/null || echo "")
           if [ -n "$API_CERT_ARN" ] && [ "$API_CERT_ARN" != "None" ]; then
             echo "📋 API SSL certificate exists: $API_CERT_ARN"
             import_resource "SSL Certificate" "aws_acm_certificate.api" "$API_CERT_ARN"
@@ -727,8 +731,8 @@ jobs:
 
           # Import Route53 Records (if they exist)
           echo "🔍 Checking Route53 records..."
-          WEBSITE_DOMAIN="${ENVIRONMENT}.hibiji.com"
-          API_DOMAIN="${ENVIRONMENT}-api.hibiji.com"
+          WEBSITE_DOMAIN="${ENVIRONMENT}.${BASE_DOMAIN}"
+          API_DOMAIN="${ENVIRONMENT}-api.${BASE_DOMAIN}"
           HOSTED_ZONE_ID="Z0269000GKEV9HN9KCKV"
 
           # Check if website CNAME exists
@@ -757,11 +761,11 @@ jobs:
 
           # Define domain names for this environment
           if [ "$ENVIRONMENT" = "prod" ]; then
-            WEBSITE_DOMAIN="www.hibiji.com"
-            API_DOMAIN="api.hibiji.com"
+            WEBSITE_DOMAIN="www.${BASE_DOMAIN}"
+            API_DOMAIN="api.${BASE_DOMAIN}"
           else
-            WEBSITE_DOMAIN="${ENVIRONMENT}.hibiji.com"
-            API_DOMAIN="${ENVIRONMENT}-api.hibiji.com"
+            WEBSITE_DOMAIN="${ENVIRONMENT}.${BASE_DOMAIN}"
+            API_DOMAIN="${ENVIRONMENT}-api.${BASE_DOMAIN}"
           fi
 
           echo "🌐 Target domains:"
@@ -788,7 +792,7 @@ jobs:
           echo "🔍 Checking website certificate..."
           if ! check_certificate "$WEBSITE_DOMAIN"; then
             echo "⚠️ Website certificate missing for $WEBSITE_DOMAIN"
-            echo "ℹ️ Note: For production deployment, create wildcard certificate *.hibiji.com"
+            echo "ℹ️ Note: For production deployment, create wildcard certificate *.${BASE_DOMAIN}"
             echo "ℹ️ Current setup uses CloudFront default SSL (functional but not professional)"
           fi
 
@@ -796,7 +800,7 @@ jobs:
           echo "🔍 Checking API certificate..."
           if ! check_certificate "$API_DOMAIN"; then
             echo "⚠️ API certificate missing for $API_DOMAIN"
-            echo "ℹ️ Note: For production deployment, create wildcard certificate *-api.hibiji.com"
+            echo "ℹ️ Note: For production deployment, create wildcard certificate *-api.${BASE_DOMAIN}"
             echo "ℹ️ Current setup uses API Gateway default SSL (functional but not professional)"
           fi
 
@@ -807,7 +811,7 @@ jobs:
           echo "🎛️ Auto-create certificates: $CREATE_CERTIFICATES"
 
           # Get Route53 hosted zone ID for DNS validation
-          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "hibiji.com" \
+          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "${BASE_DOMAIN}" \
             --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
           echo "🌐 Route53 Hosted Zone ID: $HOSTED_ZONE_ID"
 
@@ -887,39 +891,39 @@ jobs:
             fi
           }
 
-          # Check/Create Website Wildcard Certificate (*.hibiji.com)
-          WILDCARD_WEB=$(aws acm list-certificates --region us-east-1 \
-            --query "CertificateSummaryList[?DomainName=='*.hibiji.com' && (Status=='ISSUED' || Status=='PENDING_VALIDATION')].CertificateArn" \
+          # Check/Create Website Wildcard Certificate (*.${BASE_DOMAIN})
+          WILDCARD_WEB=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} \
+            --query "CertificateSummaryList[?DomainName=='*.${BASE_DOMAIN}' && (Status=='ISSUED' || Status=='PENDING_VALIDATION')].CertificateArn" \
             --output text 2>/dev/null || echo "")
             
           if [ -n "$WILDCARD_WEB" ] && [ "$WILDCARD_WEB" != "None" ]; then
-            echo "🌟 Website wildcard certificate found: *.hibiji.com"
+            echo "🌟 Website wildcard certificate found: *.${BASE_DOMAIN}"
             echo "   ARN: $WILDCARD_WEB"
           else
             if [ "$CREATE_CERTIFICATES" = "true" ]; then
-              echo "🔧 Creating website wildcard certificate: *.hibiji.com"
-              create_certificate "*.hibiji.com" "wildcard-website-hibiji-com"
+              echo "🔧 Creating website wildcard certificate: *.${BASE_DOMAIN}"
+              create_certificate "*.${BASE_DOMAIN}" "wildcard-website-${ORGANIZATION_NAME}-com"
             else
-              echo "💡 Website wildcard certificate not found: *.hibiji.com"
+              echo "💡 Website wildcard certificate not found: *.${BASE_DOMAIN}"
               echo "   💰 Cost: FREE with AWS services"
               echo "   🎛️ To create: Set CREATE_SSL_CERTIFICATES=true in workflow"
             fi
           fi
 
-          # Check/Create API Wildcard Certificate (*-api.hibiji.com)  
-          WILDCARD_API=$(aws acm list-certificates --region us-east-1 \
-            --query "CertificateSummaryList[?DomainName=='*-api.hibiji.com' && (Status=='ISSUED' || Status=='PENDING_VALIDATION')].CertificateArn" \
+          # Check/Create API Wildcard Certificate (*-api.${BASE_DOMAIN})  
+          WILDCARD_API=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} \
+            --query "CertificateSummaryList[?DomainName=='*-api.${BASE_DOMAIN}' && (Status=='ISSUED' || Status=='PENDING_VALIDATION')].CertificateArn" \
             --output text 2>/dev/null || echo "")
 
           if [ -n "$WILDCARD_API" ] && [ "$WILDCARD_API" != "None" ]; then
-            echo "🌟 API wildcard certificate found: *-api.hibiji.com"
+            echo "🌟 API wildcard certificate found: *-api.${BASE_DOMAIN}"
             echo "   ARN: $WILDCARD_API"
           else
             if [ "$CREATE_CERTIFICATES" = "true" ]; then
-              echo "🔧 Creating API wildcard certificate: *-api.hibiji.com"
-              create_certificate "*-api.hibiji.com" "wildcard-api-hibiji-com"
+              echo "🔧 Creating API wildcard certificate: *-api.${BASE_DOMAIN}"
+              create_certificate "*-api.${BASE_DOMAIN}" "wildcard-api-${ORGANIZATION_NAME}-com"
             else
-              echo "💡 API wildcard certificate not found: *-api.hibiji.com"
+              echo "💡 API wildcard certificate not found: *-api.${BASE_DOMAIN}"
               echo "   💰 Cost: FREE with AWS services"
               echo "   🎛️ To create: Set CREATE_SSL_CERTIFICATES=true in workflow"
             fi
@@ -1752,10 +1756,10 @@ jobs:
           if [ "${PUBLIC_API_STATUS}" = "FAILED" ] || [ "${WEBSITE_STATUS}" = "FAILED" ]; then
             echo "⚠️ DNS PROPAGATION NOTES:"
             if [ "${PUBLIC_API_STATUS}" = "FAILED" ]; then
-              echo "  - Public API domain (qa03-api.hibiji.com) may need DNS propagation time"
+              echo "  - Public API domain (${ENVIRONMENT}-api.${BASE_DOMAIN}) may need DNS propagation time"
             fi
             if [ "${WEBSITE_STATUS}" = "FAILED" ]; then
-              echo "  - Public website domain (qa03.hibiji.com) may need DNS propagation time"
+              echo "  - Public website domain (${ENVIRONMENT}.${BASE_DOMAIN}) may need DNS propagation time"
             fi
             echo "  - DNS propagation can take up to 24 hours globally"
             echo "  - Internal AWS infrastructure is verified and working correctly"

@@ -10,9 +10,20 @@
 
 set -e
 
-TARGET_ENV="$1"
-PROJECT_NAME="dpp"
-AWS_REGION="us-west-1"
+# Load dynamic configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/config/environment.sh" ]]; then
+    # Override environment detection with command line argument
+    export ENVIRONMENT="$1"
+    source "$SCRIPT_DIR/config/environment.sh"
+    TARGET_ENV="$SUB_ENVIRONMENT"
+else
+    # Fallback to hardcoded values if config not available
+    TARGET_ENV="$1"
+    PROJECT_NAME="${PROJECT_NAME:-dpp}"
+    AWS_REGION="${AWS_REGION:-us-west-1}"
+    BASE_DOMAIN="${BASE_DOMAIN:-hibiji.com}"
+fi
 
 # Color codes for output
 RED='\033[0;31m'
@@ -299,7 +310,7 @@ print_header "🧹 Cleaning up SSL certificates..."
 # Clean up both website and API SSL certificates
 for cert_type in "website" "api"; do
   if [ "$cert_type" = "website" ]; then
-    DOMAIN_PATTERN="${TARGET_ENV}.hibiji.com"
+                DOMAIN_PATTERN="${TARGET_ENV}.${BASE_DOMAIN}"
     print_header "🌐 Searching for website SSL certificates..."
   else
     DOMAIN_PATTERN="${TARGET_ENV}-api.hibiji.com"
