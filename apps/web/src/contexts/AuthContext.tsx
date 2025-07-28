@@ -52,30 +52,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Centralized logout function
   const logout = useCallback(() => {
-    console.log("Logging out user");
+    console.log("🚪 logout: Starting logout process...");
     AuthUtils.clearTokens();
     setUser(null);
     setError(null);
     setIsLoading(false);
     // Keep isInitialized as true since we've explicitly logged out
+    console.log("✅ logout: Logout completed, redirecting to home");
     router.push("/");
   }, [router]);
 
   // Enhanced authentication checking with better error handling
   const checkAuthState = useCallback(() => {
     try {
-      console.log("Checking auth state...");
+      console.log("🔍 checkAuthState: Starting authentication check...");
 
       // Ensure we're on the client side
       if (typeof window === "undefined") {
-        console.log("Server side - skipping auth check");
+        console.log("🔍 checkAuthState: Server side - skipping auth check");
         setIsLoading(false);
         return;
       }
 
+      console.log("🔍 checkAuthState: Client side - checking localStorage...");
       const tokens = AuthUtils.getTokens();
-      console.log("Retrieved tokens:", {
+      console.log("🔍 checkAuthState: Retrieved tokens:", {
         hasAccessToken: !!tokens?.accessToken,
+        timestamp: new Date().toISOString(),
       });
 
       if (!tokens?.accessToken) {
@@ -208,11 +211,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
       setIsLoading(true);
 
+      console.log("🔐 login: Starting login process...");
       const result = await loginMutation.mutateAsync({
         email,
         password,
       });
 
+      console.log("🔐 login: Login API successful, saving tokens...");
       // Save tokens
       AuthUtils.setTokens({
         accessToken: result.token,
@@ -223,7 +228,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
       setIsInitialized(true);
 
-      console.log("Login successful, user authenticated:", result.user);
+      console.log(
+        "✅ login: Login successful, user authenticated:",
+        result.user
+      );
 
       // Don't redirect here - let AuthMiddleware handle all auth-based redirects
       // This prevents race conditions between login redirect and middleware redirect

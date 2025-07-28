@@ -25,19 +25,26 @@ export const AuthUtils = {
       const accessToken = localStorage.getItem("accessToken");
       const refreshToken = localStorage.getItem("refreshToken");
 
-      console.log("getTokens: Retrieved from localStorage:", {
+      console.log("🔑 getTokens: Retrieved from localStorage:", {
         hasAccessToken: !!accessToken,
         hasRefreshToken: !!refreshToken,
+        accessTokenLength: accessToken?.length,
+        accessTokenStart: accessToken?.substring(0, 20) + "...",
+        localStorageKeys: Object.keys(localStorage),
+        timestamp: new Date().toISOString(),
       });
 
-      if (!accessToken) return null;
+      if (!accessToken) {
+        console.warn("🚨 getTokens: No accessToken found in localStorage");
+        return null;
+      }
 
       return {
         accessToken,
         refreshToken: refreshToken || undefined,
       };
     } catch (error) {
-      console.error("Error accessing localStorage:", error);
+      console.error("❌ Error accessing localStorage:", error);
       return null;
     }
   },
@@ -45,14 +52,17 @@ export const AuthUtils = {
   // Save tokens to localStorage
   setTokens: (tokens: AuthTokens) => {
     if (typeof window === "undefined") {
-      console.log("setTokens: Server side, skipping");
+      console.log("💾 setTokens: Server side, skipping");
       return;
     }
 
     try {
-      console.log("setTokens: Saving to localStorage:", {
+      console.log("💾 setTokens: Saving to localStorage:", {
         hasAccessToken: !!tokens.accessToken,
         hasRefreshToken: !!tokens.refreshToken,
+        accessTokenLength: tokens.accessToken?.length,
+        accessTokenStart: tokens.accessToken?.substring(0, 20) + "...",
+        timestamp: new Date().toISOString(),
       });
 
       localStorage.setItem("accessToken", tokens.accessToken);
@@ -60,26 +70,58 @@ export const AuthUtils = {
         localStorage.setItem("refreshToken", tokens.refreshToken);
       }
 
-      console.log("setTokens: Successfully saved tokens");
+      // Verify tokens were saved
+      const verifyAccessToken = localStorage.getItem("accessToken");
+      const verifyRefreshToken = localStorage.getItem("refreshToken");
+
+      console.log("✅ setTokens: Successfully saved tokens, verification:", {
+        savedAccessToken: !!verifyAccessToken,
+        savedRefreshToken: !!verifyRefreshToken,
+        accessTokenMatches: verifyAccessToken === tokens.accessToken,
+        localStorageKeys: Object.keys(localStorage),
+      });
     } catch (error) {
-      console.error("Error saving tokens to localStorage:", error);
+      console.error("❌ Error saving tokens to localStorage:", error);
     }
   },
 
   // Remove tokens from localStorage
   clearTokens: () => {
     if (typeof window === "undefined") {
-      console.log("clearTokens: Server side, skipping");
+      console.log("🗑️ clearTokens: Server side, skipping");
       return;
     }
 
     try {
-      console.log("clearTokens: Removing tokens from localStorage");
+      // Check what's in localStorage before clearing
+      const beforeAccessToken = localStorage.getItem("accessToken");
+      const beforeRefreshToken = localStorage.getItem("refreshToken");
+
+      console.log("🗑️ clearTokens: Before clearing:", {
+        hadAccessToken: !!beforeAccessToken,
+        hadRefreshToken: !!beforeRefreshToken,
+        accessTokenLength: beforeAccessToken?.length,
+        localStorageKeys: Object.keys(localStorage),
+        timestamp: new Date().toISOString(),
+      });
+
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
-      console.log("clearTokens: Successfully cleared tokens");
+
+      // Verify tokens were cleared
+      const afterAccessToken = localStorage.getItem("accessToken");
+      const afterRefreshToken = localStorage.getItem("refreshToken");
+
+      console.log(
+        "✅ clearTokens: Successfully cleared tokens, verification:",
+        {
+          accessTokenCleared: !afterAccessToken,
+          refreshTokenCleared: !afterRefreshToken,
+          localStorageKeys: Object.keys(localStorage),
+        }
+      );
     } catch (error) {
-      console.error("Error clearing tokens from localStorage:", error);
+      console.error("❌ Error clearing tokens from localStorage:", error);
     }
   },
 
