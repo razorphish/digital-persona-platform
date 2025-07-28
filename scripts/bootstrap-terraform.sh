@@ -85,6 +85,24 @@ fi
 print_status "🔧 Initializing Terraform bootstrap..."
 terraform init
 
+# Try to import existing bucket if it exists
+print_status "🔄 Checking if bucket needs to be imported into Terraform state..."
+if aws s3api head-bucket --bucket "$STATE_BUCKET_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+    print_status "📥 Bucket exists - attempting to import into Terraform state..."
+    
+    # Check if already in state
+    if terraform state show aws_s3_bucket.terraform_state >/dev/null 2>&1; then
+        print_success "✓ Bucket already managed by Terraform"
+    else
+        print_status "🔄 Importing existing bucket into Terraform state..."
+        if terraform import aws_s3_bucket.terraform_state "$STATE_BUCKET_NAME"; then
+            print_success "✓ Successfully imported existing bucket"
+        else
+            print_warning "⚠ Import failed - will try to apply anyway (bucket may be managed elsewhere)"
+        fi
+    fi
+fi
+
 print_status "📋 Planning bootstrap infrastructure..."
 terraform plan \
     -var="aws_region=$AWS_REGION" \
