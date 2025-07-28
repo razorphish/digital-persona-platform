@@ -365,6 +365,22 @@ resource "aws_acm_certificate" "website" {
   })
 }
 
+# SSL Certificate for API domain (must be in us-east-1 for CloudFront)
+resource "aws_acm_certificate" "api" {
+  provider          = aws.us_east_1
+  domain_name       = local.api_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-api-cert"
+    Type = "SSL Certificate"
+  })
+}
+
 # Provider for us-east-1 (required for CloudFront certificates)
 provider "aws" {
   alias  = "us_east_1"
@@ -377,6 +393,19 @@ resource "aws_acm_certificate_validation" "website" {
   certificate_arn = aws_acm_certificate.website.arn
   validation_record_fqdns = [
     for record in aws_route53_record.website_cert_validation : record.fqdn
+  ]
+
+  timeouts {
+    create = "10m"
+  }
+}
+
+# API Certificate validation
+resource "aws_acm_certificate_validation" "api" {
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.api.arn
+  validation_record_fqdns = [
+    for record in aws_route53_record.api_cert_validation : record.fqdn
   ]
 
   timeouts {
@@ -529,8 +558,8 @@ module "api_gateway" {
   ]
 
   # Custom domain configuration (optional)
-  # custom_domain_name = local.api_domain
-  # certificate_arn    = aws_acm_certificate.api.arn
+  custom_domain_name = local.api_domain
+  certificate_arn    = aws_acm_certificate_validation.api.certificate_arn
 
   stage_name         = "v1"
   log_retention_days = 14
@@ -559,7 +588,7 @@ resource "aws_route53_record" "api" {
   name    = local.api_domain # dev01-api.hibiji.com
   type    = "CNAME"
   ttl     = 300
-  records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
+  records = [module.api_gateway.custom_domain_target_name]
 
   # Add lifecycle to prevent conflicts
   lifecycle {

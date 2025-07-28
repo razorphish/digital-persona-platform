@@ -16,7 +16,7 @@ resource "aws_apigatewayv2_api" "main" {
     allow_methods     = var.cors_allow_methods
     allow_origins     = var.cors_allow_origins
     expose_headers    = var.cors_expose_headers
-    max_age          = var.cors_max_age
+    max_age           = var.cors_max_age
   }
 
   # Temporarily disabled tags to resolve AWS permissions issue
@@ -36,15 +36,15 @@ resource "aws_apigatewayv2_stage" "main" {
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway.arn
     format = jsonencode({
-      requestId      = "$context.requestId"
-      ip            = "$context.identity.sourceIp"
-      requestTime   = "$context.requestTime"
-      httpMethod    = "$context.httpMethod"
-      routeKey      = "$context.routeKey"
-      status        = "$context.status"
-      protocol      = "$context.protocol"
-      responseLength = "$context.responseLength"
-      error         = "$context.error.message"
+      requestId        = "$context.requestId"
+      ip               = "$context.identity.sourceIp"
+      requestTime      = "$context.requestTime"
+      httpMethod       = "$context.httpMethod"
+      routeKey         = "$context.routeKey"
+      status           = "$context.status"
+      protocol         = "$context.protocol"
+      responseLength   = "$context.responseLength"
+      error            = "$context.error.message"
       integrationError = "$context.integration.error"
     })
   }
@@ -86,7 +86,7 @@ resource "aws_apigatewayv2_integration" "lambda_api" {
   integration_method     = "POST"
   payload_format_version = "2.0"
   timeout_milliseconds   = 30000
-  
+
   # Ensure this integration is stable before routes reference it
   lifecycle {
     create_before_destroy = true
@@ -100,12 +100,12 @@ resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "GET /health"
   target    = "integrations/${aws_apigatewayv2_integration.lambda_api.id}"
-  
+
   # Ensure this route update happens before any integration deletion
   lifecycle {
     create_before_destroy = true
   }
-  
+
   depends_on = [
     aws_apigatewayv2_integration.lambda_api
   ]
@@ -135,7 +135,7 @@ resource "aws_lambda_permission" "api_gateway_lambda" {
   function_name = var.lambda_function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-  
+
   # Ensure this permission is created after the API and routes
   depends_on = [
     aws_apigatewayv2_api.main,
@@ -147,27 +147,88 @@ resource "aws_lambda_permission" "api_gateway_lambda" {
 
 
 
-# Custom domain name (optional)
-resource "aws_apigatewayv2_domain_name" "main" {
-  count       = var.custom_domain_name != null ? 1 : 0
-  domain_name = var.custom_domain_name
+# CloudFront Distribution for API (provides CDN, SSL termination, and caching)
+resource "aws_cloudfront_distribution" "api" {
+  count           = var.custom_domain_name != null ? 1 : 0
+  enabled         = true
+  is_ipv6_enabled = true
+  price_class     = "PriceClass_100"
 
-  domain_name_configuration {
-    certificate_arn = var.certificate_arn
-    endpoint_type   = "REGIONAL"
-    security_policy = "TLS_1_2"
+  # Use custom domain for CloudFront
+  aliases = [var.custom_domain_name]
+
+  origin {
+    domain_name = replace(replace(aws_apigatewayv2_api.main.api_endpoint, "https://", ""), "http://", "")
+    origin_id   = "APIGateway-${aws_apigatewayv2_api.main.id}"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+
+    origin_path = "/${aws_apigatewayv2_stage.main.name}"
+  }
+
+  # Default cache behavior for API (no caching for dynamic content)
+  default_cache_behavior {
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD", "OPTIONS"]
+    target_origin_id       = "APIGateway-${aws_apigatewayv2_api.main.id}"
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = true
+      headers      = ["*"]
+      cookies {
+        forward = "all"
+      }
+    }
+
+    # No caching for API responses
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+
+  # SSL certificate configuration
+  viewer_certificate {
+    acm_certificate_arn      = var.certificate_arn
+    minimum_protocol_version = "TLSv1.2_2021"
+    ssl_support_method       = "sni-only"
+  }
+
+  # Cache behavior for health check (can be lightly cached)
+  ordered_cache_behavior {
+    path_pattern           = "/health*"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD", "OPTIONS"]
+    target_origin_id       = "APIGateway-${aws_apigatewayv2_api.main.id}"
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 60  # Cache health checks for 1 minute
+    max_ttl     = 300 # Max 5 minutes
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
   }
 
   tags = merge(var.common_tags, {
-    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-domain"
-    Type = "APIGatewayDomain"
+    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-api-cdn"
+    Type = "CloudFrontDistribution"
   })
 }
-
-# API mapping for custom domain
-resource "aws_apigatewayv2_api_mapping" "main" {
-  count       = var.custom_domain_name != null ? 1 : 0
-  api_id      = aws_apigatewayv2_api.main.id
-  domain_name = aws_apigatewayv2_domain_name.main[0].id
-  stage       = aws_apigatewayv2_stage.main.id
-} 

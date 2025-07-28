@@ -44,17 +44,27 @@ output "stage_invoke_url" {
 
 output "custom_domain_name" {
   description = "Custom domain name (if configured)"
-  value       = var.custom_domain_name != null ? aws_apigatewayv2_domain_name.main[0].domain_name : null
+  value       = var.custom_domain_name
 }
 
 output "custom_domain_target_name" {
-  description = "Target domain name for custom domain DNS configuration"
-  value       = var.custom_domain_name != null ? aws_apigatewayv2_domain_name.main[0].domain_name_configuration[0].target_domain_name : null
+  description = "Target domain name for custom domain DNS configuration (CloudFront domain)"
+  value       = var.custom_domain_name != null ? aws_cloudfront_distribution.api[0].domain_name : null
 }
 
 output "custom_domain_hosted_zone_id" {
-  description = "Hosted zone ID for custom domain DNS configuration"
-  value       = var.custom_domain_name != null ? aws_apigatewayv2_domain_name.main[0].domain_name_configuration[0].hosted_zone_id : null
+  description = "Hosted zone ID for custom domain DNS configuration (CloudFront zone ID)"
+  value       = var.custom_domain_name != null ? aws_cloudfront_distribution.api[0].hosted_zone_id : null
+}
+
+output "cloudfront_distribution_id" {
+  description = "ID of the CloudFront distribution for the API"
+  value       = var.custom_domain_name != null ? aws_cloudfront_distribution.api[0].id : null
+}
+
+output "cloudfront_domain_name" {
+  description = "Domain name of the CloudFront distribution"
+  value       = var.custom_domain_name != null ? aws_cloudfront_distribution.api[0].domain_name : null
 }
 
 output "log_group_name" {
