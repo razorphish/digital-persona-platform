@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -54,6 +54,13 @@ function LearningPageContent() {
   const [currentResponse, setCurrentResponse] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(
+    null
+  );
+  const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const isRecordingRef = useRef(false);
 
   // tRPC queries
   const {
@@ -87,6 +94,15 @@ function LearningPageContent() {
     mainPersonaError,
   ]);
 
+  // Cleanup audio recording on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+      }
+    };
+  }, [mediaRecorder]);
+
   // tRPC mutations
   const startInterviewMutation = trpc.learning.startInterview.useMutation();
 
@@ -98,6 +114,113 @@ function LearningPageContent() {
       setSelectedPersonaId(mainPersona.id);
     }
   }, [mainPersona, selectedPersonaId]);
+
+  // Audio recording functions
+  const startRecording = async () => {
+    try {
+      setRecordingError(null);
+      console.log("Requesting microphone access...");
+
+      // Check if mediaDevices is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Audio recording is not supported in this browser");
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        },
+      });
+
+      // Create audio context for sound level monitoring
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      // Monitor audio levels
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateAudioLevel = () => {
+        if (isRecordingRef.current) {
+          analyser.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+          setAudioLevel((average / 255) * 100); // Convert to percentage
+          requestAnimationFrame(updateAudioLevel);
+        }
+      };
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      });
+
+      const audioChunks: BlobPart[] = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        setRecordedAudio(audioBlob);
+        setAudioLevel(0);
+
+        // Stop all tracks to turn off microphone
+        stream.getTracks().forEach((track) => track.stop());
+        audioContext.close();
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      isRecordingRef.current = true;
+      updateAudioLevel();
+
+      console.log("Recording started");
+    } catch (error) {
+      console.error("Error starting recording:", error);
+
+      let errorMessage = "Failed to access microphone.";
+
+      if (error instanceof Error) {
+        if (error.name === "NotAllowedError") {
+          errorMessage =
+            "Microphone access denied. Please allow microphone permissions and try again.";
+        } else if (error.name === "NotFoundError") {
+          errorMessage =
+            "No microphone found. Please connect a microphone and try again.";
+        } else if (error.name === "NotSupportedError") {
+          errorMessage = "Audio recording is not supported in this browser.";
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+
+      setRecordingError(errorMessage);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      isRecordingRef.current = false;
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setMediaRecorder(null);
+      console.log("Recording stopped");
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
 
   const handleStartInterview = async () => {
     if (!selectedPersonaId) {
@@ -151,11 +274,17 @@ function LearningPageContent() {
       ];
 
     try {
+      // TODO: Upload recorded audio to S3 and include in mediaFiles
+      if (recordedAudio && !skipQuestion) {
+        console.log("Audio recorded for this response:", recordedAudio);
+        // For now, we'll just log it - need to implement audio upload to S3
+      }
+
       const updatedInterview = await answerQuestionMutation.mutateAsync({
         interviewId: currentInterview.id,
         questionId: currentQuestion.id,
         response: skipQuestion ? undefined : currentResponse,
-        mediaFiles: uploadedFiles,
+        mediaFiles: uploadedFiles, // TODO: Include uploaded audio file
         skipQuestion,
       });
 
@@ -191,6 +320,8 @@ function LearningPageContent() {
       // Clear response for next question
       setCurrentResponse("");
       setUploadedFiles([]);
+      setRecordedAudio(null);
+      setRecordingError(null);
     } catch (error) {
       console.error("Failed to answer question:", error);
     }
@@ -440,48 +571,135 @@ function LearningPageContent() {
 
                 {/* Voice Recording */}
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          isRecording ? "bg-red-500" : "bg-gray-300"
-                        }`}
-                      >
-                        <svg
-                          className={`w-5 h-5 ${
-                            isRecording ? "text-white" : "text-gray-600"
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                            isRecording
+                              ? "bg-red-500 animate-pulse"
+                              : "bg-gray-300"
                           }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                        >
+                          <svg
+                            className={`w-5 h-5 ${
+                              isRecording ? "text-white" : "text-gray-600"
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-gray-900">
+                            Voice Response (Optional)
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {isRecording
+                              ? "Recording... Speak clearly into your microphone"
+                              : "Record your answer for better personality analysis"}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={toggleRecording}
+                        disabled={!!recordingError}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          isRecording
+                            ? "bg-red-600 text-white hover:bg-red-700"
+                            : recordedAudio
+                            ? "bg-green-600 text-white hover:bg-green-700"
+                            : "bg-purple-600 text-white hover:bg-purple-700"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {isRecording
+                          ? "🔴 Stop Recording"
+                          : recordedAudio
+                          ? "🎵 Re-record"
+                          : "🎤 Start Recording"}
+                      </button>
+                    </div>
+
+                    {/* Sound Level Meter */}
+                    {isRecording && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs text-gray-600">
+                          <span>Audio Level</span>
+                          <span>{Math.round(audioLevel)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-100 ${
+                              audioLevel > 50
+                                ? "bg-green-500"
+                                : audioLevel > 20
+                                ? "bg-yellow-500"
+                                : "bg-red-500"
+                            }`}
+                            style={{
+                              width: `${Math.min(audioLevel * 2, 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Quiet</span>
+                          <span>Good</span>
+                          <span>Loud</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recording Status */}
+                    {recordedAudio && !isRecording && (
+                      <div className="flex items-center space-x-2 text-sm text-green-600">
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
                         >
                           <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clipRule="evenodd"
                           />
                         </svg>
+                        <span>
+                          Audio recorded successfully! This will be included
+                          with your response.
+                        </span>
                       </div>
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-gray-900">
-                          Voice Response (Optional)
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Record your answer for better personality analysis
-                        </p>
+                    )}
+
+                    {/* Recording Error */}
+                    {recordingError && (
+                      <div className="flex items-center space-x-2 text-sm text-red-600">
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <span>{recordingError}</span>
+                        <button
+                          onClick={() => setRecordingError(null)}
+                          className="text-red-800 hover:text-red-900 underline"
+                        >
+                          Try Again
+                        </button>
                       </div>
-                    </div>
-                    <button
-                      onClick={() => setIsRecording(!isRecording)}
-                      className={`px-4 py-2 rounded-lg transition-colors ${
-                        isRecording
-                          ? "bg-red-600 text-white hover:bg-red-700"
-                          : "bg-purple-600 text-white hover:bg-purple-700"
-                      }`}
-                    >
-                      {isRecording ? "Stop Recording" : "Start Recording"}
-                    </button>
+                    )}
                   </div>
                 </div>
               </div>
