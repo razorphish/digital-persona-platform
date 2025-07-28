@@ -134,9 +134,8 @@ test_*.txt
 .terraform/
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
 tfplan
-tfplan.* .env
+tfplan.*
 
 # Template assets (not used in production)
 frontend/tailwind-plus-radiant/

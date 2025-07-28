@@ -1,6 +1,6 @@
 # =================================
 # Digital Persona Platform - Serverless Architecture
-# QA Environment
+# Development Environment
 # =================================
 
 terraform {
@@ -17,26 +17,31 @@ terraform {
     bucket = "hibiji-terraform-state"
     region = "us-west-1"
     # Key will be provided via -backend-config at runtime for proper isolation
-    # Format: qa/{sub_environment}/terraform.tfstate
+    # Format: dev/{sub_environment}/terraform.tfstate
   }
 }
 
 # Provider configuration
 provider "aws" {
   region = "us-west-1"
+
+  # Temporarily disable default tags due to IAM permission constraints
+  # default_tags {
+  #   tags = local.common_tags
+  # }
 }
 
 # Variables
 variable "sub_environment" {
-  description = "Sub-environment name (e.g., qa01, qa02)"
+  description = "Sub-environment name (e.g., dev01, dev02)"
   type        = string
-  default     = "qa01"
+  default     = "dev01"
 }
 
 variable "environment" {
   description = "Main environment name"
   type        = string
-  default     = "qa"
+  default     = "dev"
 }
 
 variable "domain_name" {
@@ -101,6 +106,9 @@ locals {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+# Replace the Route53 zone resource with a data source
+# This will use an existing hosted zone instead of creating a new one
+
 # Data source for existing Route53 hosted zone
 data "aws_route53_zone" "main" {
   name = var.domain_name
@@ -125,7 +133,7 @@ resource "aws_secretsmanager_secret" "jwt_secret" {
 resource "aws_secretsmanager_secret_version" "jwt_secret" {
   secret_id = aws_secretsmanager_secret.jwt_secret.id
   secret_string = jsonencode({
-    jwt_secret = "qa-jwt-secret-${random_password.jwt_secret.result}"
+    jwt_secret = "dev-jwt-secret-${random_password.jwt_secret.result}"
   })
 }
 
@@ -157,8 +165,8 @@ resource "random_password" "jwt_secret" {
 resource "random_password" "database_password" {
   length  = 32
   special = true
-  # Exclude characters not allowed in RDS passwords: '/', '@', '"', ' '
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  # Exclude characters that are invalid for RDS master password
+  override_special = "!#$%&*()_+-=[]{}|;:,.<>?"
 }
 
 # =================================
@@ -337,6 +345,63 @@ resource "aws_subnet" "private" {
 # Module Calls
 # =================================
 
+# SSL Certificate for custom domain (must be in us-east-1 for CloudFront)
+resource "aws_acm_certificate" "website" {
+  provider          = aws.us_east_1
+  domain_name       = local.website_domain
+  validation_method = "DNS"
+
+  subject_alternative_names = [
+    "*.${local.website_domain}"
+  ]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-website-cert"
+    Type = "SSL Certificate"
+  })
+}
+
+# Provider for us-east-1 (required for CloudFront certificates)
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+# Certificate validation
+resource "aws_acm_certificate_validation" "website" {
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.website.arn
+  validation_record_fqdns = [
+    for record in aws_route53_record.website_cert_validation : record.fqdn
+  ]
+
+  timeouts {
+    create = "10m"
+  }
+}
+
+# Route53 records for certificate validation
+resource "aws_route53_record" "website_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.website.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = data.aws_route53_zone.main.zone_id
+}
+
 # S3 Static Website
 module "s3_website" {
   source = "../../modules/s3-static-website"
@@ -345,6 +410,10 @@ module "s3_website" {
   sub_environment = var.sub_environment
   project_name    = var.project_name
   common_tags     = local.common_tags
+
+  # Custom domain configuration (enabled)
+  custom_domain       = local.website_domain
+  ssl_certificate_arn = aws_acm_certificate_validation.website.certificate_arn
 
   cloudfront_price_class = "PriceClass_100"
   build_retention_days   = 30
@@ -459,6 +528,10 @@ module "api_gateway" {
     "http://localhost:3100"            # Docker development
   ]
 
+  # Custom domain configuration (optional)
+  # custom_domain_name = local.api_domain
+  # certificate_arn    = aws_acm_certificate.api.arn
+
   stage_name         = "v1"
   log_retention_days = 14
 }
@@ -470,11 +543,12 @@ module "api_gateway" {
 # DNS Records for this sub-environment
 resource "aws_route53_record" "website" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.website_domain # qa03.hibiji.com
+  name    = local.website_domain # dev01.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [module.s3_website.cloudfront_domain_name]
 
+  # Add lifecycle to prevent conflicts
   lifecycle {
     ignore_changes = [records]
   }
@@ -482,11 +556,12 @@ resource "aws_route53_record" "website" {
 
 resource "aws_route53_record" "api" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.api_domain # qa03-api.hibiji.com
+  name    = local.api_domain # dev01-api.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
 
+  # Add lifecycle to prevent conflicts
   lifecycle {
     ignore_changes = [records]
   }
@@ -527,8 +602,18 @@ output "uploads_bucket_name" {
   value       = aws_s3_bucket.uploads.bucket
 }
 
-output "domain_name" {
-  description = "Domain name for the environment"
+output "ssl_certificate_arn" {
+  description = "ARN of the SSL certificate for the website"
+  value       = aws_acm_certificate.website.arn
+}
+
+output "cloudfront_distribution_id" {
+  description = "ID of the CloudFront distribution"
+  value       = module.s3_website.cloudfront_distribution_id
+}
+
+output "website_domain" {
+  description = "Website domain name"
   value       = local.website_domain
 }
 
@@ -549,20 +634,20 @@ module "aws_batch_ml" {
   # Database configuration
   database_secret_arn = aws_secretsmanager_secret.database_password.arn
 
-  # Batch compute configuration (cost-optimized for QA)
+  # Batch compute configuration (cost-optimized for Dev)
   min_vcpus           = 0
-  max_vcpus           = 5
+  max_vcpus           = 3
   desired_vcpus       = 0
-  instance_types      = ["m5.large", "c5.large"]
+  instance_types      = ["m5.large"]
   use_spot_instances  = true
-  spot_bid_percentage = 60
+  spot_bid_percentage = 70
 
   # Job configuration
   job_vcpus  = 1
-  job_memory = 2048
+  job_memory = 1024
 
   # Logging
-  log_retention_days = 7 # Shorter retention for QA
+  log_retention_days = 7
   log_level          = "DEBUG"
 }
 
@@ -598,4 +683,4 @@ output "ml_ecr_repository_url" {
 output "ml_batch_job_queue_name" {
   description = "Batch job queue name for ML processing"
   value       = module.aws_batch_ml.batch_job_queue_name
-} 
+}
