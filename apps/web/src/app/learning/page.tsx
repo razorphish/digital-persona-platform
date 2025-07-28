@@ -660,30 +660,6 @@ function LearningPageContent() {
     };
   }, []);
 
-  // Automatically request microphone permission when component loads
-  useEffect(() => {
-    const autoRequestMicPermission = async () => {
-      // Only auto-request if we haven't checked yet and user is authenticated
-      if (permissionGranted === null && user) {
-        // Skip auto-request on mobile browsers that require user interaction
-        if (requiresUserInteraction) {
-          console.log(
-            "Skipping auto-request on mobile - requires user interaction"
-          );
-          return;
-        }
-
-        console.log("Auto-requesting microphone permission on component load");
-        await requestMicrophonePermission();
-      }
-    };
-
-    // Add a longer delay for mobile devices to ensure proper loading
-    const delay = isMobileDevice ? 2000 : 1000;
-    const timer = setTimeout(autoRequestMicPermission, delay);
-    return () => clearTimeout(timer);
-  }, [user, permissionGranted, requiresUserInteraction, isMobileDevice]);
-
   // Request microphone permissions proactively
   const requestMicrophonePermission = useCallback(async () => {
     if (permissionGranted === true) {
@@ -761,7 +737,37 @@ function LearningPageContent() {
       setIsRequestingPermission(false);
       return false;
     }
-  }, [permissionGranted]);
+  }, [permissionGranted, isMobileDevice, requiresUserInteraction]);
+
+  // Automatically request microphone permission when component loads
+  useEffect(() => {
+    const autoRequestMicPermission = async () => {
+      // Only auto-request if we haven't checked yet and user is authenticated
+      if (permissionGranted === null && user) {
+        // Skip auto-request on mobile browsers that require user interaction
+        if (requiresUserInteraction) {
+          console.log(
+            "Skipping auto-request on mobile - requires user interaction"
+          );
+          return;
+        }
+
+        console.log("Auto-requesting microphone permission on component load");
+        await requestMicrophonePermission();
+      }
+    };
+
+    // Add a longer delay for mobile devices to ensure proper loading
+    const delay = isMobileDevice ? 2000 : 1000;
+    const timer = setTimeout(autoRequestMicPermission, delay);
+    return () => clearTimeout(timer);
+  }, [
+    user,
+    permissionGranted,
+    requiresUserInteraction,
+    isMobileDevice,
+    requestMicrophonePermission,
+  ]);
 
   // Audio recording functions
   const startRecording = async () => {
