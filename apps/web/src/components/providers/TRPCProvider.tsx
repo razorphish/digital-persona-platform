@@ -114,9 +114,17 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
             // Check token validity before sending requests
             if (tokens?.accessToken) {
               if (AuthUtils.isTokenExpired(tokens.accessToken)) {
-                // Token is expired, clear it and don't send authorization header
-                AuthUtils.clearTokens();
-                return {};
+                // Token is expired, but don't clear it immediately in headers function
+                // Let the response handling deal with 401 errors instead
+                console.warn(
+                  "🕐 Token appears expired, but letting server decide"
+                );
+
+                // Still send the token - let the server respond with 401 if truly invalid
+                // This prevents race conditions where tokens are cleared too aggressively
+                return {
+                  authorization: `Bearer ${tokens.accessToken}`,
+                };
               }
 
               return {
@@ -134,15 +142,36 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
             if (response.status === 401 || response.status === 403) {
               console.warn(
                 "HTTP authentication error detected:",
-                response.status
+                response.status,
+                "URL:",
+                url
               );
 
-              // Clear corrupted/invalid tokens
-              AuthUtils.clearTokens();
+              // Don't clear tokens immediately on first 401 - might be a temporary issue
+              // Only clear tokens if we're not on an auth page and this isn't during initial load
+              const isInitialLoad = performance.navigation?.type === 1; // PAGE_LOAD type
+              const isOnAuthPage =
+                window.location.pathname.startsWith("/auth/");
 
-              // Check if we're not already on login page to prevent redirect loops
-              if (!window.location.pathname.startsWith("/auth/")) {
-                window.location.href = "/auth/login";
+              console.log("401 Response context:", {
+                isInitialLoad,
+                isOnAuthPage,
+                pathname: window.location.pathname,
+                url: url.toString(),
+              });
+
+              if (!isOnAuthPage && !isInitialLoad) {
+                console.warn("Clearing tokens due to confirmed 401 response");
+                AuthUtils.clearTokens();
+
+                // Add a small delay to prevent race conditions
+                setTimeout(() => {
+                  if (!window.location.pathname.startsWith("/auth/")) {
+                    window.location.href = "/auth/login";
+                  }
+                }, 100);
+              } else {
+                console.log("Skipping token clear - initial load or auth page");
               }
             }
 

@@ -95,7 +95,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (isExpired) {
         console.warn("Token expired, clearing auth state");
-        AuthUtils.clearTokens();
+        // Only clear tokens if they're significantly expired (not just a few seconds)
+        const tokenData = AuthUtils.getUserFromToken(tokens.accessToken);
+        const currentTime = Date.now() / 1000;
+        const timeSinceExpiry = currentTime - (tokenData as any)?.exp;
+
+        console.log("Token expiration details:", {
+          exp: (tokenData as any)?.exp,
+          currentTime,
+          timeSinceExpiry,
+          gracePeriod: timeSinceExpiry < 60, // 1 minute grace period
+        });
+
+        // Give a 1-minute grace period for clock skew
+        if (timeSinceExpiry > 60) {
+          AuthUtils.clearTokens();
+        } else {
+          console.log("Token recently expired, keeping for grace period");
+        }
+
         setUser(null);
         setIsLoading(false);
         setIsInitialized(true);
@@ -125,9 +143,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("Invalid token payload - missing critical fields:", {
           userData,
         });
-        // Clear invalid tokens to prevent redirect loops
-        console.log("Clearing invalid tokens");
-        AuthUtils.clearTokens();
+        // Don't immediately clear tokens on payload issues - might be temporary
+        // Let the user stay on current page and try API calls to determine validity
+        console.log(
+          "Token payload issue detected, but not clearing tokens immediately"
+        );
         setUser(null);
       }
 
@@ -222,6 +242,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       AuthUtils.setTokens({
         accessToken: result.token,
       });
+
+      // Verify tokens were saved properly
+      const verifyTokens = AuthUtils.getTokens();
+      console.log("🔑 login: Token verification after save:", {
+        tokenSaved: !!verifyTokens?.accessToken,
+        tokenMatches: verifyTokens?.accessToken === result.token,
+        tokenLength: verifyTokens?.accessToken?.length,
+      });
+
+      if (!verifyTokens?.accessToken) {
+        console.error(
+          "❌ login: Token was not saved properly to localStorage!"
+        );
+        throw new Error("Failed to save authentication token");
+      }
 
       // Set user state
       setUser(result.user);
