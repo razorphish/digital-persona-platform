@@ -50,12 +50,16 @@ function MicrophoneSetupInstructions({
   testResult,
   isMobileDevice,
   requiresUserInteraction,
+  onRequestPermission,
+  isRequestingPermission,
 }: {
   onTestMicrophone: () => void;
   isTesting: boolean;
   testResult: "success" | "failed" | null;
   isMobileDevice: boolean;
   requiresUserInteraction: boolean;
+  onRequestPermission: () => void;
+  isRequestingPermission: boolean;
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
@@ -388,15 +392,16 @@ function MicrophoneSetupInstructions({
           </p>
           <div className="flex items-center space-x-3">
             <button
-              onClick={onTestMicrophone}
-              disabled={isTesting}
+              type="button"
+              onClick={onRequestPermission}
+              disabled={isRequestingPermission}
               className={`px-4 py-2 text-white rounded-lg font-medium disabled:opacity-50 ${
                 isMobileDevice
                   ? "bg-orange-600 hover:bg-orange-700"
                   : "bg-blue-600 hover:bg-blue-700"
               }`}
             >
-              {isTesting
+              {isRequestingPermission
                 ? "Requesting..."
                 : isMobileDevice
                 ? "📱 Request Mobile Access"
@@ -423,6 +428,7 @@ function MicrophoneSetupInstructions({
           </p>
           <div className="flex items-center space-x-3">
             <button
+              type="button"
               onClick={onTestMicrophone}
               disabled={isTesting}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -893,9 +899,30 @@ function LearningPageContent() {
     try {
       console.log("Testing microphone access...");
 
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Audio recording is not supported in this browser");
+      // Enhanced browser compatibility checks
+      if (typeof window === "undefined") {
+        throw new Error("Not running in browser environment");
       }
+
+      if (!navigator || !navigator.mediaDevices) {
+        throw new Error("MediaDevices API not supported in this browser");
+      }
+
+      if (!navigator.mediaDevices.getUserMedia) {
+        throw new Error("getUserMedia not supported in this browser");
+      }
+
+      // Check for HTTPS requirement (except localhost)
+      if (
+        location.protocol !== "https:" &&
+        !location.hostname.includes("localhost")
+      ) {
+        throw new Error("Microphone access requires HTTPS connection");
+      }
+
+      console.log(
+        "Browser compatibility checks passed, requesting microphone..."
+      );
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -905,16 +932,30 @@ function LearningPageContent() {
         },
       });
 
-      // Test for 2 seconds
       console.log("Microphone access granted, testing for 2 seconds...");
 
-      setTimeout(() => {
-        // Stop all tracks
-        stream.getTracks().forEach((track) => track.stop());
-        setMicTestResult("success");
-        setIsMicTesting(false);
-        console.log("Microphone test successful!");
-      }, 2000);
+      // Create a promise that resolves after testing
+      const testPromise = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          try {
+            // Stop all tracks safely
+            stream.getTracks().forEach((track) => {
+              if (track.readyState !== "ended") {
+                track.stop();
+              }
+            });
+            console.log("Microphone test successful!");
+            resolve();
+          } catch (stopError) {
+            console.warn("Error stopping tracks:", stopError);
+            resolve(); // Still consider test successful
+          }
+        }, 2000);
+      });
+
+      await testPromise;
+      setMicTestResult("success");
+      setIsMicTesting(false);
     } catch (error) {
       console.error("Microphone test failed:", error);
 
@@ -922,19 +963,59 @@ function LearningPageContent() {
 
       if (error instanceof Error) {
         if (error.name === "NotAllowedError") {
-          errorMessage =
-            "Microphone access denied. Please allow microphone permissions and try again.";
+          errorMessage = isMobileDevice
+            ? "Microphone access denied. Please check your mobile browser settings and allow microphone access for this site."
+            : "Microphone access denied. Please click the microphone icon in your browser's address bar and allow access.";
         } else if (error.name === "NotFoundError") {
-          errorMessage =
-            "No microphone found. Please connect a microphone and try again.";
+          errorMessage = isMobileDevice
+            ? "No microphone found. Please check that your mobile device's microphone is working and not blocked by another app."
+            : "No microphone found. Please connect a microphone and try again.";
         } else if (error.name === "NotSupportedError") {
-          errorMessage = "Audio recording is not supported in this browser.";
+          errorMessage =
+            "Audio recording is not supported in this browser. Try Chrome, Firefox, or Safari.";
+        } else if (error.name === "OverconstrainedError") {
+          errorMessage =
+            "Microphone constraints not supported. Using a simpler configuration...";
+          // Try again with simpler constraints
+          setTimeout(() => testMicrophoneWithBasicConfig(), 1000);
+          return;
+        } else if (error.message.includes("HTTPS")) {
+          errorMessage =
+            "Microphone access requires a secure (HTTPS) connection. Please use https:// in the URL.";
         } else {
           errorMessage = error.message || errorMessage;
         }
       }
 
       setRecordingError(errorMessage);
+      setMicTestResult("failed");
+      setIsMicTesting(false);
+    }
+  };
+
+  // Fallback test with basic microphone configuration
+  const testMicrophoneWithBasicConfig = async () => {
+    try {
+      console.log("Retrying microphone test with basic configuration...");
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true, // Use basic audio constraints
+      });
+
+      setTimeout(() => {
+        stream.getTracks().forEach((track) => track.stop());
+        setMicTestResult("success");
+        setIsMicTesting(false);
+        console.log("Microphone test successful with basic config!");
+      }, 2000);
+    } catch (retryError) {
+      console.error(
+        "Microphone test failed even with basic config:",
+        retryError
+      );
+      setRecordingError(
+        "Microphone test failed. Please check your device's microphone settings."
+      );
       setMicTestResult("failed");
       setIsMicTesting(false);
     }
@@ -1573,6 +1654,8 @@ function LearningPageContent() {
                           testResult={micTestResult}
                           isMobileDevice={isMobileDevice}
                           requiresUserInteraction={requiresUserInteraction}
+                          onRequestPermission={requestMicrophonePermission}
+                          isRequestingPermission={isRequestingPermission}
                         />
                       </div>
                     )}
@@ -1911,6 +1994,8 @@ function LearningPageContent() {
                           testResult={micTestResult}
                           isMobileDevice={isMobileDevice}
                           requiresUserInteraction={requiresUserInteraction}
+                          onRequestPermission={requestMicrophonePermission}
+                          isRequestingPermission={isRequestingPermission}
                         />
                       </div>
                     )}
@@ -2175,11 +2260,13 @@ function LearningPageContent() {
           {/* Start Button */}
           <div className="text-center">
             <button
+              type="button"
               onClick={handleStartInterview}
               disabled={
                 !selectedPersonaId ||
                 startInterviewMutation.isLoading ||
-                personasLoading
+                personasLoading ||
+                isUploadingAudio
               }
               className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-lg font-semibold rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
