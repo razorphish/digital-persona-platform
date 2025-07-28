@@ -153,3 +153,4 @@ test-server-startup.py
 # Next.js
 .next/
 out/
+.turbo/
