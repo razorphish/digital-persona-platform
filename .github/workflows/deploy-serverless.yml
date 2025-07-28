@@ -341,6 +341,15 @@ jobs:
           # Run the IAM update script
           ./scripts/update-iam-permissions.sh
 
+      - name: Bootstrap Terraform Infrastructure
+        run: |
+          echo "🚀 Running Terraform bootstrap to ensure state bucket exists..."
+          ./scripts/bootstrap-terraform.sh
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          STATE_BUCKET_NAME: "hibiji-terraform-state"
+          PROJECT_NAME: "dpp"
+
       - name: Terraform Init and Plan
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
