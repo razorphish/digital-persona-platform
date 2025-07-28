@@ -134,6 +134,14 @@ export class ErrorHandler {
       return "Authentication failed. Please try again.";
     }
 
+    // Log the error for debugging
+    console.error("🔍 Auth error details:", {
+      message: error?.message,
+      code: error?.code,
+      cause: error?.cause,
+      stack: error?.stack,
+    });
+
     if (
       error?.message?.includes("email already exists") ||
       error?.message?.includes("CONFLICT")
@@ -143,16 +151,32 @@ export class ErrorHandler {
 
     if (
       error?.message?.includes("Invalid credentials") ||
-      error?.message?.includes("authentication failed")
+      error?.message?.includes("authentication failed") ||
+      error?.message?.includes("UNAUTHORIZED")
     ) {
       return "Invalid email or password. Please check your credentials.";
     }
 
-    if (error?.message?.includes("password")) {
+    // Only show password length validation for specific validation errors (registration)
+    // Not for general auth failures that happen to mention "password"
+    if (
+      error?.message?.includes("Password must be at least 8 characters") ||
+      (error?.message?.includes("password") &&
+        (error?.message?.includes("min") ||
+          error?.message?.includes("length") ||
+          error?.message?.includes("characters") ||
+          error?.code === "VALIDATION_ERROR" ||
+          error?.issues?.some?.((issue: any) =>
+            issue?.path?.includes("password")
+          )))
+    ) {
       return "Password must be at least 8 characters long.";
     }
 
-    if (error?.message?.includes("email")) {
+    if (
+      error?.message?.includes("email") &&
+      !error?.message?.includes("Invalid")
+    ) {
       return "Please enter a valid email address.";
     }
 

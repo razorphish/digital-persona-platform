@@ -200,7 +200,98 @@ for bucket in $S3_BUCKETS; do
   fi
 done
 
-# 6. Route53 DNS Records
+# 6. CloudFront Distributions (before SSL certificates)
+print_status "🧹 Cleaning up CloudFront distributions..."
+CLOUDFRONT_DISTRIBUTIONS=$(aws cloudfront list-distributions \
+  --query "DistributionList.Items[?contains(Comment, '${MAIN_ENV}-${TARGET_ENV}-${PROJECT_NAME}') || (Origins.Items[0].DomainName && contains(Origins.Items[0].DomainName, '${MAIN_ENV}-${TARGET_ENV}-${PROJECT_NAME}'))].Id" \
+  --output text)
+
+for dist_id in $CLOUDFRONT_DISTRIBUTIONS; do
+  if [ -n "$dist_id" ] && [ "$dist_id" != "None" ]; then
+    print_status "🔍 Checking CloudFront distribution: $dist_id"
+    
+    # Get distribution details
+    DIST_STATUS=$(aws cloudfront get-distribution --id "$dist_id" --query 'Distribution.Status' --output text 2>/dev/null || echo "NotFound")
+    DIST_ENABLED=$(aws cloudfront get-distribution --id "$dist_id" --query 'Distribution.DistributionConfig.Enabled' --output text 2>/dev/null || echo "false")
+    
+    if [ "$DIST_STATUS" = "NotFound" ]; then
+      print_status "⚠️ Distribution $dist_id not found, skipping"
+      continue
+    fi
+    
+    if [ "$DIST_ENABLED" = "true" ]; then
+      print_status "⏸️ Disabling CloudFront distribution: $dist_id"
+      
+      # Get current config
+      aws cloudfront get-distribution-config --id "$dist_id" --output json > "/tmp/dist_config_${dist_id}.json"
+      ETAG=$(jq -r '.ETag' "/tmp/dist_config_${dist_id}.json")
+      
+      # Disable distribution
+      jq '.DistributionConfig | .Enabled = false' "/tmp/dist_config_${dist_id}.json" > "/tmp/dist_config_disabled_${dist_id}.json"
+      
+      aws cloudfront update-distribution \
+        --id "$dist_id" \
+        --distribution-config "file:///tmp/dist_config_disabled_${dist_id}.json" \
+        --if-match "$ETAG" > /dev/null || echo "⚠️ Failed to disable distribution: $dist_id"
+      
+      print_status "⏳ Waiting for distribution to be disabled (this may take 10-15 minutes)..."
+      
+      # Wait for distribution to be disabled and deployed
+      while true; do
+        CURRENT_STATUS=$(aws cloudfront get-distribution --id "$dist_id" --query 'Distribution.Status' --output text)
+        CURRENT_ENABLED=$(aws cloudfront get-distribution --id "$dist_id" --query 'Distribution.DistributionConfig.Enabled' --output text)
+        
+        if [ "$CURRENT_STATUS" = "Deployed" ] && [ "$CURRENT_ENABLED" = "false" ]; then
+          break
+        fi
+        
+        print_status "⏳ Distribution status: $CURRENT_STATUS, enabled: $CURRENT_ENABLED - waiting..."
+        sleep 30
+      done
+      
+      # Cleanup temp files
+      rm -f "/tmp/dist_config_${dist_id}.json" "/tmp/dist_config_disabled_${dist_id}.json"
+    fi
+    
+    if [ "$DIST_STATUS" = "Deployed" ] && [ "$DIST_ENABLED" = "false" ]; then
+      print_status "🗑️ Deleting CloudFront distribution: $dist_id"
+      
+      # Get ETag for deletion
+      ETAG=$(aws cloudfront get-distribution --id "$dist_id" --query 'ETag' --output text)
+      
+      aws cloudfront delete-distribution --id "$dist_id" --if-match "$ETAG" || echo "⚠️ Failed to delete distribution: $dist_id"
+    else
+      print_status "⚠️ Distribution $dist_id not ready for deletion (Status: $DIST_STATUS, Enabled: $DIST_ENABLED)"
+    fi
+  fi
+done
+
+# 7. SSL Certificates (ACM) - clean up after CloudFront distributions
+print_status "🧹 Cleaning up SSL certificates..."
+SSL_CERTIFICATES=$(aws acm list-certificates --region us-east-1 \
+  --query "CertificateSummaryList[?contains(DomainName, '${TARGET_ENV}.hibiji.com')].CertificateArn" \
+  --output text)
+
+for cert_arn in $SSL_CERTIFICATES; do
+  if [ -n "$cert_arn" ] && [ "$cert_arn" != "None" ]; then
+    print_status "🔍 Checking SSL certificate: $cert_arn"
+    
+    # Check if certificate is in use by any CloudFront distributions
+    CERT_IN_USE=$(aws cloudfront list-distributions \
+      --query "DistributionList.Items[?DistributionConfig.ViewerCertificate.ACMCertificateArn=='${cert_arn}'].Id" \
+      --output text)
+    
+    if [ -n "$CERT_IN_USE" ] && [ "$CERT_IN_USE" != "None" ]; then
+      print_status "⚠️ SSL certificate still in use by CloudFront distributions: $CERT_IN_USE"
+      print_status "💡 Skipping certificate deletion - will be cleaned up when distributions are removed"
+    else
+      print_status "🗑️ Deleting SSL certificate: $cert_arn"
+      aws acm delete-certificate --certificate-arn "$cert_arn" --region us-east-1 || echo "⚠️ Failed to delete certificate: $cert_arn"
+    fi
+  fi
+done
+
+# 8. Route53 DNS Records
 print_status "🧹 Cleaning up Route53 DNS records..."
 HOSTED_ZONE_ID=$(aws route53 list-hosted-zones \
   --query "HostedZones[?Name=='hibiji.com.'].Id" \
@@ -229,6 +320,28 @@ if [ -n "$HOSTED_ZONE_ID" ] && [ "$HOSTED_ZONE_ID" != "None" ]; then
         }" || echo "⚠️ Failed to delete DNS record: $record"
     fi
   done
+  
+  # Delete SSL certificate validation DNS records (CNAME records starting with _)
+  print_status "🧹 Cleaning up SSL certificate validation DNS records..."
+  SSL_VALIDATION_RECORDS=$(aws route53 list-resource-record-sets \
+    --hosted-zone-id "$HOSTED_ZONE_ID" \
+    --query "ResourceRecordSets[?Type=='CNAME' && starts_with(Name, '_') && contains(Name, '${TARGET_ENV}.hibiji.com')]" \
+    --output json)
+  
+  if [ "$SSL_VALIDATION_RECORDS" != "[]" ] && [ "$SSL_VALIDATION_RECORDS" != "null" ]; then
+    echo "$SSL_VALIDATION_RECORDS" | jq -c '.[]' | while read -r record; do
+      RECORD_NAME=$(echo "$record" | jq -r '.Name')
+      print_status "🗑️ Deleting SSL validation record: $RECORD_NAME"
+      aws route53 change-resource-record-sets \
+        --hosted-zone-id "$HOSTED_ZONE_ID" \
+        --change-batch "{
+          \"Changes\": [{
+            \"Action\": \"DELETE\",
+            \"ResourceRecordSet\": $record
+          }]
+        }" || echo "⚠️ Failed to delete SSL validation record: $RECORD_NAME"
+    done
+  fi
 fi
 
 # 7. VPC Infrastructure Cleanup (handle dependencies in correct order)

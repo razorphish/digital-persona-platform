@@ -64,6 +64,138 @@ docker logs dpp-frontend-dev
 docker logs dpp-backend-dev
 ```
 
+## 🚀 Serverless Deployment
+
+Deploy the full stack to AWS with SSL certificates and custom domains using the integrated deployment script.
+
+### Quick Deployment
+
+```bash
+# Deploy to any environment with SSL
+./scripts/deploy-serverless.sh -e dev -s dev01    # → https://dev01.hibiji.com
+./scripts/deploy-serverless.sh -e dev -s qa02     # → https://qa02.hibiji.com
+./scripts/deploy-serverless.sh -e dev -s staging  # → https://staging.hibiji.com
+```
+
+### Deployment Options
+
+```bash
+# Full deployment (build + infrastructure + SSL)
+./scripts/deploy-serverless.sh -e dev -s dev01
+
+# Skip build, deploy infrastructure only
+./scripts/deploy-serverless.sh -b -e dev -s dev01
+
+# Skip infrastructure, deploy code only
+./scripts/deploy-serverless.sh -i -e dev -s dev01
+
+# Dry run (preview changes)
+./scripts/deploy-serverless.sh -d -e dev -s dev01
+
+# Help
+./scripts/deploy-serverless.sh -h
+```
+
+### What Gets Deployed
+
+**🏗️ Infrastructure (Terraform):**
+
+- ✅ **SSL Certificates**: Automatic ACM certificates in us-east-1
+- ✅ **CloudFront CDN**: Custom domain with SSL attachment
+- ✅ **S3 Static Website**: Frontend hosting with custom domain
+- ✅ **Lambda Functions**: Backend API with VPC integration
+- ✅ **API Gateway**: HTTP API with CORS and custom domain
+- ✅ **RDS Aurora**: PostgreSQL database with proxy
+- ✅ **Route53 DNS**: Automatic DNS records and validation
+
+**🚀 Applications:**
+
+- ✅ **Frontend**: Next.js SPA built and deployed to S3
+- ✅ **Backend**: Node.js Lambda with production optimizations
+- ✅ **Database**: Automatic migrations and connection pooling
+
+**🔒 Security & SSL:**
+
+- ✅ **Custom Domain**: `{sub-environment}.hibiji.com`
+- ✅ **SSL Certificate**: Valid HTTPS with automatic renewal
+- ✅ **DNS Validation**: Automatic Route53 certificate validation
+- ✅ **Security Headers**: CloudFront security optimizations
+
+### Deployment Output
+
+```bash
+==========================================
+🎉 DEPLOYMENT SUMMARY
+==========================================
+
+Environment: dev/dev01
+🌐 Custom Domain (SSL): https://dev01.hibiji.com
+🔒 SSL Certificate Status: ISSUED
+🔗 API URL: https://dev01-api.hibiji.com/v1
+📡 CloudFront URL: https://d6qpaqu5yyo7w.cloudfront.net
+📦 S3 Bucket: dev-dev01-dpp-website
+⚡ Lambda Function: dev-dev01-dpp-api
+
+🔍 Verifying SSL deployment...
+✅ SSL certificate is working!
+```
+
+### Environment Management
+
+**Create unlimited environments:**
+
+```bash
+# Development environments
+./scripts/deploy-serverless.sh -e dev -s dev01
+./scripts/deploy-serverless.sh -e dev -s dev02
+./scripts/deploy-serverless.sh -e dev -s dev03
+
+# QA environments
+./scripts/deploy-serverless.sh -e dev -s qa01
+./scripts/deploy-serverless.sh -e dev -s qa02
+
+# Special environments
+./scripts/deploy-serverless.sh -e dev -s hotfix
+./scripts/deploy-serverless.sh -e dev -s demo
+./scripts/deploy-serverless.sh -e dev -s preview
+```
+
+**Environment cleanup:**
+
+```bash
+# Clean up specific environment (including SSL)
+./scripts/dynamic-cleanup-environment.sh dev dev01
+
+# Interactive SSL certificate cleanup
+./scripts/cleanup-ssl-certificates.sh
+```
+
+### Prerequisites for Deployment
+
+1. **AWS CLI configured** with appropriate permissions
+2. **Terraform installed** (v1.0+)
+3. **Node.js 18+** for build process
+4. **Domain hosted in Route53** (hibiji.com configured)
+
+### Deployment Architecture
+
+| Component      | Technology                       | Purpose                          |
+| -------------- | -------------------------------- | -------------------------------- |
+| **Frontend**   | S3 + CloudFront                  | Static website hosting with CDN  |
+| **Backend**    | Lambda + API Gateway             | Serverless API with auto-scaling |
+| **Database**   | Aurora Serverless v2 + RDS Proxy | Auto-scaling PostgreSQL          |
+| **SSL**        | ACM + Route53                    | Automatic certificate management |
+| **DNS**        | Route53                          | Custom domain routing            |
+| **Monitoring** | CloudWatch                       | Logs and metrics                 |
+
+**🎯 Benefits:**
+
+- 🔒 **Production SSL** - Valid HTTPS certificates
+- 💰 **Cost Optimized** - Serverless auto-scaling
+- 🚀 **Fast Deployment** - Single command deployment
+- 🧹 **Easy Cleanup** - Environment-specific cleanup
+- 📈 **Unlimited Environments** - Dynamic sub-environment support
+
 ## 💻 Local Development Setup
 
 ### 1. Clone and Setup
@@ -407,15 +539,18 @@ docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
 
 ## 📚 Documentation
 
-| Document                                                           | Description                      |
-| ------------------------------------------------------------------ | -------------------------------- |
-| [DOCKER_README.md](./DOCKER_README.md)                             | Comprehensive Docker setup guide |
-| [DOCKER_SETUP_COMPLETE.md](./DOCKER_SETUP_COMPLETE.md)             | Docker configuration details     |
-| [DEBUG_SETUP.md](./DEBUG_SETUP.md)                                 | VS Code debugging configuration  |
-| [VSCODE_DEBUG_CONFIGURATIONS.md](./VSCODE_DEBUG_CONFIGURATIONS.md) | Complete debug setup             |
-| [AUTHENTICATION_SYSTEM.md](./docs/AUTHENTICATION_SYSTEM.md)        | Auth implementation details      |
-| [DATABASE.md](./docs/DATABASE.md)                                  | Database schema and operations   |
-| [UPLOAD_SYSTEM.md](./docs/UPLOAD_SYSTEM.md)                        | File upload architecture         |
+| Document                                                                       | Description                         |
+| ------------------------------------------------------------------------------ | ----------------------------------- |
+| [DOCKER_README.md](./DOCKER_README.md)                                         | Comprehensive Docker setup guide    |
+| [DOCKER_SETUP_COMPLETE.md](./DOCKER_SETUP_COMPLETE.md)                         | Docker configuration details        |
+| [DEBUG_SETUP.md](./DEBUG_SETUP.md)                                             | VS Code debugging configuration     |
+| [VSCODE_DEBUG_CONFIGURATIONS.md](./VSCODE_DEBUG_CONFIGURATIONS.md)             | Complete debug setup                |
+| [AUTHENTICATION_SYSTEM.md](./docs/AUTHENTICATION_SYSTEM.md)                    | Auth implementation details         |
+| [DATABASE.md](./docs/DATABASE.md)                                              | Database schema and operations      |
+| [UPLOAD_SYSTEM.md](./docs/UPLOAD_SYSTEM.md)                                    | File upload architecture            |
+| [DEPLOY_SERVERLESS_SSL_INTEGRATION.md](./DEPLOY_SERVERLESS_SSL_INTEGRATION.md) | SSL deployment integration guide    |
+| [SUB_ENVIRONMENT_SSL_SUPPORT.md](./SUB_ENVIRONMENT_SSL_SUPPORT.md)             | Dynamic sub-environment SSL support |
+| [SSL_CLEANUP_CHANGES.md](./SSL_CLEANUP_CHANGES.md)                             | SSL lifecycle management guide      |
 
 ## 🤝 Contributing
 
@@ -444,6 +579,10 @@ docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
 - [x] SPA deployment configuration
 - [x] VS Code debugging setup with automatic port cleanup
 - [x] Comprehensive error handling and user feedback
+- [x] **Serverless deployment with SSL certificates**
+- [x] **Dynamic sub-environment support with custom domains**
+- [x] **Production-ready HTTPS with automatic certificate management**
+- [x] **AWS infrastructure automation (Terraform + Lambda + CloudFront)**
 
 ### 🚧 In Progress
 
@@ -459,46 +598,55 @@ docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
 - [ ] Mobile app development
 - [ ] Advanced AI learning capabilities
 
-## 🚀 Production Readiness TODOs
+## 🚀 Production Readiness Status
 
-### 🔐 SSL Certificate Management
+### ✅ SSL Certificate Management - IMPLEMENTED
 
-**Current Status**: Using AWS default certificates (working but unprofessional URLs)  
-**Production Need**: Custom domain SSL certificates for professional deployment
+**Current Status**: ✅ **Production-ready SSL with custom domains**  
+**Implementation**: Dynamic SSL certificates for unlimited sub-environments
 
-**📋 Implementation Plan:**
+**📋 Completed Features:**
 
-- [ ] **Wildcard SSL Certificates** (Recommended AWS Best Practice)
-  - `*.hibiji.com` → All environment websites (qa10.hibiji.com, dev01.hibiji.com)
-  - `*-api.hibiji.com` → All API endpoints (qa10-api.hibiji.com, dev01-api.hibiji.com)
-  - `hibiji.com` → Production apex domain
+- ✅ **Dynamic SSL Certificates** - Automatic ACM certificates for any sub-environment
+  - `{sub-environment}.hibiji.com` → Environment websites (dev01.hibiji.com, qa02.hibiji.com)
+  - `{sub-environment}-api.hibiji.com` → API endpoints (dev01-api.hibiji.com, qa02-api.hibiji.com)
+  - Automatic DNS validation via Route53
+- ✅ **Production URLs** with valid SSL (no certificate warnings)
+- ✅ **Cost Optimized** - Free ACM certificates with automatic renewal
+- ✅ **Automatic Coverage** for new environments
+- ✅ **Zero-configuration** SSL deployment
 
-**💰 Benefits:**
-
-- **78% cost savings** vs individual certificates ($328/year vs $1,500/year)
-- **Professional URLs** with valid SSL (no certificate warnings)
-- **SEO improvement** with custom domain structure
-- **Automatic coverage** for new environments
-- **Future-proof** infrastructure
-
-**🔧 Technical Details:**
+**🔧 Technical Implementation:**
 
 ```terraform
-# Wildcard certificates for production
-resource "aws_acm_certificate" "wildcard_website" {
-  domain_name               = "*.hibiji.com"
-  subject_alternative_names = ["hibiji.com"]
-  validation_method         = "DNS"
+# Dynamic SSL certificate generation
+resource "aws_acm_certificate" "website" {
+  domain_name       = "${var.sub_environment}.hibiji.com"
+  subject_alternative_names = ["*.${var.sub_environment}.hibiji.com"]
+  validation_method = "DNS"
 }
 
-resource "aws_acm_certificate" "wildcard_api" {
-  domain_name       = "*-api.hibiji.com"
-  validation_method = "DNS"
+# Automatic DNS validation
+resource "aws_route53_record" "website_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.website.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
 }
 ```
 
-**📈 Priority**: High for production launch  
-**📚 Reference**: [AWS ACM Best Practices](https://docs.aws.amazon.com/acm/latest/userguide/best-practices.html)
+**💰 Benefits Achieved:**
+
+- 🔒 **Professional HTTPS** for all environments
+- 💰 **$0 SSL cost** (using free ACM certificates)
+- 🚀 **Instant deployment** with `./scripts/deploy-serverless.sh`
+- 🔄 **Automatic renewal** (no manual certificate management)
+- 📈 **Unlimited environments** support
+
+**📈 Status**: ✅ **Production Ready** - SSL fully implemented and operational
 
 ---
 
@@ -516,7 +664,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 2. **VS Code**: Use "Debug Full Stack" configuration
 3. **Manual**: Follow the Local Development Setup above
 
-The platform includes **enterprise-grade authentication**, **full containerization**, and **comprehensive file management** - ready for both development and production deployment!
+**For production deployment:**
+
+4. **AWS Deployment**: `./scripts/deploy-serverless.sh -e dev -s dev01` → https://dev01.hibiji.com
+
+The platform includes **enterprise-grade authentication**, **full containerization**, **comprehensive file management**, and **production SSL deployment** - ready for both development and production deployment!
 
 **🔗 Quick Access:**
 
@@ -524,3 +676,4 @@ The platform includes **enterprise-grade authentication**, **full containerizati
 - **Docker Backend**: http://localhost:3101
 - **Local Frontend**: http://localhost:4000
 - **Local Backend**: http://localhost:4001
+- **Production Example**: https://dev01.hibiji.com

@@ -4,9 +4,10 @@
 # Serverless Architecture Deployment Script
 # =================================
 # This script deploys the serverless architecture including:
-# - Terraform infrastructure (Lambda, API Gateway, S3)
+# - Terraform infrastructure (Lambda, API Gateway, S3, CloudFront, SSL certificates)
 # - Frontend build and S3 upload
 # - Backend Lambda deployment
+# - SSL certificate validation and custom domain setup
 
 set -e
 
@@ -265,11 +266,27 @@ if [[ "$SKIP_INFRASTRUCTURE" == false ]]; then
         WEBSITE_BUCKET=$(terraform output -raw website_bucket_name)
         API_URL=$(terraform output -raw api_url)
         LAMBDA_FUNCTION=$(terraform output -raw lambda_function_name)
+        SSL_CERTIFICATE_ARN=$(terraform output -raw ssl_certificate_arn 2>/dev/null || echo "")
+        WEBSITE_DOMAIN=$(terraform output -raw website_domain 2>/dev/null || echo "")
+        CLOUDFRONT_DISTRIBUTION_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
         
         print_success "Infrastructure deployed successfully"
         print_status "Website bucket: ${WEBSITE_BUCKET}"
         print_status "API URL: ${API_URL}"
         print_status "Lambda function: ${LAMBDA_FUNCTION}"
+        
+        # Show SSL certificate information
+        if [[ -n "$SSL_CERTIFICATE_ARN" && "$SSL_CERTIFICATE_ARN" != "null" ]]; then
+            print_success "🔒 SSL Certificate deployed: ${SSL_CERTIFICATE_ARN}"
+        fi
+        
+        if [[ -n "$WEBSITE_DOMAIN" && "$WEBSITE_DOMAIN" != "null" ]]; then
+            print_success "🌐 Custom domain configured: https://${WEBSITE_DOMAIN}"
+        fi
+        
+        if [[ -n "$CLOUDFRONT_DISTRIBUTION_ID" && "$CLOUDFRONT_DISTRIBUTION_ID" != "null" ]]; then
+            print_status "📡 CloudFront distribution: ${CLOUDFRONT_DISTRIBUTION_ID}"
+        fi
     else
         print_status "DRY RUN: Would apply infrastructure changes"
     fi
@@ -284,6 +301,9 @@ else
         WEBSITE_BUCKET=$(terraform output -raw website_bucket_name 2>/dev/null || echo "")
         API_URL=$(terraform output -raw api_url 2>/dev/null || echo "")
         LAMBDA_FUNCTION=$(terraform output -raw lambda_function_name 2>/dev/null || echo "")
+        SSL_CERTIFICATE_ARN=$(terraform output -raw ssl_certificate_arn 2>/dev/null || echo "")
+        WEBSITE_DOMAIN=$(terraform output -raw website_domain 2>/dev/null || echo "")
+        CLOUDFRONT_DISTRIBUTION_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
         cd ../../..
     fi
 fi
@@ -371,19 +391,30 @@ if [[ "$DRY_RUN" == false && -n "$API_URL" ]]; then
         fi
     done
     
-    # Test website (if we have CloudFront distribution)
+    # Test website (CloudFront distribution)
     if [[ -n "$WEBSITE_BUCKET" ]]; then
         WEBSITE_URL=$(aws cloudfront list-distributions \
             --query "DistributionList.Items[?Comment=='${WEBSITE_BUCKET}'].DomainName" \
             --output text)
         
         if [[ -n "$WEBSITE_URL" && "$WEBSITE_URL" != "None" ]]; then
-            print_status "Testing website..."
+            print_status "Testing CloudFront distribution..."
             if curl -f "https://${WEBSITE_URL}" &> /dev/null; then
-                print_success "Website health check passed"
+                print_success "CloudFront health check passed"
             else
-                print_warning "Website health check failed"
+                print_warning "CloudFront health check failed"
             fi
+        fi
+    fi
+    
+    # Test custom domain with SSL (if configured)
+    if [[ -n "$WEBSITE_DOMAIN" && "$WEBSITE_DOMAIN" != "null" ]]; then
+        print_status "Testing custom domain with SSL..."
+        if curl -f -s --connect-timeout 15 "https://${WEBSITE_DOMAIN}" &> /dev/null; then
+            print_success "✅ Custom domain SSL health check passed"
+        else
+            print_warning "⚠️ Custom domain not ready yet (SSL may still be validating)"
+            print_status "💡 This is normal for new deployments - validation takes 5-15 minutes"
         fi
     fi
 fi
@@ -405,8 +436,19 @@ fi
 echo ""
 print_status "Environment: ${ENVIRONMENT}/${SUB_ENVIRONMENT}"
 
+# Show SSL and custom domain information first (most important)
+if [[ -n "$WEBSITE_DOMAIN" && "$WEBSITE_DOMAIN" != "null" ]]; then
+    print_success "🌐 Custom Domain (SSL): https://${WEBSITE_DOMAIN}"
+fi
+
+if [[ -n "$SSL_CERTIFICATE_ARN" && "$SSL_CERTIFICATE_ARN" != "null" ]]; then
+    # Get certificate status
+    CERT_STATUS=$(aws acm describe-certificate --certificate-arn "$SSL_CERTIFICATE_ARN" --region us-east-1 --query 'Certificate.Status' --output text 2>/dev/null || echo "Unknown")
+    print_success "🔒 SSL Certificate Status: ${CERT_STATUS}"
+fi
+
 if [[ -n "$API_URL" ]]; then
-    print_status "API URL: ${API_URL}"
+    print_status "🔗 API URL: ${API_URL}"
 fi
 
 if [[ -n "$WEBSITE_BUCKET" ]]; then
@@ -415,14 +457,26 @@ if [[ -n "$WEBSITE_BUCKET" ]]; then
         --output text 2>/dev/null || echo "")
     
     if [[ -n "$WEBSITE_URL" && "$WEBSITE_URL" != "None" ]]; then
-        print_status "Website URL: https://${WEBSITE_URL}"
+        print_status "📡 CloudFront URL: https://${WEBSITE_URL}"
     fi
     
-    print_status "S3 Bucket: ${WEBSITE_BUCKET}"
+    print_status "📦 S3 Bucket: ${WEBSITE_BUCKET}"
 fi
 
 if [[ -n "$LAMBDA_FUNCTION" ]]; then
-    print_status "Lambda Function: ${LAMBDA_FUNCTION}"
+    print_status "⚡ Lambda Function: ${LAMBDA_FUNCTION}"
 fi
 
-echo "" 
+# SSL deployment verification
+if [[ -n "$WEBSITE_DOMAIN" && "$WEBSITE_DOMAIN" != "null" && "$DRY_RUN" == false ]]; then
+    echo ""
+    print_status "🔍 Verifying SSL deployment..."
+    
+    # Test SSL certificate
+    if curl -I -s --connect-timeout 10 "https://${WEBSITE_DOMAIN}" >/dev/null 2>&1; then
+        print_success "✅ SSL certificate is working!"
+    else
+        print_warning "⚠️ SSL certificate may still be validating (can take 5-15 minutes)"
+        print_status "💡 Check status: aws acm describe-certificate --certificate-arn ${SSL_CERTIFICATE_ARN} --region us-east-1"
+    fi
+fi 

@@ -114,6 +114,78 @@ check_s3_bucket_exists() {
     fi
 }
 
+# Function to check if SSL certificate is in use
+check_ssl_certificate_usage() {
+    local cert_arn=$1
+    if [ -z "$cert_arn" ] || [ "$cert_arn" = "null" ]; then
+        return 1
+    fi
+    
+    # Check if certificate is used by any CloudFront distributions
+    local distributions_using_cert
+    distributions_using_cert=$(aws cloudfront list-distributions \
+        --query "DistributionList.Items[?DistributionConfig.ViewerCertificate.ACMCertificateArn=='${cert_arn}'].Id" \
+        --output text)
+    
+    if [ -n "$distributions_using_cert" ] && [ "$distributions_using_cert" != "None" ]; then
+        return 0  # Certificate is in use
+    else
+        return 1  # Certificate is not in use
+    fi
+}
+
+# Function to clean up unused SSL certificates
+cleanup_ssl_certificates() {
+    echo -e "${YELLOW}🔍 Checking for unused SSL certificates...${NC}"
+    
+    # Get all ACM certificates
+    local certificates
+    certificates=$(aws acm list-certificates --region us-east-1 \
+        --query 'CertificateSummaryList[*].{Arn:CertificateArn,Domain:DomainName}' \
+        --output json)
+    
+    if [ -z "$certificates" ] || [ "$certificates" = "[]" ]; then
+        echo -e "${BLUE}💡 No SSL certificates found${NC}"
+        return
+    fi
+    
+    echo "$certificates" | jq -c '.[]' | while read -r cert; do
+        local cert_arn
+        local domain_name
+        cert_arn=$(echo "$cert" | jq -r '.Arn')
+        domain_name=$(echo "$cert" | jq -r '.Domain')
+        
+        echo ""
+        echo -e "${BLUE}=== SSL Certificate: $domain_name ===${NC}"
+        echo "  ARN: $cert_arn"
+        
+        if check_ssl_certificate_usage "$cert_arn"; then
+            echo -e "${GREEN}✅ Certificate is in use by CloudFront distributions${NC}"
+        else
+            echo -e "${YELLOW}⚠️ Certificate is not being used by any CloudFront distributions${NC}"
+            
+            # Get certificate details
+            local cert_status
+            cert_status=$(aws acm describe-certificate --certificate-arn "$cert_arn" --region us-east-1 \
+                --query 'Certificate.Status' --output text 2>/dev/null || echo "Unknown")
+            
+            echo "  Status: $cert_status"
+            
+            # Check if it's a development/staging certificate
+            if [[ "$domain_name" =~ (dev|staging|test|qa)[0-9]*\. ]]; then
+                echo -e "${YELLOW}🔍 This appears to be a development/testing certificate${NC}"
+                read -p "❓ Delete this unused SSL certificate? (y/N): " delete_cert
+                if [[ $delete_cert =~ ^[Yy]$ ]]; then
+                    echo -e "${YELLOW}🗑️ Deleting SSL certificate: $domain_name${NC}"
+                    aws acm delete-certificate --certificate-arn "$cert_arn" --region us-east-1 || echo "⚠️ Failed to delete certificate"
+                fi
+            else
+                echo -e "${RED}⚠️ Production certificate detected - manual review recommended${NC}"
+            fi
+        fi
+    done
+}
+
 # Function to safely disable a distribution
 disable_distribution() {
     local distribution_id=$1
@@ -160,6 +232,27 @@ delete_distribution() {
         return 1
     fi
     
+    # Check for SSL certificate before deletion
+    local cert_arn
+    cert_arn=$(aws cloudfront get-distribution --id "$distribution_id" \
+        --query 'Distribution.DistributionConfig.ViewerCertificate.ACMCertificateArn' \
+        --output text 2>/dev/null || echo "None")
+    
+    if [ -n "$cert_arn" ] && [ "$cert_arn" != "None" ] && [ "$cert_arn" != "null" ]; then
+        echo -e "${BLUE}📋 Distribution uses SSL certificate: $cert_arn${NC}"
+        
+        # Check if certificate will become unused after this deletion
+        local other_distributions
+        other_distributions=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?DistributionConfig.ViewerCertificate.ACMCertificateArn=='${cert_arn}' && Id!='${distribution_id}'].Id" \
+            --output text)
+        
+        if [ -z "$other_distributions" ] || [ "$other_distributions" = "None" ]; then
+            echo -e "${YELLOW}⚠️ This certificate will become unused after distribution deletion${NC}"
+            echo -e "${YELLOW}💡 You may want to clean up the certificate separately${NC}"
+        fi
+    fi
+    
     # Get ETag for deletion
     etag=$(aws cloudfront get-distribution --id "$distribution_id" --query 'ETag' --output text)
     
@@ -176,7 +269,8 @@ show_menu() {
     echo "1. List all CloudFront distributions"
     echo "2. Analyze duplicate distributions"
     echo "3. Interactive cleanup (safe)"
-    echo "4. Exit"
+    echo "4. Clean up unused SSL certificates"
+    echo "5. Exit"
     echo ""
 }
 
@@ -278,7 +372,7 @@ interactive_cleanup() {
 main() {
     while true; do
         show_menu
-        read -p "Choose an option (1-4): " choice
+        read -p "Choose an option (1-5): " choice
         
         case $choice in
             1)
@@ -291,11 +385,14 @@ main() {
                 interactive_cleanup
                 ;;
             4)
+                cleanup_ssl_certificates
+                ;;
+            5)
                 echo -e "${GREEN}✅ Cleanup tool completed${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}❌ Invalid option. Please choose 1-4.${NC}"
+                echo -e "${RED}❌ Invalid option. Please choose 1-5.${NC}"
                 ;;
         esac
         

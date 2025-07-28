@@ -52,6 +52,7 @@ function MicrophoneSetupInstructions({
   requiresUserInteraction,
   onRequestPermission,
   isRequestingPermission,
+  onDiagnoseAudio,
 }: {
   onTestMicrophone: () => void;
   isTesting: boolean;
@@ -60,6 +61,7 @@ function MicrophoneSetupInstructions({
   requiresUserInteraction: boolean;
   onRequestPermission: () => void;
   isRequestingPermission: boolean;
+  onDiagnoseAudio: () => Promise<void>;
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
@@ -449,6 +451,13 @@ function MicrophoneSetupInstructions({
                 ? "❌ Test Failed"
                 : "🎤 Test Microphone"}
             </button>
+            <button
+              type="button"
+              onClick={onDiagnoseAudio}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors text-sm"
+            >
+              🔍 Diagnose
+            </button>
             {testResult === "success" && (
               <span className="text-green-700 text-sm font-medium">
                 Microphone is working! You can now record audio.
@@ -666,8 +675,110 @@ function LearningPageContent() {
     };
   }, []);
 
+  // Enhanced audio device diagnostics
+  const diagnoseAudioDevices = async () => {
+    console.log("🔍 Running comprehensive audio device diagnostics...");
+
+    try {
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices) {
+        console.error("❌ navigator.mediaDevices not available");
+        return {
+          success: false,
+          error: "MediaDevices API not supported",
+          devices: [],
+          recommendations: [
+            "Try a different browser",
+            "Ensure you're on HTTPS",
+          ],
+        };
+      }
+
+      // Enumerate available devices
+      if (!navigator.mediaDevices.enumerateDevices) {
+        console.error("❌ enumerateDevices not available");
+        return {
+          success: false,
+          error: "Device enumeration not supported",
+          devices: [],
+          recommendations: ["Try a different browser"],
+        };
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(
+        (device) => device.kind === "audioinput"
+      );
+      const audioOutputs = devices.filter(
+        (device) => device.kind === "audiooutput"
+      );
+      const videoInputs = devices.filter(
+        (device) => device.kind === "videoinput"
+      );
+
+      console.log("🎤 Audio input devices:", audioInputs);
+      console.log("🔊 Audio output devices:", audioOutputs);
+      console.log("📹 Video input devices:", videoInputs);
+
+      const recommendations = [];
+
+      if (audioInputs.length === 0) {
+        recommendations.push("Connect a microphone to your computer");
+        recommendations.push("Check System Preferences → Sound → Input");
+        recommendations.push("Restart your browser");
+        recommendations.push("Try a different browser to compare");
+      }
+
+      if (audioInputs.some((device) => !device.label)) {
+        recommendations.push(
+          "Grant microphone permissions to see device labels"
+        );
+      }
+
+      return {
+        success: audioInputs.length > 0,
+        error: audioInputs.length === 0 ? "No audio input devices found" : null,
+        devices: {
+          audioInputs: audioInputs.map((d) => ({
+            deviceId: d.deviceId,
+            label: d.label || "Unknown device",
+            groupId: d.groupId,
+          })),
+          audioOutputs: audioOutputs.length,
+          videoInputs: videoInputs.length,
+        },
+        recommendations,
+      };
+    } catch (error) {
+      console.error("❌ Device enumeration failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        devices: [],
+        recommendations: [
+          "Check browser permissions",
+          "Try refreshing the page",
+          "Restart your browser",
+          "Try a different browser",
+        ],
+      };
+    }
+  };
+
   // Helper function for modern API
   const requestWithModernAPI = async (): Promise<boolean> => {
+    // First, run comprehensive audio device diagnostics
+    const diagnostics = await diagnoseAudioDevices();
+
+    if (!diagnostics.success) {
+      console.error("❌ Audio diagnostics failed:", diagnostics);
+      if (diagnostics.error === "No audio input devices found") {
+        throw new Error("NO_AUDIO_DEVICES_FOUND");
+      }
+    } else {
+      console.log("✅ Audio diagnostics passed:", diagnostics);
+    }
+
     const constraints = [
       // Try with full constraints first
       {
@@ -710,11 +821,24 @@ function LearningPageContent() {
       } catch (error) {
         console.warn(`❌ Modern API attempt ${i + 1} failed:`, error);
 
+        // Enhanced error analysis
+        if (error instanceof DOMException) {
+          console.log("🔍 Error details:", {
+            name: error.name,
+            message: error.message,
+            code: error.code,
+            stack: error.stack,
+          });
+        }
+
         // Check if this is the specific "object can not be found" error
         // If so, immediately fallback to legacy API instead of trying more constraints
         if (
           error instanceof DOMException &&
-          error.message?.includes("object can not be found")
+          (error.message?.includes("object can not be found") ||
+            error.message?.includes("object cannot be found") ||
+            (error.name === "NotFoundError" &&
+              error.message?.includes("not be found")))
         ) {
           console.warn(
             "🚨 Detected 'object can not be found' error - immediately falling back to legacy API"
@@ -837,7 +961,11 @@ function LearningPageContent() {
       let errorMessage = "Could not access microphone.";
 
       if (error instanceof Error) {
-        if (error.name === "NotAllowedError") {
+        if (error.message === "NO_AUDIO_DEVICES_FOUND") {
+          errorMessage = isMobileDevice
+            ? "🎤 No microphone detected. Please check that your mobile device's microphone is working and not muted. Try restarting your browser."
+            : "🎤 No microphone devices found. Please:\n• Connect a microphone to your computer\n• Check System Preferences → Sound → Input\n• Ensure your microphone isn't being used by another app\n• Try restarting your browser";
+        } else if (error.name === "NotAllowedError") {
           if (isMobileDevice) {
             errorMessage = requiresUserInteraction
               ? "🚫 Microphone access denied. On mobile Safari, you need to tap a recording button first, then allow microphone access when prompted."
@@ -851,8 +979,11 @@ function LearningPageContent() {
             errorMessage =
               "🎤 No microphone found. Please check that your mobile device's microphone is working (try recording a voice message in another app) and try again.";
           } else {
-            errorMessage =
-              "🎤 No microphone found. Please connect a microphone and click 'Test Microphone' below.";
+            // Enhanced guidance for desktop NotFoundError
+            const isFirefox = navigator.userAgent.includes("Firefox");
+            errorMessage = isFirefox
+              ? "🎤 Firefox can't find your microphone. Please:\n• Check System Preferences → Sound → Input\n• Quit any apps using your microphone (Zoom, Discord, etc.)\n• Try refreshing the page\n• Restart Firefox if the issue persists\n• Try testing in Chrome/Safari to compare"
+              : "🎤 No microphone found. Please connect a microphone and click 'Test Microphone' below.";
           }
         } else if (error.name === "NotSupportedError") {
           if (isMobileDevice) {
@@ -869,9 +1000,15 @@ function LearningPageContent() {
         } else if (error.message?.includes("Navigator API not available")) {
           errorMessage =
             "🌐 Browser compatibility issue. This browser doesn't support audio recording.";
-        } else if (error.message?.includes("object can not be found")) {
+        } else if (
+          error.message?.includes("object can not be found") ||
+          error.message?.includes("object cannot be found")
+        ) {
+          const isFirefox = navigator.userAgent.includes("Firefox");
           errorMessage = isMobileDevice
             ? "📱 Browser compatibility issue. Try refreshing the page or using a different mobile browser (Chrome, Firefox, Safari)."
+            : isFirefox
+            ? "🦊 Firefox microphone issue. Please:\n• Check if your microphone works in other apps\n• Go to about:preferences#privacy → Permissions → Camera and Microphone\n• Reset permissions for this site\n• Restart Firefox\n• Try a different browser to compare"
             : "🌐 Browser compatibility issue. Try refreshing the page, using a different browser, or ensure you're on HTTPS.";
         } else {
           errorMessage = `🔧 ${error.message || errorMessage}`;
@@ -1038,6 +1175,30 @@ function LearningPageContent() {
 
     try {
       console.log("🧪 Testing microphone access...");
+
+      // Enhanced system diagnostics
+      console.log("🔍 System diagnostics:", {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        cookieEnabled: navigator.cookieEnabled,
+        onLine: navigator.onLine,
+        languages: navigator.languages,
+        doNotTrack: navigator.doNotTrack,
+        hardwareConcurrency: navigator.hardwareConcurrency,
+        maxTouchPoints: navigator.maxTouchPoints,
+      });
+
+      // Check permissions API if available
+      if ("permissions" in navigator) {
+        try {
+          const micPermission = await navigator.permissions.query({
+            name: "microphone" as PermissionName,
+          });
+          console.log("🎤 Microphone permission state:", micPermission.state);
+        } catch (permError) {
+          console.warn("⚠️ Could not check microphone permissions:", permError);
+        }
+      }
 
       // Enhanced browser compatibility checks
       if (typeof window === "undefined") {
@@ -1908,6 +2069,28 @@ function LearningPageContent() {
                           requiresUserInteraction={requiresUserInteraction}
                           onRequestPermission={requestMicrophonePermission}
                           isRequestingPermission={isRequestingPermission}
+                          onDiagnoseAudio={async () => {
+                            const diagnostics = await diagnoseAudioDevices();
+                            console.log("🔍 Manual diagnostics:", diagnostics);
+                            alert(
+                              `Audio Device Diagnostics:\n\n${
+                                diagnostics.success
+                                  ? `✅ Found ${
+                                      diagnostics.devices.audioInputs?.length ||
+                                      0
+                                    } microphone(s)\n\nDevices:\n${
+                                      diagnostics.devices.audioInputs
+                                        ?.map((d) => `• ${d.label}`)
+                                        .join("\n") || "None"
+                                    }`
+                                  : `❌ ${
+                                      diagnostics.error
+                                    }\n\nRecommendations:\n${diagnostics.recommendations
+                                      .map((r) => `• ${r}`)
+                                      .join("\n")}`
+                              }`
+                            );
+                          }}
                         />
                       </div>
                     )}
@@ -2248,6 +2431,28 @@ function LearningPageContent() {
                           requiresUserInteraction={requiresUserInteraction}
                           onRequestPermission={requestMicrophonePermission}
                           isRequestingPermission={isRequestingPermission}
+                          onDiagnoseAudio={async () => {
+                            const diagnostics = await diagnoseAudioDevices();
+                            console.log("🔍 Manual diagnostics:", diagnostics);
+                            alert(
+                              `Audio Device Diagnostics:\n\n${
+                                diagnostics.success
+                                  ? `✅ Found ${
+                                      diagnostics.devices.audioInputs?.length ||
+                                      0
+                                    } microphone(s)\n\nDevices:\n${
+                                      diagnostics.devices.audioInputs
+                                        ?.map((d) => `• ${d.label}`)
+                                        .join("\n") || "None"
+                                    }`
+                                  : `❌ ${
+                                      diagnostics.error
+                                    }\n\nRecommendations:\n${diagnostics.recommendations
+                                      .map((r) => `• ${r}`)
+                                      .join("\n")}`
+                              }`
+                            );
+                          }}
                         />
                       </div>
                     )}

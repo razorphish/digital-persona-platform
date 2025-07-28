@@ -343,6 +343,63 @@ resource "aws_subnet" "private" {
 # Module Calls
 # =================================
 
+# SSL Certificate for custom domain (must be in us-east-1 for CloudFront)
+resource "aws_acm_certificate" "website" {
+  provider          = aws.us_east_1
+  domain_name       = local.website_domain
+  validation_method = "DNS"
+
+  subject_alternative_names = [
+    "*.${local.website_domain}"
+  ]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-website-cert"
+    Type = "SSL Certificate"
+  })
+}
+
+# Provider for us-east-1 (required for CloudFront certificates)
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+# Certificate validation
+resource "aws_acm_certificate_validation" "website" {
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.website.arn
+  validation_record_fqdns = [
+    for record in aws_route53_record.website_cert_validation : record.fqdn
+  ]
+
+  timeouts {
+    create = "10m"
+  }
+}
+
+# Route53 records for certificate validation
+resource "aws_route53_record" "website_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.website.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = data.aws_route53_zone.main.zone_id
+}
+
 # S3 Static Website
 module "s3_website" {
   source = "../../modules/s3-static-website"
@@ -352,9 +409,9 @@ module "s3_website" {
   project_name    = var.project_name
   common_tags     = local.common_tags
 
-  # Custom domain configuration (optional)
-  # custom_domain        = local.website_domain
-  # ssl_certificate_arn  = aws_acm_certificate.website.arn
+  # Custom domain configuration (enabled)
+  custom_domain       = local.website_domain
+  ssl_certificate_arn = aws_acm_certificate_validation.website.certificate_arn
 
   cloudfront_price_class = "PriceClass_100"
   build_retention_days   = 30
@@ -543,6 +600,21 @@ output "uploads_bucket_name" {
   value       = aws_s3_bucket.uploads.bucket
 }
 
+output "ssl_certificate_arn" {
+  description = "ARN of the SSL certificate for the website"
+  value       = aws_acm_certificate.website.arn
+}
+
+output "cloudfront_distribution_id" {
+  description = "ID of the CloudFront distribution"
+  value       = module.s3_website.cloudfront_distribution_id
+}
+
+output "website_domain" {
+  description = "Website domain name"
+  value       = local.website_domain
+}
+
 # AWS Batch ML Processing for AI/ML workloads
 module "aws_batch_ml" {
   source = "../../modules/aws-batch-ml"
@@ -609,4 +681,4 @@ output "ml_ecr_repository_url" {
 output "ml_batch_job_queue_name" {
   description = "Batch job queue name for ML processing"
   value       = module.aws_batch_ml.batch_job_queue_name
-} 
+}
