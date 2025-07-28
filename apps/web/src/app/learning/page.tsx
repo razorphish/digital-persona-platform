@@ -43,6 +43,287 @@ interface InterviewQuestion {
   allowFollowUp?: boolean;
 }
 
+// Microphone Setup Instructions Component
+function MicrophoneSetupInstructions({
+  onTestMicrophone,
+  isTesting,
+  testResult,
+}: {
+  onTestMicrophone: () => void;
+  isTesting: boolean;
+  testResult: "success" | "failed" | null;
+}) {
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+
+  const toggleSection = (section: string) => {
+    setExpandedSection(expandedSection === section ? null : section);
+  };
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+      <h4 className="font-semibold text-blue-900 mb-3 flex items-center">
+        <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path
+            fillRule="evenodd"
+            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+            clipRule="evenodd"
+          />
+        </svg>
+        Microphone Setup Help
+      </h4>
+
+      <div className="space-y-3">
+        {/* Browser Permissions */}
+        <div>
+          <button
+            onClick={() => toggleSection("browser")}
+            className="flex items-center justify-between w-full text-left text-blue-800 hover:text-blue-900 font-medium"
+          >
+            <span>🌐 Browser Permissions</span>
+            <svg
+              className={`w-4 h-4 transform transition-transform ${
+                expandedSection === "browser" ? "rotate-180" : ""
+              }`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          {expandedSection === "browser" && (
+            <div className="mt-2 pl-4 text-blue-700 space-y-2">
+              <p>
+                <strong>Chrome/Edge:</strong>
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-4">
+                <li>Click the 🔒 lock icon in the address bar</li>
+                <li>Set "Microphone" to "Allow"</li>
+                <li>Refresh the page and try again</li>
+              </ul>
+              <p>
+                <strong>Firefox:</strong>
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-4">
+                <li>Click the shield icon in the address bar</li>
+                <li>Click "Turn off Blocking for This Site"</li>
+                <li>Allow microphone when prompted</li>
+              </ul>
+              <p>
+                <strong>Safari:</strong>
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-4">
+                <li>Safari → Preferences → Websites → Microphone</li>
+                <li>Set this site to "Allow"</li>
+                <li>Refresh the page</li>
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* macOS Settings */}
+        <div>
+          <button
+            onClick={() => toggleSection("macos")}
+            className="flex items-center justify-between w-full text-left text-blue-800 hover:text-blue-900 font-medium"
+          >
+            <span>🍎 macOS Settings</span>
+            <svg
+              className={`w-4 h-4 transform transition-transform ${
+                expandedSection === "macos" ? "rotate-180" : ""
+              }`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          {expandedSection === "macos" && (
+            <div className="mt-2 pl-4 text-blue-700 space-y-2">
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Apple Menu → System Preferences → Security & Privacy</li>
+                <li>Click the "Privacy" tab</li>
+                <li>Select "Microphone" from the left sidebar</li>
+                <li>
+                  Check the box next to your browser (Chrome, Firefox, Safari)
+                </li>
+                <li>If prompted, click "Later" then restart your browser</li>
+                <li>
+                  Test your microphone in System Preferences → Sound → Input
+                </li>
+              </ol>
+              <p className="text-sm mt-2 p-2 bg-blue-100 rounded">
+                <strong>Tip:</strong> Speak into your microphone and watch for
+                input level bars in Sound settings
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Windows Settings */}
+        <div>
+          <button
+            onClick={() => toggleSection("windows")}
+            className="flex items-center justify-between w-full text-left text-blue-800 hover:text-blue-900 font-medium"
+          >
+            <span>🪟 Windows Settings</span>
+            <svg
+              className={`w-4 h-4 transform transition-transform ${
+                expandedSection === "windows" ? "rotate-180" : ""
+              }`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          {expandedSection === "windows" && (
+            <div className="mt-2 pl-4 text-blue-700 space-y-2">
+              <p>
+                <strong>Windows 10/11:</strong>
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Settings → Privacy → Microphone</li>
+                <li>Turn on "Allow apps to access your microphone"</li>
+                <li>Turn on "Allow desktop apps to access your microphone"</li>
+                <li>Scroll down and enable your browser</li>
+              </ol>
+              <p>
+                <strong>Alternative Method:</strong>
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  Right-click speaker icon in taskbar → Open Sound settings
+                </li>
+                <li>Click "Sound Control Panel" → "Recording" tab</li>
+                <li>Right-click your microphone → "Enable" if disabled</li>
+                <li>Right-click → "Set as Default Device"</li>
+                <li>Test by speaking - you should see green bars</li>
+              </ol>
+            </div>
+          )}
+        </div>
+
+        {/* Hardware Check */}
+        <div>
+          <button
+            onClick={() => toggleSection("hardware")}
+            className="flex items-center justify-between w-full text-left text-blue-800 hover:text-blue-900 font-medium"
+          >
+            <span>🎤 Hardware Check</span>
+            <svg
+              className={`w-4 h-4 transform transition-transform ${
+                expandedSection === "hardware" ? "rotate-180" : ""
+              }`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          {expandedSection === "hardware" && (
+            <div className="mt-2 pl-4 text-blue-700 space-y-2">
+              <ul className="list-disc list-inside space-y-1">
+                <li>
+                  <strong>Built-in Microphone:</strong> Usually works
+                  automatically on laptops
+                </li>
+                <li>
+                  <strong>External Microphone:</strong> Check USB/3.5mm
+                  connection
+                </li>
+                <li>
+                  <strong>Headset:</strong> Ensure mic isn't muted on the
+                  headset itself
+                </li>
+                <li>
+                  <strong>Wireless Headphones:</strong> Check Bluetooth
+                  connection and pairing
+                </li>
+              </ul>
+              <p className="text-sm mt-2 p-2 bg-blue-100 rounded">
+                <strong>Quick Test:</strong> Try recording a voice memo on your
+                phone/computer to verify hardware works
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Microphone Test */}
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+          <h5 className="font-semibold text-yellow-800 mb-2">
+            🧪 Test Your Microphone
+          </h5>
+          <p className="text-yellow-700 text-sm mb-3">
+            Click the button below to test if your microphone is working
+            properly:
+          </p>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={onTestMicrophone}
+              disabled={isTesting}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                isTesting
+                  ? "bg-yellow-300 text-yellow-800 cursor-not-allowed"
+                  : testResult === "success"
+                  ? "bg-green-600 text-white hover:bg-green-700"
+                  : testResult === "failed"
+                  ? "bg-red-600 text-white hover:bg-red-700"
+                  : "bg-yellow-600 text-white hover:bg-yellow-700"
+              }`}
+            >
+              {isTesting
+                ? "Testing..."
+                : testResult === "success"
+                ? "✅ Test Passed"
+                : testResult === "failed"
+                ? "❌ Test Failed"
+                : "🎤 Test Microphone"}
+            </button>
+            {testResult === "success" && (
+              <span className="text-green-700 text-sm font-medium">
+                Microphone is working! You can now record audio.
+              </span>
+            )}
+            {testResult === "failed" && (
+              <span className="text-red-700 text-sm font-medium">
+                Microphone test failed. Try the steps above.
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Fixes */}
+        <div className="bg-green-50 border border-green-200 rounded p-3">
+          <h5 className="font-semibold text-green-800 mb-2">🔧 Quick Fixes</h5>
+          <ul className="text-green-700 text-xs space-y-1">
+            <li>• Refresh this page after changing settings</li>
+            <li>• Try a different browser (Chrome usually works best)</li>
+            <li>• Close other apps that might be using your microphone</li>
+            <li>• Restart your browser completely</li>
+            <li>• Check if antivirus software is blocking microphone access</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LearningPageContent() {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -80,6 +361,10 @@ function LearningPageContent() {
     }>
   >([]);
   const [isInteractiveSession, setIsInteractiveSession] = useState(false);
+  const [isMicTesting, setIsMicTesting] = useState(false);
+  const [micTestResult, setMicTestResult] = useState<
+    "success" | "failed" | null
+  >(null);
   const isRecordingRef = useRef(false);
 
   // tRPC queries
@@ -239,6 +524,62 @@ function LearningPageContent() {
       stopRecording();
     } else {
       startRecording();
+    }
+  };
+
+  // Test microphone functionality
+  const testMicrophone = async () => {
+    setIsMicTesting(true);
+    setMicTestResult(null);
+    setRecordingError(null);
+
+    try {
+      console.log("Testing microphone access...");
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Audio recording is not supported in this browser");
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        },
+      });
+
+      // Test for 2 seconds
+      console.log("Microphone access granted, testing for 2 seconds...");
+
+      setTimeout(() => {
+        // Stop all tracks
+        stream.getTracks().forEach((track) => track.stop());
+        setMicTestResult("success");
+        setIsMicTesting(false);
+        console.log("Microphone test successful!");
+      }, 2000);
+    } catch (error) {
+      console.error("Microphone test failed:", error);
+
+      let errorMessage = "Microphone test failed.";
+
+      if (error instanceof Error) {
+        if (error.name === "NotAllowedError") {
+          errorMessage =
+            "Microphone access denied. Please allow microphone permissions and try again.";
+        } else if (error.name === "NotFoundError") {
+          errorMessage =
+            "No microphone found. Please connect a microphone and try again.";
+        } else if (error.name === "NotSupportedError") {
+          errorMessage = "Audio recording is not supported in this browser.";
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+
+      setRecordingError(errorMessage);
+      setMicTestResult("failed");
+      setIsMicTesting(false);
     }
   };
 
@@ -828,25 +1169,34 @@ function LearningPageContent() {
 
                     {/* Recording Error */}
                     {recordingError && (
-                      <div className="flex items-center space-x-2 text-sm text-red-600">
-                        <svg
-                          className="w-4 h-4"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <span>{recordingError}</span>
-                        <button
-                          onClick={() => setRecordingError(null)}
-                          className="text-red-800 hover:text-red-900 underline"
-                        >
-                          Try Again
-                        </button>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-2 text-sm text-red-600">
+                          <svg
+                            className="w-4 h-4"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <span>{recordingError}</span>
+                          <button
+                            onClick={() => setRecordingError(null)}
+                            className="text-red-800 hover:text-red-900 underline"
+                          >
+                            Try Again
+                          </button>
+                        </div>
+
+                        {/* Microphone Setup Instructions */}
+                        <MicrophoneSetupInstructions
+                          onTestMicrophone={testMicrophone}
+                          isTesting={isMicTesting}
+                          testResult={micTestResult}
+                        />
                       </div>
                     )}
                   </div>
@@ -1137,25 +1487,34 @@ function LearningPageContent() {
 
                     {/* Recording Error */}
                     {recordingError && (
-                      <div className="flex items-center space-x-2 text-sm text-red-600">
-                        <svg
-                          className="w-4 h-4"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <span>{recordingError}</span>
-                        <button
-                          onClick={() => setRecordingError(null)}
-                          className="text-red-800 hover:text-red-900 underline"
-                        >
-                          Try Again
-                        </button>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-2 text-sm text-red-600">
+                          <svg
+                            className="w-4 h-4"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <span>{recordingError}</span>
+                          <button
+                            onClick={() => setRecordingError(null)}
+                            className="text-red-800 hover:text-red-900 underline"
+                          >
+                            Try Again
+                          </button>
+                        </div>
+
+                        {/* Microphone Setup Instructions */}
+                        <MicrophoneSetupInstructions
+                          onTestMicrophone={testMicrophone}
+                          isTesting={isMicTesting}
+                          testResult={micTestResult}
+                        />
                       </div>
                     )}
                   </div>
