@@ -709,6 +709,19 @@ function LearningPageContent() {
         return true;
       } catch (error) {
         console.warn(`❌ Modern API attempt ${i + 1} failed:`, error);
+
+        // Check if this is the specific "object can not be found" error
+        // If so, immediately fallback to legacy API instead of trying more constraints
+        if (
+          error instanceof DOMException &&
+          error.message?.includes("object can not be found")
+        ) {
+          console.warn(
+            "🚨 Detected 'object can not be found' error - immediately falling back to legacy API"
+          );
+          throw new Error("FALLBACK_TO_LEGACY_API");
+        }
+
         if (i === constraints.length - 1) {
           throw error; // Re-throw the last error
         }
@@ -779,6 +792,13 @@ function LearningPageContent() {
         userAgent: navigator?.userAgent,
         protocol: window.location.protocol,
         hostname: window.location.hostname,
+        // Additional debugging info
+        isSecureContext: window.isSecureContext,
+        mediaDevicesType: typeof navigator?.mediaDevices,
+        getUserMediaType: typeof navigator?.mediaDevices?.getUserMedia,
+        browserVendor: (navigator as any)?.vendor,
+        cookieEnabled: navigator?.cookieEnabled,
+        onLine: navigator?.onLine,
       });
 
       // Check for basic requirements
@@ -789,7 +809,23 @@ function LearningPageContent() {
       // Try modern API first
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         console.log("🔄 Trying modern mediaDevices.getUserMedia API...");
-        return await requestWithModernAPI();
+        try {
+          return await requestWithModernAPI();
+        } catch (modernError) {
+          // Check if we should fallback to legacy API
+          if (
+            modernError instanceof Error &&
+            modernError.message === "FALLBACK_TO_LEGACY_API"
+          ) {
+            console.log(
+              "⚡ Fast-tracking to legacy API due to compatibility issue"
+            );
+          } else {
+            console.warn("❌ Modern API failed completely:", modernError);
+          }
+
+          // Proceed to legacy API fallback
+        }
       }
 
       // Fallback to legacy API
@@ -1035,42 +1071,92 @@ function LearningPageContent() {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         console.log("🔄 Test - Using modern API...");
 
-        // Try with progressively simpler constraints
-        const constraints = [
-          {
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              sampleRate: 44100,
+        try {
+          // Try with progressively simpler constraints
+          const constraints = [
+            {
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                sampleRate: 44100,
+              },
             },
-          },
-          { audio: { echoCancellation: true, noiseSuppression: true } },
-          { audio: true },
-        ];
+            { audio: { echoCancellation: true, noiseSuppression: true } },
+            { audio: true },
+          ];
 
-        let success = false;
-        for (let i = 0; i < constraints.length; i++) {
-          try {
-            console.log(
-              `🔄 Test - Trying constraint set ${i + 1}:`,
-              constraints[i]
-            );
-            stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
-            success = true;
-            break;
-          } catch (constraintError) {
-            console.warn(
-              `❌ Test - Constraint set ${i + 1} failed:`,
-              constraintError
-            );
-            if (i === constraints.length - 1) {
-              throw constraintError;
+          let success = false;
+          for (let i = 0; i < constraints.length; i++) {
+            try {
+              console.log(
+                `🔄 Test - Trying constraint set ${i + 1}:`,
+                constraints[i]
+              );
+              stream = await navigator.mediaDevices.getUserMedia(
+                constraints[i]
+              );
+              success = true;
+              break;
+            } catch (constraintError) {
+              console.warn(
+                `❌ Test - Constraint set ${i + 1} failed:`,
+                constraintError
+              );
+
+              // Check if this is the specific "object can not be found" error
+              // If so, immediately fallback to legacy API instead of trying more constraints
+              if (
+                constraintError instanceof DOMException &&
+                constraintError.message?.includes("object can not be found")
+              ) {
+                console.warn(
+                  "🚨 Test - Detected 'object can not be found' error - immediately falling back to legacy API"
+                );
+                throw new Error("FALLBACK_TO_LEGACY_API");
+              }
+
+              if (i === constraints.length - 1) {
+                throw constraintError;
+              }
             }
           }
-        }
 
-        if (!success) {
-          throw new Error("All modern API constraint sets failed");
+          if (!success) {
+            throw new Error("All modern API constraint sets failed");
+          }
+        } catch (modernTestError) {
+          // Check if we should fallback to legacy API
+          if (
+            modernTestError instanceof Error &&
+            modernTestError.message === "FALLBACK_TO_LEGACY_API"
+          ) {
+            console.log(
+              "⚡ Test - Fast-tracking to legacy API due to compatibility issue"
+            );
+          } else {
+            console.warn(
+              "❌ Test - Modern API failed completely:",
+              modernTestError
+            );
+          }
+
+          // Proceed to legacy API fallback
+          console.log("🔄 Test - Falling back to legacy API...");
+
+          // Fallback to legacy API
+          const getUserMedia =
+            (navigator as any).getUserMedia ||
+            (navigator as any).webkitGetUserMedia ||
+            (navigator as any).mozGetUserMedia ||
+            (navigator as any).msGetUserMedia;
+
+          if (!getUserMedia) {
+            throw new Error("No getUserMedia API available in this browser");
+          }
+
+          stream = await new Promise<MediaStream>((resolve, reject) => {
+            getUserMedia.call(navigator, { audio: true }, resolve, reject);
+          });
         }
       } else {
         console.log("🔄 Test - Falling back to legacy API...");
