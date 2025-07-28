@@ -54,8 +54,24 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          cd apps/server && npm ci
-          cd ../.. && cd packages/database && npm ci
+
+      - name: Build workspace packages
+        run: |
+          echo "🔧 Building workspace dependencies for migration generation..."
+
+          # Build database package first (needed for schema imports)
+          echo "📦 Building @digital-persona/database..."
+          cd packages/database
+          npm run build
+          cd ../..
+
+          # Build shared package (needed for types)
+          echo "📦 Building @digital-persona/shared..."
+          cd packages/shared  
+          npm run build
+          cd ../..
+
+          echo "✅ Workspace packages built for migration validation"
 
       - name: Debug commit information
         run: |
@@ -185,7 +201,50 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          cd apps/server && npm ci
+
+      - name: Build workspace packages
+        run: |
+          echo "🔧 Building workspace dependencies in correct order..."
+
+          # Build database package first (needed by server)
+          echo "📦 Building @digital-persona/database..."
+          cd packages/database
+          npm run build
+          cd ../..
+
+          # Build shared package (needed by server)
+          echo "📦 Building @digital-persona/shared..."
+          cd packages/shared
+          npm run build
+          cd ../..
+
+          echo "✅ Workspace packages built successfully"
+
+      - name: Verify workspace build outputs
+        run: |
+          echo "🔍 Verifying workspace package build outputs..."
+
+          # Check database package build output
+          if [ -f "packages/database/dist/index.js" ] && [ -f "packages/database/dist/index.d.ts" ]; then
+            echo "✅ @digital-persona/database build output verified"
+            ls -la packages/database/dist/
+          else
+            echo "❌ @digital-persona/database build output missing"
+            ls -la packages/database/ || echo "packages/database directory not found"
+            exit 1
+          fi
+
+          # Check shared package build output  
+          if [ -f "packages/shared/dist/index.js" ] && [ -f "packages/shared/dist/index.d.ts" ]; then
+            echo "✅ @digital-persona/shared build output verified"
+            ls -la packages/shared/dist/
+          else
+            echo "❌ @digital-persona/shared build output missing"
+            ls -la packages/shared/ || echo "packages/shared directory not found"
+            exit 1
+          fi
+
+          echo "🎉 All workspace package outputs verified successfully"
 
       - name: Download migration files
         uses: actions/download-artifact@v4
@@ -195,8 +254,10 @@ jobs:
 
       - name: Build migration runner
         run: |
+          echo "🏗️ Building server with dependencies..."
           cd apps/server
           npm run build
+          echo "✅ Migration runner built successfully"
 
       - name: Create test database backup
         run: |

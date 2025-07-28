@@ -291,7 +291,7 @@ const personasRouter = router({
       .where(eq(personas.userId, ctx.user.id))
       .orderBy(desc(personas.createdAt));
 
-    return userPersonas.map((persona) => ({
+    return userPersonas.map((persona: typeof personas.$inferSelect) => ({
       ...persona,
       createdAt: persona.createdAt.toISOString(),
       updatedAt: persona.updatedAt.toISOString(),
@@ -384,8 +384,8 @@ const personasRouter = router({
       if (traits?.isMainPersona || existingPersona.isDefault) {
         // Only allow name and description updates for main personas
         const allowedUpdates = {
-          name: input.data.name,
-          description: input.data.description,
+          name: (input.data as any).name,
+          description: (input.data as any).description,
         };
 
         const [updatedPersona] = await db
@@ -421,8 +421,9 @@ const personasRouter = router({
       const [updatedPersona] = await db
         .update(personas)
         .set({
-          name: input.data.name || existingPersona.name,
-          description: input.data.description || existingPersona.description,
+          name: (input.data as any).name || existingPersona.name,
+          description:
+            (input.data as any).description || existingPersona.description,
           traits: updatedTraits,
           preferences: updatedPreferences,
         })
@@ -620,7 +621,7 @@ const chatRouter = router({
       .where(eq(conversations.userId, ctx.user.id))
       .orderBy(desc(conversations.updatedAt));
 
-    return userConversations.map((conv) => ({
+    return userConversations.map((conv: typeof conversations.$inferSelect) => ({
       ...conv,
       createdAt: conv.createdAt.toISOString(),
       updatedAt: conv.updatedAt.toISOString(),
@@ -679,10 +680,12 @@ const chatRouter = router({
         ...conversation,
         createdAt: conversation.createdAt.toISOString(),
         updatedAt: conversation.updatedAt.toISOString(),
-        messages: conversationMessages.map((msg) => ({
-          ...msg,
-          createdAt: msg.createdAt.toISOString(),
-        })),
+        messages: conversationMessages.map(
+          (msg: typeof messages.$inferSelect) => ({
+            ...msg,
+            createdAt: msg.createdAt.toISOString(),
+          })
+        ),
       };
     }),
 
@@ -880,7 +883,7 @@ const socialRouter = router({
       .from(socialConnections)
       .where(eq(socialConnections.userId, ctx.user.id));
 
-    return connections.map((conn) => ({
+    return connections.map((conn: typeof socialConnections.$inferSelect) => ({
       ...conn,
       createdAt: conn.createdAt.toISOString(),
       updatedAt: conn.updatedAt.toISOString(),
