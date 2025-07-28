@@ -157,6 +157,8 @@ resource "random_password" "jwt_secret" {
 resource "random_password" "database_password" {
   length  = 32
   special = true
+  # Exclude characters that are invalid for RDS master password
+  override_special = "!#$%&*()_+-=[]{}|;:,.<>?"
 }
 
 # =================================
@@ -596,4 +598,4 @@ output "ml_ecr_repository_url" {
 output "ml_batch_job_queue_name" {
   description = "Batch job queue name for ML processing"
   value       = module.aws_batch_ml.batch_job_queue_name
-} 
+}

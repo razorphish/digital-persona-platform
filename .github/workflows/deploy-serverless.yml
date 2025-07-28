@@ -477,6 +477,52 @@ jobs:
 
           echo "✅ Resource conflict handling completed"
 
+      - name: Import Existing Resources
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        env:
+          ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
+          MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
+        run: |
+          echo "🔄 Importing existing AWS resources into Terraform state..."
+
+          # Function to safely import resource
+          import_resource() {
+            local resource_type="$1"
+            local resource_name="$2"
+            local aws_resource_id="$3"
+            
+            echo "📥 Checking $resource_type: $resource_name"
+            if terraform state show "$resource_name" >/dev/null 2>&1; then
+              echo "  ✓ Already in state"
+            else
+              echo "  🔄 Importing $aws_resource_id..."
+              if terraform import "$resource_name" "$aws_resource_id" 2>/dev/null; then
+                echo "  ✅ Successfully imported"
+              else
+                echo "  ⚠️ Import failed (resource may not exist or already managed)"
+              fi
+            fi
+          }
+
+          # Import ECR repositories
+          import_resource "ECR Repository" "module.aws_batch_ml.aws_ecr_repository.ml_service" "$ENVIRONMENT-$ENVIRONMENT-dpp-ml-service"
+
+          # Import IAM roles
+          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_service" "$ENVIRONMENT-$ENVIRONMENT-dpp-batch-service-role"
+          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_instance" "$ENVIRONMENT-$ENVIRONMENT-dpp-batch-instance-role"  
+          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_execution" "$ENVIRONMENT-$ENVIRONMENT-dpp-batch-execution-role"
+          import_resource "IAM Role" "module.lambda_backend.aws_iam_role.lambda_execution" "$ENVIRONMENT-$ENVIRONMENT-dpp-lambda-execution"
+          import_resource "IAM Role" "module.rds_proxy.aws_iam_role.rds_proxy" "$ENVIRONMENT-$ENVIRONMENT-dpp-rds-proxy-role"
+
+          # Import CloudFront Origin Access Control (need to get ID from AWS)
+          echo "🔍 Checking CloudFront Origin Access Control..."
+          OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$ENVIRONMENT-$ENVIRONMENT-dpp-oac'].Id" --output text 2>/dev/null || echo "")
+          if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
+            import_resource "CloudFront OAC" "module.s3_website.aws_cloudfront_origin_access_control.website" "$OAC_ID"
+          fi
+
+          echo "✅ Resource import completed"
+
       - name: Verify and Create ACM Certificates
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
