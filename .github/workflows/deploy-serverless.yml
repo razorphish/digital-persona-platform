@@ -638,6 +638,11 @@ jobs:
                 fi
               fi
               
+              if echo "$import_output" | grep -q "Cannot import non-existent remote object"; then
+                echo "  ✅ Resource does not exist in AWS - will be created fresh during apply"
+                return 0
+              fi
+              
               if echo "$import_output" | grep -q "configuration.*drift\|doesn't match"; then
                 echo "  🔧 Configuration drift detected - this is expected from ad-hoc fixes"
                 echo "  ✅ Will be reconciled during terraform apply"
