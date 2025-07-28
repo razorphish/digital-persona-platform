@@ -168,7 +168,7 @@ resource "aws_cloudfront_distribution" "api" {
       origin_ssl_protocols   = ["TLSv1.2"]
     }
 
-    origin_path = "/${aws_apigatewayv2_stage.main.name}"
+    # origin_path removed - API Gateway v2 HTTP API already includes stage path
   }
 
   # Default cache behavior for API (no caching for dynamic content)

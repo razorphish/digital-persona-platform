@@ -295,27 +295,39 @@ done
 
 # 7. SSL Certificates (ACM) - clean up after CloudFront distributions
 print_header "🧹 Cleaning up SSL certificates..."
-SSL_CERTIFICATES=$(aws acm list-certificates --region us-east-1 \
-  --query "CertificateSummaryList[?contains(DomainName, '${TARGET_ENV}.hibiji.com')].CertificateArn" \
-  --output text)
 
-for cert_arn in $SSL_CERTIFICATES; do
-  if [ -n "$cert_arn" ] && [ "$cert_arn" != "None" ]; then
-    print_header "🔍 Checking SSL certificate: $cert_arn"
-    
-    # Check if certificate is in use by any CloudFront distributions
-    CERT_IN_USE=$(aws cloudfront list-distributions \
-      --query "DistributionList.Items[?DistributionConfig.ViewerCertificate.ACMCertificateArn=='${cert_arn}'].Id" \
-      --output text)
-    
-    if [ -n "$CERT_IN_USE" ] && [ "$CERT_IN_USE" != "None" ]; then
-      print_header "⚠️ SSL certificate still in use by CloudFront distributions: $CERT_IN_USE"
-      print_header "💡 Skipping certificate deletion - will be cleaned up when distributions are removed"
-    else
-      print_header "🗑️ Deleting SSL certificate: $cert_arn"
-      aws acm delete-certificate --certificate-arn "$cert_arn" --region us-east-1 || echo "⚠️ Failed to delete certificate: $cert_arn"
-    fi
+# Clean up both website and API SSL certificates
+for cert_type in "website" "api"; do
+  if [ "$cert_type" = "website" ]; then
+    DOMAIN_PATTERN="${TARGET_ENV}.hibiji.com"
+    print_header "🌐 Searching for website SSL certificates..."
+  else
+    DOMAIN_PATTERN="${TARGET_ENV}-api.hibiji.com"
+    print_header "🔗 Searching for API SSL certificates..."
   fi
+  
+  SSL_CERTIFICATES=$(aws acm list-certificates --region us-east-1 \
+    --query "CertificateSummaryList[?contains(DomainName, '${DOMAIN_PATTERN}')].CertificateArn" \
+    --output text)
+
+  for cert_arn in $SSL_CERTIFICATES; do
+    if [ -n "$cert_arn" ] && [ "$cert_arn" != "None" ]; then
+      print_header "🔍 Checking ${cert_type} SSL certificate: $cert_arn"
+      
+      # Check if certificate is in use by any CloudFront distributions
+      CERT_IN_USE=$(aws cloudfront list-distributions \
+        --query "DistributionList.Items[?DistributionConfig.ViewerCertificate.ACMCertificateArn=='${cert_arn}'].Id" \
+        --output text)
+      
+      if [ -n "$CERT_IN_USE" ] && [ "$CERT_IN_USE" != "None" ]; then
+        print_header "⚠️ SSL certificate still in use by CloudFront distributions: $CERT_IN_USE"
+        print_header "💡 Skipping certificate deletion - will be cleaned up when distributions are removed"
+      else
+        print_header "🗑️ Deleting ${cert_type} SSL certificate: $cert_arn"
+        aws acm delete-certificate --certificate-arn "$cert_arn" --region us-east-1 || echo "⚠️ Failed to delete certificate: $cert_arn"
+      fi
+    fi
+  done
 done
 
 # 8. Route53 DNS Records
@@ -350,25 +362,30 @@ if [ -n "$HOSTED_ZONE_ID" ] && [ "$HOSTED_ZONE_ID" != "None" ]; then
   
   # Delete SSL certificate validation DNS records (CNAME records starting with _)
   print_header "🧹 Cleaning up SSL certificate validation DNS records..."
-  SSL_VALIDATION_RECORDS=$(aws route53 list-resource-record-sets \
-    --hosted-zone-id "$HOSTED_ZONE_ID" \
-    --query "ResourceRecordSets[?Type=='CNAME' && starts_with(Name, '_') && contains(Name, '${TARGET_ENV}.hibiji.com')]" \
-    --output json)
   
-  if [ "$SSL_VALIDATION_RECORDS" != "[]" ] && [ "$SSL_VALIDATION_RECORDS" != "null" ]; then
-    echo "$SSL_VALIDATION_RECORDS" | jq -c '.[]' | while read -r record; do
-      RECORD_NAME=$(echo "$record" | jq -r '.Name')
-      print_header "🗑️ Deleting SSL validation record: $RECORD_NAME"
-      aws route53 change-resource-record-sets \
-        --hosted-zone-id "$HOSTED_ZONE_ID" \
-        --change-batch "{
-          \"Changes\": [{
-            \"Action\": \"DELETE\",
-            \"ResourceRecordSet\": $record
-          }]
-        }" || echo "⚠️ Failed to delete SSL validation record: $RECORD_NAME"
-    done
-  fi
+  # Clean up validation records for both website and API certificates
+  for cert_domain in "${TARGET_ENV}.hibiji.com" "${TARGET_ENV}-api.hibiji.com"; do
+    print_header "🔍 Looking for validation records for: $cert_domain"
+    SSL_VALIDATION_RECORDS=$(aws route53 list-resource-record-sets \
+      --hosted-zone-id "$HOSTED_ZONE_ID" \
+      --query "ResourceRecordSets[?Type=='CNAME' && starts_with(Name, '_') && contains(Name, '${cert_domain}')]" \
+      --output json)
+    
+    if [ "$SSL_VALIDATION_RECORDS" != "[]" ] && [ "$SSL_VALIDATION_RECORDS" != "null" ]; then
+      echo "$SSL_VALIDATION_RECORDS" | jq -c '.[]' | while read -r record; do
+        RECORD_NAME=$(echo "$record" | jq -r '.Name')
+        print_header "🗑️ Deleting SSL validation record: $RECORD_NAME"
+        aws route53 change-resource-record-sets \
+          --hosted-zone-id "$HOSTED_ZONE_ID" \
+          --change-batch "{
+            \"Changes\": [{
+              \"Action\": \"DELETE\",
+              \"ResourceRecordSet\": $record
+            }]
+          }" || echo "⚠️ Failed to delete SSL validation record: $RECORD_NAME"
+      done
+    fi
+  done
 fi
 
 # 7. VPC Infrastructure Cleanup (handle dependencies in correct order)

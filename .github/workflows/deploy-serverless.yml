@@ -703,6 +703,28 @@ jobs:
             import_resource "CloudFront OAC" "module.s3_website.aws_cloudfront_origin_access_control.website" "$OAC_ID"
           fi
 
+          # Import API CloudFront Distribution (if exists)
+          echo "🔍 Checking API CloudFront Distribution..."
+          API_CF_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[0]=='${ENVIRONMENT}-api.hibiji.com'].Id" --output text 2>/dev/null || echo "")
+          if [ -n "$API_CF_ID" ] && [ "$API_CF_ID" != "None" ]; then
+            echo "📋 API CloudFront distribution exists: $API_CF_ID"
+            import_resource "CloudFront Distribution" "module.api_gateway.aws_cloudfront_distribution.api[0]" "$API_CF_ID"
+          fi
+
+          # Import SSL Certificates (if they exist)
+          echo "🔍 Checking SSL Certificates..."
+          WEBSITE_CERT_ARN=$(aws acm list-certificates --region us-east-1 --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}.hibiji.com'].CertificateArn" --output text 2>/dev/null || echo "")
+          if [ -n "$WEBSITE_CERT_ARN" ] && [ "$WEBSITE_CERT_ARN" != "None" ]; then
+            echo "📋 Website SSL certificate exists: $WEBSITE_CERT_ARN"
+            import_resource "SSL Certificate" "aws_acm_certificate.website" "$WEBSITE_CERT_ARN"
+          fi
+
+          API_CERT_ARN=$(aws acm list-certificates --region us-east-1 --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}-api.hibiji.com'].CertificateArn" --output text 2>/dev/null || echo "")
+          if [ -n "$API_CERT_ARN" ] && [ "$API_CERT_ARN" != "None" ]; then
+            echo "📋 API SSL certificate exists: $API_CERT_ARN"
+            import_resource "SSL Certificate" "aws_acm_certificate.api" "$API_CERT_ARN"
+          fi
+
           # Import Route53 Records (if they exist)
           echo "🔍 Checking Route53 records..."
           WEBSITE_DOMAIN="${ENVIRONMENT}.hibiji.com"
