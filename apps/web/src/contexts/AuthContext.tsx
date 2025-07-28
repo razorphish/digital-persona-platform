@@ -17,6 +17,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isInitialized: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
@@ -33,6 +34,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
+
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log("AuthProvider state change:", {
+      hasUser: !!user,
+      isLoading,
+      isInitialized,
+      isAuthenticated: !!user,
+      timestamp: new Date().toISOString(),
+    });
+  }, [user, isLoading, isInitialized]);
 
   // Re-enable tRPC mutations for proper API calls
   const loginMutation = trpc.auth.login.useMutation();
@@ -70,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("No access token found - user not authenticated");
         setUser(null);
         setIsLoading(false);
+        setIsInitialized(true);
         return;
       }
 
@@ -82,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         AuthUtils.clearTokens();
         setUser(null);
         setIsLoading(false);
+        setIsInitialized(true);
         return;
       }
 
@@ -108,8 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("Invalid token payload - missing critical fields:", {
           userData,
         });
-        // Don't immediately clear tokens on first load - token might be valid but format different
-        // Instead, set user to null but keep token for potential recovery
+        // Clear invalid tokens to prevent redirect loops
+        console.log("Clearing invalid tokens");
+        AuthUtils.clearTokens();
         setUser(null);
       }
 
@@ -135,15 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, []); // Empty dependency array - only run once on mount
-
-  // Re-check auth state when explicitly requested
-  useEffect(() => {
-    if (isInitialized) {
-      console.log("Re-checking auth state on demand");
-      checkAuthState();
-    }
-  }, [checkAuthState, isInitialized]);
+  }, [isInitialized, checkAuthState]); // Include dependencies to prevent stale closures
 
   // Periodic token validation (every 5 minutes)
   useEffect(() => {
@@ -283,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     isLoading,
     isAuthenticated: !!user,
+    isInitialized,
     login,
     register,
     logout,

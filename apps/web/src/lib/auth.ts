@@ -130,7 +130,19 @@ export const AuthUtils = {
     token: string
   ): (Partial<User> & { sub?: string }) | null => {
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      if (!token || typeof token !== "string") {
+        console.warn("Invalid token format for user extraction");
+        return null;
+      }
+
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        console.warn("JWT token doesn't have 3 parts for user extraction");
+        return null;
+      }
+
+      const payload = JSON.parse(atob(parts[1]));
+      console.log("Token payload:", payload);
 
       const userData = {
         id: payload.id || payload.sub || payload.userId,
@@ -140,6 +152,7 @@ export const AuthUtils = {
         createdAt: payload.createdAt,
       };
 
+      console.log("Extracted user data:", userData);
       return userData;
     } catch (error) {
       console.error("Failed to parse JWT token:", error);

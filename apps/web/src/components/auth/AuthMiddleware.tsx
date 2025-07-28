@@ -13,7 +13,7 @@ import { AuthUtils } from "@/lib/auth";
  * - Provide consistent auth behavior across the app
  */
 export function AuthMiddleware() {
-  const { user, isLoading, isAuthenticated, logout } = useAuth();
+  const { user, isLoading, isAuthenticated, isInitialized, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -22,6 +22,7 @@ export function AuthMiddleware() {
     pathname,
     isLoading,
     isAuthenticated,
+    isInitialized,
     hasUser: !!user,
     currentTime: new Date().toISOString(),
   });
@@ -54,9 +55,15 @@ export function AuthMiddleware() {
   );
 
   useEffect(() => {
-    // Skip redirect logic during initial loading
-    if (isLoading) {
-      console.log("AuthMiddleware: Still loading, skipping redirects");
+    // Skip redirect logic during initial loading or before auth system is initialized
+    if (isLoading || !isInitialized) {
+      console.log(
+        "AuthMiddleware: Still loading or not initialized, skipping redirects",
+        {
+          isLoading,
+          isInitialized,
+        }
+      );
       return;
     }
 
@@ -75,15 +82,31 @@ export function AuthMiddleware() {
 
     // Handle protected routes - but be less aggressive on first load
     if (isProtectedRoute && !isAuthenticated) {
-      // Give a small delay to allow for auth state restoration
+      // Give more time to allow for auth state restoration
       const timer = setTimeout(() => {
         // Re-check authentication state before redirecting
         const tokens = AuthUtils.getTokens();
         if (!tokens?.accessToken) {
-          console.warn(`Access denied to protected route: ${pathname}`);
+          console.warn(
+            `Access denied to protected route: ${pathname} - no valid token found`
+          );
           router.replace("/auth/login");
+        } else {
+          console.log(
+            `Protected route access delayed - token exists, waiting for auth context`
+          );
+          // If token exists but user not authenticated, give more time
+          setTimeout(() => {
+            const stillNotAuthenticated = !AuthUtils.getTokens()?.accessToken;
+            if (stillNotAuthenticated) {
+              console.warn(
+                `Final redirect to login - auth state not resolved for ${pathname}`
+              );
+              router.replace("/auth/login");
+            }
+          }, 300); // Additional delay if token exists
         }
-      }, 200);
+      }, 500); // Increased from 200ms to 500ms
 
       return () => clearTimeout(timer);
     }
@@ -124,6 +147,7 @@ export function AuthMiddleware() {
   }, [
     isLoading,
     isAuthenticated,
+    isInitialized,
     user,
     pathname,
     router,
