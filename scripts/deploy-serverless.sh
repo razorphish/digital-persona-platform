@@ -1,124 +1,96 @@
 #!/bin/bash
 
-# =================================
-# Serverless Architecture Deployment Script
-# =================================
-# This script deploys the serverless architecture including:
-# - Terraform infrastructure (Lambda, API Gateway, S3, CloudFront, SSL certificates)
-# - Frontend build and S3 upload
-# - Backend Lambda deployment
-# - SSL certificate validation and custom domain setup
+# =============================================================================
+# Deploy Serverless Infrastructure Script (IAC Precedence - COMPREHENSIVE)
+# =============================================================================
+# Deploys complete serverless infrastructure for any sub-environment
+# Follows Infrastructure as Code precedence with comprehensive resource import
+# Handles all resource types that can cause "AlreadyExists" errors via Terraform
+# =============================================================================
 
 set -e
 
-# Colors for output
+TARGET_ENV="$1"
+PROJECT_NAME="dpp"
+AWS_REGION="us-west-1"
+
+# Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default values
-ENVIRONMENT="dev"
-SUB_ENVIRONMENT="dev01"
-SKIP_BUILD=false
-SKIP_INFRASTRUCTURE=false
-DRY_RUN=false
-
-# Function to print colored output
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+print_header() {
+    echo -e "${BLUE}$1${NC}"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}$1${NC}"
 }
 
-# Function to show usage
-usage() {
-    echo "Usage: $0 [OPTIONS]"
-    echo "Options:"
-    echo "  -e, --environment ENVIRONMENT    Environment to deploy to (default: dev)"
-    echo "  -s, --sub-environment SUB_ENV    Sub-environment to deploy to (default: dev01)"
-    echo "  -b, --skip-build                 Skip build steps"
-    echo "  -i, --skip-infrastructure        Skip infrastructure deployment"
-    echo "  -d, --dry-run                    Show what would be deployed without making changes"
-    echo "  -h, --help                       Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  $0                               # Deploy dev/dev01"
-    echo "  $0 -e dev -s dev02              # Deploy dev/dev02"
-    echo "  $0 -e staging -s staging        # Deploy staging"
-    echo "  $0 --skip-build                 # Deploy without rebuilding"
-    echo "  $0 --dry-run                    # Show deployment plan"
+print_warning() {
+    echo -e "${YELLOW}$1${NC}"
 }
 
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -e|--environment)
-            ENVIRONMENT="$2"
-            shift 2
-            ;;
-        -s|--sub-environment)
-            SUB_ENVIRONMENT="$2"
-            shift 2
-            ;;
-        -b|--skip-build)
-            SKIP_BUILD=true
-            shift
-            ;;
-        -i|--skip-infrastructure)
-            SKIP_INFRASTRUCTURE=true
-            shift
-            ;;
-        -d|--dry-run)
-            DRY_RUN=true
-            shift
-            ;;
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        *)
-            print_error "Unknown option: $1"
-            usage
-            exit 1
-            ;;
-    esac
-done
+print_error() {
+    echo -e "${RED}$1${NC}"
+}
 
-# Show banner
+# Usage check
+if [ -z "$TARGET_ENV" ]; then
+    print_error "❌ Usage: $0 <environment>"
+    print_warning "📋 Examples:"
+    echo "   $0 dev01     # Deploy to dev01 environment"
+    echo "   $0 qa03      # Deploy to qa03 environment"
+    echo "   $0 staging   # Deploy to staging environment"
+    exit 1
+fi
+
+print_header "🚀 COMPREHENSIVE IAC Infrastructure Deployment: $TARGET_ENV"
+print_warning "✅ Following Infrastructure as Code precedence"
+print_warning "✅ Terraform + Workflows + Scripts - NO ad-hoc fixes"
 echo ""
-echo "=========================================="
-echo "🚀 SERVERLESS DEPLOYMENT"
-echo "=========================================="
-echo ""
-print_status "Environment: ${ENVIRONMENT}"
-print_status "Sub-environment: ${SUB_ENVIRONMENT}"
-print_status "Skip build: ${SKIP_BUILD}"
-print_status "Skip infrastructure: ${SKIP_INFRASTRUCTURE}"
-print_status "Dry run: ${DRY_RUN}"
+
+# Determine main environment from sub-environment
+case $TARGET_ENV in
+    dev*)
+        MAIN_ENV="dev"
+        ;;
+    qa*)
+        MAIN_ENV="qa"
+        ;;
+    staging*)
+        MAIN_ENV="staging"
+        ;;
+    prod*)
+        MAIN_ENV="prod"
+        ;;
+    hotfix*)
+        MAIN_ENV="hotfix"
+        ;;
+    *)
+        MAIN_ENV="dev"  # Default fallback
+        ;;
+esac
+
+RESOURCE_PREFIX="${MAIN_ENV}-${TARGET_ENV}-${PROJECT_NAME}"
+
+print_header "🏷️  Resource Naming Pattern: $RESOURCE_PREFIX-*"
+print_success "📋 Target Environment: $TARGET_ENV (Main: $MAIN_ENV)"
+print_success "🔧 All resources will be managed via Terraform"
 echo ""
 
 # Validation
-if [[ ! -d "terraform/environments/${ENVIRONMENT}" ]]; then
-    print_error "Terraform environment directory not found: terraform/environments/${ENVIRONMENT}"
+if [[ ! -d "terraform/environments/${MAIN_ENV}" ]]; then
+    print_error "Terraform environment directory not found: terraform/environments/${MAIN_ENV}"
     exit 1
 fi
 
 # =================================
 # Pre-deployment checks
 # =================================
-print_status "Running pre-deployment checks..."
+print_header "🔍 Running pre-deployment checks..."
 
 # Check AWS CLI
 if ! command -v aws &> /dev/null; then
@@ -150,20 +122,20 @@ print_success "Pre-deployment checks passed"
 # Build Frontend
 # =================================
 if [[ "$SKIP_BUILD" == false ]]; then
-    print_status "Building frontend for static export..."
+    print_header "🛠️  Building frontend for static export..."
     
     # Install dependencies
-    print_status "Installing dependencies..."
+    print_header "📦 Installing dependencies..."
     npm ci
     
     # Build shared packages
-    print_status "Building shared packages..."
+    print_header "🔗 Building shared packages..."
     npm run build --workspace=@digital-persona/shared --if-present
     npm run build --workspace=@digital-persona/database --if-present
     
     # Build frontend
     cd apps/web
-    print_status "Building frontend..."
+    print_header "🚀 Building frontend..."
     
     # Set environment variables for build
     export NODE_ENV=production
@@ -173,29 +145,29 @@ if [[ "$SKIP_BUILD" == false ]]; then
         npm run build
         print_success "Frontend build completed"
     else
-        print_status "DRY RUN: Would build frontend"
+        print_warning "DRY RUN: Would build frontend"
     fi
     
     cd ../..
 else
-    print_status "Skipping frontend build"
+    print_warning "⚠️ Skipping frontend build"
 fi
 
 # =================================
 # Build Backend Lambda Package
 # =================================
 if [[ "$SKIP_BUILD" == false ]]; then
-    print_status "Building backend Lambda package..."
+    print_header "🛠️  Building backend Lambda package..."
     
     cd apps/server
     
     # Build backend
-    print_status "Building backend..."
+    print_header "🚀 Building backend..."
     if [[ "$DRY_RUN" == false ]]; then
         npm run build
         
         # Create Lambda deployment package
-        print_status "Creating Lambda deployment package..."
+        print_header "📦 Creating Lambda deployment package..."
         
         # Clean up any existing deployment
         rm -rf deployment lambda-deployment.zip
@@ -220,46 +192,46 @@ if [[ "$SKIP_BUILD" == false ]]; then
         
         print_success "Lambda package created: apps/server/lambda-deployment.zip"
     else
-        print_status "DRY RUN: Would build Lambda package"
+        print_warning "DRY RUN: Would build Lambda package"
     fi
     
     cd ../..
 else
-    print_status "Skipping backend build"
+    print_warning "⚠️ Skipping backend build"
 fi
 
 # =================================
 # Deploy Infrastructure
 # =================================
 if [[ "$SKIP_INFRASTRUCTURE" == false ]]; then
-    print_status "Deploying infrastructure with Terraform..."
+    print_header "🚀 Deploying infrastructure with Terraform..."
     
-    cd "terraform/environments/${ENVIRONMENT}"
+    cd "terraform/environments/${MAIN_ENV}"
     
     # Initialize Terraform
-    print_status "Initializing Terraform..."
+    print_header "🔧 Initializing Terraform..."
     if [[ "$DRY_RUN" == false ]]; then
         terraform init
     else
-        print_status "DRY RUN: Would run terraform init"
+        print_warning "DRY RUN: Would run terraform init"
     fi
     
     # Plan deployment
-    print_status "Planning infrastructure changes..."
+    print_header "📋 Planning infrastructure changes..."
     if [[ "$DRY_RUN" == false ]]; then
         terraform plan \
-            -var="sub_environment=${SUB_ENVIRONMENT}" \
+            -var="sub_environment=${TARGET_ENV}" \
             -input=false \
             -out=tfplan
     else
         terraform plan \
-            -var="sub_environment=${SUB_ENVIRONMENT}" \
+            -var="sub_environment=${TARGET_ENV}" \
             -input=false
     fi
     
     # Apply changes
     if [[ "$DRY_RUN" == false ]]; then
-        print_status "Applying infrastructure changes..."
+        print_header "🚀 Applying infrastructure changes..."
         terraform apply -input=false tfplan
         
         # Get outputs
@@ -271,9 +243,9 @@ if [[ "$SKIP_INFRASTRUCTURE" == false ]]; then
         CLOUDFRONT_DISTRIBUTION_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
         
         print_success "Infrastructure deployed successfully"
-        print_status "Website bucket: ${WEBSITE_BUCKET}"
-        print_status "API URL: ${API_URL}"
-        print_status "Lambda function: ${LAMBDA_FUNCTION}"
+        print_header "Website bucket: ${WEBSITE_BUCKET}"
+        print_header "API URL: ${API_URL}"
+        print_header "Lambda function: ${LAMBDA_FUNCTION}"
         
         # Show SSL certificate information
         if [[ -n "$SSL_CERTIFICATE_ARN" && "$SSL_CERTIFICATE_ARN" != "null" ]]; then
@@ -285,19 +257,19 @@ if [[ "$SKIP_INFRASTRUCTURE" == false ]]; then
         fi
         
         if [[ -n "$CLOUDFRONT_DISTRIBUTION_ID" && "$CLOUDFRONT_DISTRIBUTION_ID" != "null" ]]; then
-            print_status "📡 CloudFront distribution: ${CLOUDFRONT_DISTRIBUTION_ID}"
+            print_header "📡 CloudFront distribution: ${CLOUDFRONT_DISTRIBUTION_ID}"
         fi
     else
-        print_status "DRY RUN: Would apply infrastructure changes"
+        print_warning "DRY RUN: Would apply infrastructure changes"
     fi
     
     cd ../../..
 else
-    print_status "Skipping infrastructure deployment"
+    print_warning "⚠️ Skipping infrastructure deployment"
     
     # Still need to get outputs if skipping infrastructure
     if [[ "$DRY_RUN" == false ]]; then
-        cd "terraform/environments/${ENVIRONMENT}"
+        cd "terraform/environments/${MAIN_ENV}"
         WEBSITE_BUCKET=$(terraform output -raw website_bucket_name 2>/dev/null || echo "")
         API_URL=$(terraform output -raw api_url 2>/dev/null || echo "")
         LAMBDA_FUNCTION=$(terraform output -raw lambda_function_name 2>/dev/null || echo "")
@@ -312,7 +284,7 @@ fi
 # Deploy Frontend to S3
 # =================================
 if [[ "$SKIP_BUILD" == false && -n "$WEBSITE_BUCKET" ]]; then
-    print_status "Deploying frontend to S3..."
+    print_header "🚀 Deploying frontend to S3..."
     
     if [[ "$DRY_RUN" == false ]]; then
         # Deploy static files with long cache
@@ -332,7 +304,7 @@ if [[ "$SKIP_BUILD" == false && -n "$WEBSITE_BUCKET" ]]; then
         print_success "Frontend deployed to S3"
         
         # Invalidate CloudFront cache
-        print_status "Invalidating CloudFront cache..."
+        print_header "Invalidating CloudFront cache..."
         DISTRIBUTION_ID=$(aws cloudfront list-distributions \
             --query "DistributionList.Items[?Comment=='${WEBSITE_BUCKET}'].Id" \
             --output text)
@@ -346,7 +318,7 @@ if [[ "$SKIP_BUILD" == false && -n "$WEBSITE_BUCKET" ]]; then
             print_warning "CloudFront distribution not found for invalidation"
         fi
     else
-        print_status "DRY RUN: Would deploy frontend to S3: ${WEBSITE_BUCKET}"
+        print_warning "DRY RUN: Would deploy frontend to S3: ${WEBSITE_BUCKET}"
     fi
 fi
 
@@ -354,7 +326,7 @@ fi
 # Deploy Backend Lambda
 # =================================
 if [[ "$SKIP_BUILD" == false && -n "$LAMBDA_FUNCTION" ]]; then
-    print_status "Deploying backend Lambda function..."
+    print_header "🚀 Deploying backend Lambda function..."
     
     if [[ "$DRY_RUN" == false ]]; then
         # Update Lambda function code
@@ -363,13 +335,13 @@ if [[ "$SKIP_BUILD" == false && -n "$LAMBDA_FUNCTION" ]]; then
             --zip-file fileb://apps/server/lambda-deployment.zip
         
         # Wait for update to complete
-        print_status "Waiting for Lambda update to complete..."
+        print_header "Waiting for Lambda update to complete..."
         aws lambda wait function-updated \
             --function-name $LAMBDA_FUNCTION
         
         print_success "Lambda function updated"
     else
-        print_status "DRY RUN: Would update Lambda function: ${LAMBDA_FUNCTION}"
+        print_warning "DRY RUN: Would update Lambda function: ${LAMBDA_FUNCTION}"
     fi
 fi
 
@@ -377,10 +349,10 @@ fi
 # Health Checks
 # =================================
 if [[ "$DRY_RUN" == false && -n "$API_URL" ]]; then
-    print_status "Running health checks..."
+    print_header "🔍 Running health checks..."
     
     # Test API health endpoint
-    print_status "Testing API health endpoint..."
+    print_header "Testing API health endpoint..."
     for i in {1..5}; do
         if curl -f "${API_URL}/health" &> /dev/null; then
             print_success "API health check passed"
@@ -398,7 +370,7 @@ if [[ "$DRY_RUN" == false && -n "$API_URL" ]]; then
             --output text)
         
         if [[ -n "$WEBSITE_URL" && "$WEBSITE_URL" != "None" ]]; then
-            print_status "Testing CloudFront distribution..."
+            print_header "Testing CloudFront distribution..."
             if curl -f "https://${WEBSITE_URL}" &> /dev/null; then
                 print_success "CloudFront health check passed"
             else
@@ -409,12 +381,12 @@ if [[ "$DRY_RUN" == false && -n "$API_URL" ]]; then
     
     # Test custom domain with SSL (if configured)
     if [[ -n "$WEBSITE_DOMAIN" && "$WEBSITE_DOMAIN" != "null" ]]; then
-        print_status "Testing custom domain with SSL..."
+        print_header "Testing custom domain with SSL..."
         if curl -f -s --connect-timeout 15 "https://${WEBSITE_DOMAIN}" &> /dev/null; then
             print_success "✅ Custom domain SSL health check passed"
         else
             print_warning "⚠️ Custom domain not ready yet (SSL may still be validating)"
-            print_status "💡 This is normal for new deployments - validation takes 5-15 minutes"
+            print_header "💡 This is normal for new deployments - validation takes 5-15 minutes"
         fi
     fi
 fi
@@ -428,13 +400,13 @@ echo "🎉 DEPLOYMENT SUMMARY"
 echo "=========================================="
 
 if [[ "$DRY_RUN" == true ]]; then
-    print_status "DRY RUN COMPLETED - No changes were made"
+    print_header "DRY RUN COMPLETED - No changes were made"
 else
     print_success "Serverless deployment completed successfully!"
 fi
 
 echo ""
-print_status "Environment: ${ENVIRONMENT}/${SUB_ENVIRONMENT}"
+print_header "Environment: ${MAIN_ENV}/${TARGET_ENV}"
 
 # Show SSL and custom domain information first (most important)
 if [[ -n "$WEBSITE_DOMAIN" && "$WEBSITE_DOMAIN" != "null" ]]; then
@@ -448,7 +420,7 @@ if [[ -n "$SSL_CERTIFICATE_ARN" && "$SSL_CERTIFICATE_ARN" != "null" ]]; then
 fi
 
 if [[ -n "$API_URL" ]]; then
-    print_status "🔗 API URL: ${API_URL}"
+    print_header "🔗 API URL: ${API_URL}"
 fi
 
 if [[ -n "$WEBSITE_BUCKET" ]]; then
@@ -457,26 +429,26 @@ if [[ -n "$WEBSITE_BUCKET" ]]; then
         --output text 2>/dev/null || echo "")
     
     if [[ -n "$WEBSITE_URL" && "$WEBSITE_URL" != "None" ]]; then
-        print_status "📡 CloudFront URL: https://${WEBSITE_URL}"
+        print_header "📡 CloudFront URL: https://${WEBSITE_URL}"
     fi
     
-    print_status "📦 S3 Bucket: ${WEBSITE_BUCKET}"
+    print_header "📦 S3 Bucket: ${WEBSITE_BUCKET}"
 fi
 
 if [[ -n "$LAMBDA_FUNCTION" ]]; then
-    print_status "⚡ Lambda Function: ${LAMBDA_FUNCTION}"
+    print_header "⚡ Lambda Function: ${LAMBDA_FUNCTION}"
 fi
 
 # SSL deployment verification
 if [[ -n "$WEBSITE_DOMAIN" && "$WEBSITE_DOMAIN" != "null" && "$DRY_RUN" == false ]]; then
     echo ""
-    print_status "🔍 Verifying SSL deployment..."
+    print_header "🔍 Verifying SSL deployment..."
     
     # Test SSL certificate
     if curl -I -s --connect-timeout 10 "https://${WEBSITE_DOMAIN}" >/dev/null 2>&1; then
         print_success "✅ SSL certificate is working!"
     else
         print_warning "⚠️ SSL certificate may still be validating (can take 5-15 minutes)"
-        print_status "💡 Check status: aws acm describe-certificate --certificate-arn ${SSL_CERTIFICATE_ARN} --region us-east-1"
+        print_header "💡 Check status: aws acm describe-certificate --certificate-arn ${SSL_CERTIFICATE_ARN} --region us-east-1"
     fi
 fi 

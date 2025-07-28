@@ -484,6 +484,7 @@ jobs:
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
         run: |
           echo "🔄 Importing existing AWS resources into Terraform state..."
+          echo "🏷️  Using naming pattern: $MAIN_ENV-$ENVIRONMENT-dpp-*"
 
           # Function to safely import resource
           import_resource() {
@@ -492,6 +493,7 @@ jobs:
             local aws_resource_id="$3"
             
             echo "📥 Checking $resource_type: $resource_name"
+            echo "    AWS Resource ID: $aws_resource_id"
             if terraform state show "$resource_name" >/dev/null 2>&1; then
               echo "  ✓ Already in state"
             else
@@ -505,23 +507,60 @@ jobs:
           }
 
           # Import ECR repositories
-          import_resource "ECR Repository" "module.aws_batch_ml.aws_ecr_repository.ml_service" "$ENVIRONMENT-$ENVIRONMENT-dpp-ml-service"
+          import_resource "ECR Repository" "module.aws_batch_ml.aws_ecr_repository.ml_service" "$MAIN_ENV-$ENVIRONMENT-dpp-ml-service"
 
-          # Import IAM roles
-          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_service" "$ENVIRONMENT-$ENVIRONMENT-dpp-batch-service-role"
-          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_instance" "$ENVIRONMENT-$ENVIRONMENT-dpp-batch-instance-role"  
-          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_execution" "$ENVIRONMENT-$ENVIRONMENT-dpp-batch-execution-role"
-          import_resource "IAM Role" "module.lambda_backend.aws_iam_role.lambda_execution" "$ENVIRONMENT-$ENVIRONMENT-dpp-lambda-execution"
-          import_resource "IAM Role" "module.rds_proxy.aws_iam_role.rds_proxy" "$ENVIRONMENT-$ENVIRONMENT-dpp-rds-proxy-role"
+          # Import IAM roles - All roles that commonly cause AlreadyExists errors
+          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_service" "$MAIN_ENV-$ENVIRONMENT-dpp-batch-service-role"
+          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_instance" "$MAIN_ENV-$ENVIRONMENT-dpp-batch-instance-role"  
+          import_resource "IAM Role" "module.aws_batch_ml.aws_iam_role.batch_execution" "$MAIN_ENV-$ENVIRONMENT-dpp-batch-execution-role"
+          import_resource "IAM Role" "module.lambda_backend.aws_iam_role.lambda_execution" "$MAIN_ENV-$ENVIRONMENT-dpp-lambda-execution"
+          import_resource "IAM Role" "module.rds_proxy.aws_iam_role.rds_proxy" "$MAIN_ENV-$ENVIRONMENT-dpp-rds-proxy-role"
+
+          # Import IAM Instance Profiles
+          import_resource "IAM Instance Profile" "module.aws_batch_ml.aws_iam_instance_profile.batch_instance" "$MAIN_ENV-$ENVIRONMENT-dpp-batch-instance-profile"
+
+          # Import CloudWatch Log Groups
+          import_resource "CloudWatch Log Group" "module.aws_batch_ml.aws_cloudwatch_log_group.ml_batch_logs" "/aws/batch/$MAIN_ENV-$ENVIRONMENT-dpp-ml-processing"
+          import_resource "CloudWatch Log Group" "module.api_gateway.aws_cloudwatch_log_group.api_gateway" "/aws/apigateway/$MAIN_ENV-$ENVIRONMENT-dpp"
+          import_resource "CloudWatch Log Group" "module.lambda_backend.aws_cloudwatch_log_group.lambda_logs" "/aws/lambda/$MAIN_ENV-$ENVIRONMENT-dpp-api"
+
+          # Import SQS Queues
+          import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs" "https://sqs.us-west-1.amazonaws.com/570827307849/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs"
+          import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs_dlq" "https://sqs.us-west-1.amazonaws.com/570827307849/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs-dlq"
+
+          # Import RDS DB Proxy (if exists)
+          echo "🔍 Checking RDS DB Proxy..."
+          if aws rds describe-db-proxies --db-proxy-name "$MAIN_ENV-$ENVIRONMENT-dpp-rds-proxy" >/dev/null 2>&1; then
+            import_resource "RDS DB Proxy" "module.rds_proxy.aws_db_proxy.main" "$MAIN_ENV-$ENVIRONMENT-dpp-rds-proxy"
+          fi
 
           # Import CloudFront Origin Access Control (need to get ID from AWS)
           echo "🔍 Checking CloudFront Origin Access Control..."
-          OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$ENVIRONMENT-$ENVIRONMENT-dpp-oac'].Id" --output text 2>/dev/null || echo "")
+          OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$MAIN_ENV-$ENVIRONMENT-dpp-oac'].Id" --output text 2>/dev/null || echo "")
           if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
             import_resource "CloudFront OAC" "module.s3_website.aws_cloudfront_origin_access_control.website" "$OAC_ID"
           fi
 
-          echo "✅ Resource import completed"
+          # Import Route53 Records (if they exist)
+          echo "🔍 Checking Route53 records..."
+          WEBSITE_DOMAIN="${ENVIRONMENT}.hibiji.com"
+          API_DOMAIN="${ENVIRONMENT}-api.hibiji.com"
+          HOSTED_ZONE_ID="Z0269000GKEV9HN9KCKV"
+
+          # Check if website CNAME exists
+          if aws route53 list-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" --query "ResourceRecordSets[?Name=='$WEBSITE_DOMAIN.' && Type=='CNAME']" --output text | grep -q "$WEBSITE_DOMAIN"; then
+            echo "📋 Website DNS record exists for $WEBSITE_DOMAIN"
+            import_resource "Route53 Record" "aws_route53_record.website" "${HOSTED_ZONE_ID}_${WEBSITE_DOMAIN}_CNAME"
+          fi
+
+          # Check if API CNAME exists  
+          if aws route53 list-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" --query "ResourceRecordSets[?Name=='$API_DOMAIN.' && Type=='CNAME']" --output text | grep -q "$API_DOMAIN"; then
+            echo "📋 API DNS record exists for $API_DOMAIN"
+            import_resource "Route53 Record" "aws_route53_record.api" "${HOSTED_ZONE_ID}_${API_DOMAIN}_CNAME"
+          fi
+
+          echo "✅ Comprehensive resource import completed"
+          echo "📊 Summary: All common AlreadyExists resources checked and imported if found"
 
       - name: Verify and Create ACM Certificates
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
