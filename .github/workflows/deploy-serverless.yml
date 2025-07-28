@@ -558,13 +558,49 @@ jobs:
                   return 0
                 fi
                 ;;
-              "IAM Role"|"IAM Instance Profile")
-                if aws iam get-role --role-name "$aws_resource_id" >/dev/null 2>&1 || aws iam get-instance-profile --instance-profile-name "$aws_resource_id" >/dev/null 2>&1; then
+              "IAM Role")
+                if aws iam get-role --role-name "$aws_resource_id" >/dev/null 2>&1; then
                   echo "  ✓ Resource exists in AWS"
                 else
                   echo "  ℹ️ Resource does not exist in AWS, will be created"
                   return 0
                 fi
+                ;;
+              "IAM Instance Profile")
+                if aws iam get-instance-profile --instance-profile-name "$aws_resource_id" >/dev/null 2>&1; then
+                  echo "  ✓ Resource exists in AWS"
+                else
+                  echo "  ℹ️ Resource does not exist in AWS, will be created"
+                  return 0
+                fi
+                ;;
+              "Batch Compute Environment")
+                if aws batch describe-compute-environments --compute-environments "$aws_resource_id" >/dev/null 2>&1; then
+                  echo "  ✓ Resource exists in AWS"
+                else
+                  echo "  ℹ️ Resource does not exist in AWS, will be created"
+                  return 0
+                fi
+                ;;
+              "Lambda Function")
+                if aws lambda get-function --function-name "$aws_resource_id" >/dev/null 2>&1; then
+                  echo "  ✓ Resource exists in AWS"
+                else
+                  echo "  ℹ️ Resource does not exist in AWS, will be created"
+                  return 0
+                fi
+                ;;
+              "RDS DB Proxy")
+                if aws rds describe-db-proxies --db-proxy-name "$aws_resource_id" >/dev/null 2>&1; then
+                  echo "  ✓ Resource exists in AWS"
+                else
+                  echo "  ℹ️ Resource does not exist in AWS, will be created"
+                  return 0
+                fi
+                ;;
+              "SQS Queue")
+                # SQS verification is complex with URLs, skip for now
+                echo "  ℹ️ Skipping AWS verification for SQS - will attempt import"
                 ;;
               *)
                 echo "  ℹ️ Skipping AWS verification for resource type: $resource_type"
@@ -631,10 +667,23 @@ jobs:
           import_resource "CloudWatch Log Group" "module.aws_batch_ml.aws_cloudwatch_log_group.ml_batch_logs" "/aws/batch/$MAIN_ENV-$ENVIRONMENT-dpp-ml-processing"
           import_resource "CloudWatch Log Group" "module.api_gateway.aws_cloudwatch_log_group.api_gateway" "/aws/apigateway/$MAIN_ENV-$ENVIRONMENT-dpp"
           import_resource "CloudWatch Log Group" "module.lambda_backend.aws_cloudwatch_log_group.lambda_logs" "/aws/lambda/$MAIN_ENV-$ENVIRONMENT-dpp-api"
+          import_resource "CloudWatch Log Group" "module.rds_proxy.aws_cloudwatch_log_group.rds_proxy" "/aws/rds-proxy/$MAIN_ENV-$ENVIRONMENT-dpp-rds-proxy"
 
           # Import SQS Queues
           import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs" "https://sqs.us-west-1.amazonaws.com/570827307849/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs"
           import_resource "SQS Queue" "module.aws_batch_ml.aws_sqs_queue.ml_jobs_dlq" "https://sqs.us-west-1.amazonaws.com/570827307849/$MAIN_ENV-$ENVIRONMENT-dpp-ml-jobs-dlq"
+
+          # Import AWS Batch Compute Environments (commonly orphaned from failed cleanups)
+          echo "🔍 Checking AWS Batch Compute Environment..."
+          if aws batch describe-compute-environments --compute-environments "$MAIN_ENV-$ENVIRONMENT-dpp-ml-compute" >/dev/null 2>&1; then
+            import_resource "Batch Compute Environment" "module.aws_batch_ml.aws_batch_compute_environment.ml_processing" "$MAIN_ENV-$ENVIRONMENT-dpp-ml-compute"
+          fi
+
+          # Import Lambda Functions (commonly orphaned from failed cleanups)
+          echo "🔍 Checking Lambda Function..."
+          if aws lambda get-function --function-name "$MAIN_ENV-$ENVIRONMENT-dpp-api" >/dev/null 2>&1; then
+            import_resource "Lambda Function" "module.lambda_backend.aws_lambda_function.api" "$MAIN_ENV-$ENVIRONMENT-dpp-api"
+          fi
 
           # Import RDS DB Proxy (if exists)
           echo "🔍 Checking RDS DB Proxy..."
