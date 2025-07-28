@@ -48,10 +48,14 @@ function MicrophoneSetupInstructions({
   onTestMicrophone,
   isTesting,
   testResult,
+  isMobileDevice,
+  requiresUserInteraction,
 }: {
   onTestMicrophone: () => void;
   isTesting: boolean;
   testResult: "success" | "failed" | null;
+  isMobileDevice: boolean;
+  requiresUserInteraction: boolean;
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
@@ -215,6 +219,66 @@ function MicrophoneSetupInstructions({
           )}
         </div>
 
+        {/* Mobile Settings */}
+        <div>
+          <button
+            onClick={() => toggleSection("mobile")}
+            className="flex items-center justify-between w-full text-left text-blue-800 hover:text-blue-900 font-medium"
+          >
+            <span>📱 Mobile Device Settings</span>
+            <svg
+              className={`w-4 h-4 transform transition-transform ${
+                expandedSection === "mobile" ? "rotate-180" : ""
+              }`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          {expandedSection === "mobile" && (
+            <div className="mt-2 pl-4 text-blue-700 space-y-2">
+              <p>
+                <strong>iPhone/iPad (iOS):</strong>
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Settings → Privacy & Security → Microphone</li>
+                <li>
+                  Find your browser (Safari, Chrome, Firefox) and toggle ON
+                </li>
+                <li>
+                  If using Safari: Settings → Safari → Camera & Microphone
+                  Access
+                </li>
+                <li>Return to this page and tap a recording button</li>
+                <li>When prompted, tap "Allow" for microphone access</li>
+              </ol>
+              <p>
+                <strong>Android:</strong>
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Settings → Apps → [Your Browser] → Permissions</li>
+                <li>Tap "Microphone" and select "Allow"</li>
+                <li>
+                  Alternative: Settings → Privacy → Permission Manager →
+                  Microphone
+                </li>
+                <li>Find your browser and set to "Allow"</li>
+                <li>Return to this page and try recording</li>
+              </ol>
+              <p className="text-sm mt-2 p-2 bg-blue-100 rounded">
+                <strong>Mobile Tip:</strong> On mobile Safari, you must tap a
+                recording button first before the browser will ask for
+                microphone permission. Auto-requests don't work on iOS.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Hardware Check */}
         <div>
           <button
@@ -239,48 +303,113 @@ function MicrophoneSetupInstructions({
           {expandedSection === "hardware" && (
             <div className="mt-2 pl-4 text-blue-700 space-y-2">
               <ul className="list-disc list-inside space-y-1">
-                <li>
-                  <strong>Built-in Microphone:</strong> Usually works
-                  automatically on laptops
-                </li>
-                <li>
-                  <strong>External Microphone:</strong> Check USB/3.5mm
-                  connection
-                </li>
-                <li>
-                  <strong>Headset:</strong> Ensure mic isn't muted on the
-                  headset itself
-                </li>
-                <li>
-                  <strong>Wireless Headphones:</strong> Check Bluetooth
-                  connection and pairing
-                </li>
+                {isMobileDevice ? (
+                  <>
+                    <li>
+                      <strong>Built-in Microphone:</strong> Most phones and
+                      tablets have built-in mics that work automatically
+                    </li>
+                    <li>
+                      <strong>Wired Headphones:</strong> Check that headphones
+                      with mic are properly connected
+                    </li>
+                    <li>
+                      <strong>Bluetooth Headphones:</strong> Ensure they're
+                      connected and selected as audio device
+                    </li>
+                    <li>
+                      <strong>Case/Cover:</strong> Remove any cases that might
+                      be blocking the microphone
+                    </li>
+                    <li>
+                      <strong>App Permissions:</strong> Check if other recording
+                      apps work (Voice Memos, etc.)
+                    </li>
+                  </>
+                ) : (
+                  <>
+                    <li>
+                      <strong>Built-in Microphone:</strong> Usually works
+                      automatically on laptops
+                    </li>
+                    <li>
+                      <strong>External Microphone:</strong> Check USB/3.5mm
+                      connection
+                    </li>
+                    <li>
+                      <strong>Headset:</strong> Ensure mic isn't muted on the
+                      headset itself
+                    </li>
+                    <li>
+                      <strong>Wireless Headphones:</strong> Check Bluetooth
+                      connection and pairing
+                    </li>
+                  </>
+                )}
               </ul>
               <p className="text-sm mt-2 p-2 bg-blue-100 rounded">
-                <strong>Quick Test:</strong> Try recording a voice memo on your
-                phone/computer to verify hardware works
+                <strong>Quick Test:</strong> Try recording a voice memo{" "}
+                {isMobileDevice
+                  ? "in your phone's Voice Memos app"
+                  : "on your phone/computer"}{" "}
+                to verify hardware works
               </p>
             </div>
           )}
         </div>
 
         {/* Permission Request */}
-        <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
-          <h5 className="font-semibold text-blue-800 mb-2">
-            🔐 Request Microphone Permission
+        <div
+          className={`border rounded p-3 mb-3 ${
+            isMobileDevice
+              ? "bg-orange-50 border-orange-200"
+              : "bg-blue-50 border-blue-200"
+          }`}
+        >
+          <h5
+            className={`font-semibold mb-2 ${
+              isMobileDevice ? "text-orange-800" : "text-blue-800"
+            }`}
+          >
+            {isMobileDevice
+              ? "📱 Mobile Microphone Access"
+              : "🔐 Request Microphone Permission"}
           </h5>
-          <p className="text-blue-700 text-sm mb-3">
-            Click to request microphone access from your browser:
+          <p
+            className={`text-sm mb-3 ${
+              isMobileDevice ? "text-orange-700" : "text-blue-700"
+            }`}
+          >
+            {isMobileDevice
+              ? requiresUserInteraction
+                ? "On mobile Safari, you must tap a recording button first to trigger the permission prompt:"
+                : "Tap to request microphone access from your mobile browser:"
+              : "Click to request microphone access from your browser:"}
           </p>
           <div className="flex items-center space-x-3">
             <button
               onClick={onTestMicrophone}
               disabled={isTesting}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-300"
+              className={`px-4 py-2 text-white rounded-lg font-medium disabled:opacity-50 ${
+                isMobileDevice
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
             >
-              {isTesting ? "Requesting..." : "🔓 Request Microphone Access"}
+              {isTesting
+                ? "Requesting..."
+                : isMobileDevice
+                ? "📱 Request Mobile Access"
+                : "🔓 Request Microphone Access"}
             </button>
           </div>
+          {isMobileDevice && requiresUserInteraction && (
+            <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+              <strong>iOS Safari Tip:</strong> The permission dialog will only
+              appear after you tap this button. This is how Safari protects user
+              privacy.
+            </div>
+          )}
         </div>
 
         {/* Microphone Test */}
@@ -331,12 +460,44 @@ function MicrophoneSetupInstructions({
         <div className="bg-green-50 border border-green-200 rounded p-3">
           <h5 className="font-semibold text-green-800 mb-2">🔧 Quick Fixes</h5>
           <ul className="text-green-700 text-xs space-y-1">
-            <li>• Refresh this page after changing settings</li>
-            <li>• Try a different browser (Chrome usually works best)</li>
-            <li>• Close other apps that might be using your microphone</li>
-            <li>• Restart your browser completely</li>
-            <li>• Check if antivirus software is blocking microphone access</li>
+            {isMobileDevice ? (
+              <>
+                <li>
+                  • Tap a recording button to trigger the permission prompt
+                </li>
+                <li>
+                  • Close other apps that might be using your microphone (Voice
+                  Memos, etc.)
+                </li>
+                <li>• Try switching between WiFi and cellular data</li>
+                <li>• Restart your browser app completely</li>
+                <li>
+                  • Try a different browser (Chrome Mobile, Firefox Mobile)
+                </li>
+                <li>• Check if Do Not Disturb mode is blocking permissions</li>
+                <li>
+                  • Remove any phone cases that might block the microphone
+                </li>
+              </>
+            ) : (
+              <>
+                <li>• Refresh this page after changing settings</li>
+                <li>• Try a different browser (Chrome usually works best)</li>
+                <li>• Close other apps that might be using your microphone</li>
+                <li>• Restart your browser completely</li>
+                <li>
+                  • Check if antivirus software is blocking microphone access
+                </li>
+              </>
+            )}
           </ul>
+          {requiresUserInteraction && (
+            <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+              <strong>Mobile Safari Note:</strong> You must tap a recording
+              button first. Auto-requests don't work on iOS - this is a browser
+              security feature.
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -388,6 +549,8 @@ function LearningPageContent() {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(
     null
   );
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [requiresUserInteraction, setRequiresUserInteraction] = useState(false);
   const isRecordingRef = useRef(false);
 
   // tRPC queries
@@ -443,20 +606,83 @@ function LearningPageContent() {
     }
   }, [mainPersona, selectedPersonaId]);
 
+  // Detect mobile device and browser capabilities
+  useEffect(() => {
+    const detectMobileAndCapabilities = () => {
+      // Detect mobile device
+      const isMobile =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          navigator.userAgent
+        ) ||
+        (typeof window !== "undefined" && window.innerWidth <= 768);
+
+      setIsMobileDevice(isMobile);
+
+      // Check if browser requires user interaction for microphone access
+      const isIOSSafari =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+        !(window as any).MSStream;
+      const isMobileSafari =
+        /Safari/.test(navigator.userAgent) &&
+        /Mobile/.test(navigator.userAgent);
+      const requiresInteraction = isIOSSafari || isMobileSafari;
+
+      setRequiresUserInteraction(requiresInteraction);
+
+      console.log("Mobile detection:", {
+        isMobile,
+        isIOSSafari,
+        isMobileSafari,
+        requiresInteraction,
+        userAgent: navigator.userAgent,
+        screenWidth: typeof window !== "undefined" ? window.innerWidth : 0,
+      });
+    };
+
+    detectMobileAndCapabilities();
+
+    // Re-check on window resize (orientation change)
+    const handleResize = () => {
+      const isMobile =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          navigator.userAgent
+        ) ||
+        (typeof window !== "undefined" && window.innerWidth <= 768);
+      setIsMobileDevice(isMobile);
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
   // Automatically request microphone permission when component loads
   useEffect(() => {
     const autoRequestMicPermission = async () => {
       // Only auto-request if we haven't checked yet and user is authenticated
       if (permissionGranted === null && user) {
+        // Skip auto-request on mobile browsers that require user interaction
+        if (requiresUserInteraction) {
+          console.log(
+            "Skipping auto-request on mobile - requires user interaction"
+          );
+          return;
+        }
+
         console.log("Auto-requesting microphone permission on component load");
         await requestMicrophonePermission();
       }
     };
 
-    // Add a delay to avoid requesting permission immediately on page load
-    const timer = setTimeout(autoRequestMicPermission, 1000);
+    // Add a longer delay for mobile devices to ensure proper loading
+    const delay = isMobileDevice ? 2000 : 1000;
+    const timer = setTimeout(autoRequestMicPermission, delay);
     return () => clearTimeout(timer);
-  }, [user, permissionGranted]);
+  }, [user, permissionGranted, requiresUserInteraction, isMobileDevice]);
 
   // Request microphone permissions proactively
   const requestMicrophonePermission = useCallback(async () => {
@@ -497,17 +723,34 @@ function LearningPageContent() {
 
       if (error instanceof Error) {
         if (error.name === "NotAllowedError") {
-          errorMessage =
-            "Microphone access was denied. Please click the microphone icon in your browser's address bar and allow access, then try again.";
+          if (isMobileDevice) {
+            errorMessage = requiresUserInteraction
+              ? "Microphone access denied. On mobile Safari, you need to tap a recording button first, then allow microphone access when prompted."
+              : "Microphone access denied. Please check your mobile browser settings: Settings → Website Settings → Microphone → Allow for this site.";
+          } else {
+            errorMessage =
+              "Microphone access was denied. Please click the microphone icon in your browser's address bar and allow access, then try again.";
+          }
         } else if (error.name === "NotFoundError") {
-          errorMessage =
-            "No microphone found. Please connect a microphone and click 'Test Microphone' below.";
+          if (isMobileDevice) {
+            errorMessage =
+              "No microphone found. Please check that your mobile device's microphone is working (try recording a voice message in another app) and try again.";
+          } else {
+            errorMessage =
+              "No microphone found. Please connect a microphone and click 'Test Microphone' below.";
+          }
         } else if (error.name === "NotSupportedError") {
-          errorMessage =
-            "Audio recording is not supported in this browser. Try using Chrome, Firefox, or Safari.";
+          if (isMobileDevice) {
+            errorMessage =
+              "Audio recording is not supported in this mobile browser. Try using Chrome, Safari, or Firefox mobile.";
+          } else {
+            errorMessage =
+              "Audio recording is not supported in this browser. Try using Chrome, Firefox, or Safari.";
+          }
         } else if (error.name === "OverconstrainedError") {
-          errorMessage =
-            "Microphone settings are not supported. Try a different microphone.";
+          errorMessage = isMobileDevice
+            ? "Microphone settings are not supported on this mobile device. Try using the built-in microphone."
+            : "Microphone settings are not supported. Try a different microphone.";
         } else {
           errorMessage = error.message || errorMessage;
         }
@@ -1322,6 +1565,8 @@ function LearningPageContent() {
                           onTestMicrophone={testMicrophone}
                           isTesting={isMicTesting}
                           testResult={micTestResult}
+                          isMobileDevice={isMobileDevice}
+                          requiresUserInteraction={requiresUserInteraction}
                         />
                       </div>
                     )}
@@ -1658,6 +1903,8 @@ function LearningPageContent() {
                           onTestMicrophone={testMicrophone}
                           isTesting={isMicTesting}
                           testResult={micTestResult}
+                          isMobileDevice={isMobileDevice}
+                          requiresUserInteraction={requiresUserInteraction}
                         />
                       </div>
                     )}
