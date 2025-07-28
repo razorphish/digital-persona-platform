@@ -666,7 +666,96 @@ function LearningPageContent() {
     };
   }, []);
 
-  // Request microphone permissions proactively
+  // Helper function for modern API
+  const requestWithModernAPI = async (): Promise<boolean> => {
+    const constraints = [
+      // Try with full constraints first
+      {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        },
+      },
+      // Fallback to basic constraints
+      {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      },
+      // Most basic constraints
+      {
+        audio: true,
+      },
+    ];
+
+    for (let i = 0; i < constraints.length; i++) {
+      try {
+        console.log(
+          `🔄 Attempting modern API with constraint set ${i + 1}:`,
+          constraints[i]
+        );
+        const stream = await navigator.mediaDevices.getUserMedia(
+          constraints[i]
+        );
+
+        // Stop the stream immediately - we just wanted to get permission
+        stream.getTracks().forEach((track) => track.stop());
+
+        console.log("✅ Modern API successful!");
+        setPermissionGranted(true);
+        setIsRequestingPermission(false);
+        return true;
+      } catch (error) {
+        console.warn(`❌ Modern API attempt ${i + 1} failed:`, error);
+        if (i === constraints.length - 1) {
+          throw error; // Re-throw the last error
+        }
+      }
+    }
+    return false;
+  };
+
+  // Helper function for legacy API
+  const requestWithLegacyAPI = async (): Promise<boolean> => {
+    return new Promise<boolean>((resolve, reject) => {
+      // Try different legacy getUserMedia implementations
+      const getUserMedia =
+        (navigator as any).getUserMedia ||
+        (navigator as any).webkitGetUserMedia ||
+        (navigator as any).mozGetUserMedia ||
+        (navigator as any).msGetUserMedia;
+
+      if (!getUserMedia) {
+        reject(new Error("No getUserMedia API available"));
+        return;
+      }
+
+      console.log("🔄 Attempting legacy getUserMedia API...");
+
+      const constraints = { audio: true };
+
+      getUserMedia.call(
+        navigator,
+        constraints,
+        (stream: MediaStream) => {
+          console.log("✅ Legacy API successful!");
+          // Stop the stream immediately
+          stream.getTracks().forEach((track) => track.stop());
+          setPermissionGranted(true);
+          setIsRequestingPermission(false);
+          resolve(true);
+        },
+        (error: any) => {
+          console.error("❌ Legacy API failed:", error);
+          reject(error);
+        }
+      );
+    });
+  };
+
+  // Request microphone permissions proactively with multiple fallbacks
   const requestMicrophonePermission = useCallback(async () => {
     if (permissionGranted === true) {
       console.log("Microphone permission already granted");
@@ -674,32 +763,40 @@ function LearningPageContent() {
     }
 
     try {
-      console.log("Requesting microphone permission...");
+      console.log("🎤 Requesting microphone permission...");
       setIsRequestingPermission(true);
       setRecordingError(null);
 
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Audio recording is not supported in this browser");
-      }
-
-      // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-        },
+      // Enhanced browser compatibility checks
+      console.log("🔍 Checking browser capabilities:", {
+        hasNavigator: !!navigator,
+        hasMediaDevices: !!navigator?.mediaDevices,
+        hasGetUserMedia: !!navigator?.mediaDevices?.getUserMedia,
+        hasLegacyGetUserMedia:
+          !!(navigator as any)?.getUserMedia ||
+          !!(navigator as any)?.webkitGetUserMedia ||
+          !!(navigator as any)?.mozGetUserMedia,
+        userAgent: navigator?.userAgent,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
       });
 
-      // Stop the stream immediately - we just wanted to get permission
-      stream.getTracks().forEach((track) => track.stop());
+      // Check for basic requirements
+      if (typeof navigator === "undefined") {
+        throw new Error("Navigator API not available");
+      }
 
-      console.log("Microphone permission granted successfully");
-      setPermissionGranted(true);
-      setIsRequestingPermission(false);
-      return true;
+      // Try modern API first
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        console.log("🔄 Trying modern mediaDevices.getUserMedia API...");
+        return await requestWithModernAPI();
+      }
+
+      // Fallback to legacy API
+      console.log("🔄 Falling back to legacy getUserMedia API...");
+      return await requestWithLegacyAPI();
     } catch (error) {
-      console.error("Microphone permission request failed:", error);
+      console.error("❌ All microphone permission methods failed:", error);
 
       let errorMessage = "Could not access microphone.";
 
@@ -707,34 +804,41 @@ function LearningPageContent() {
         if (error.name === "NotAllowedError") {
           if (isMobileDevice) {
             errorMessage = requiresUserInteraction
-              ? "Microphone access denied. On mobile Safari, you need to tap a recording button first, then allow microphone access when prompted."
-              : "Microphone access denied. Please check your mobile browser settings: Settings → Website Settings → Microphone → Allow for this site.";
+              ? "🚫 Microphone access denied. On mobile Safari, you need to tap a recording button first, then allow microphone access when prompted."
+              : "🚫 Microphone access denied. Please check your mobile browser settings: Settings → Website Settings → Microphone → Allow for this site.";
           } else {
             errorMessage =
-              "Microphone access was denied. Please click the microphone icon in your browser's address bar and allow access, then try again.";
+              "🚫 Microphone access was denied. Please click the microphone icon in your browser's address bar and allow access, then try again.";
           }
         } else if (error.name === "NotFoundError") {
           if (isMobileDevice) {
             errorMessage =
-              "No microphone found. Please check that your mobile device's microphone is working (try recording a voice message in another app) and try again.";
+              "🎤 No microphone found. Please check that your mobile device's microphone is working (try recording a voice message in another app) and try again.";
           } else {
             errorMessage =
-              "No microphone found. Please connect a microphone and click 'Test Microphone' below.";
+              "🎤 No microphone found. Please connect a microphone and click 'Test Microphone' below.";
           }
         } else if (error.name === "NotSupportedError") {
           if (isMobileDevice) {
             errorMessage =
-              "Audio recording is not supported in this mobile browser. Try using Chrome, Safari, or Firefox mobile.";
+              "❌ Audio recording is not supported in this mobile browser. Try using Chrome, Safari, or Firefox mobile.";
           } else {
             errorMessage =
-              "Audio recording is not supported in this browser. Try using Chrome, Firefox, or Safari.";
+              "❌ Audio recording is not supported in this browser. Try using Chrome, Firefox, or Safari.";
           }
         } else if (error.name === "OverconstrainedError") {
           errorMessage = isMobileDevice
-            ? "Microphone settings are not supported on this mobile device. Try using the built-in microphone."
-            : "Microphone settings are not supported. Try a different microphone.";
+            ? "⚙️ Microphone settings are not supported on this mobile device. Try using the built-in microphone."
+            : "⚙️ Microphone settings are not supported. Try a different microphone.";
+        } else if (error.message?.includes("Navigator API not available")) {
+          errorMessage =
+            "🌐 Browser compatibility issue. This browser doesn't support audio recording.";
+        } else if (error.message?.includes("object can not be found")) {
+          errorMessage = isMobileDevice
+            ? "📱 Browser compatibility issue. Try refreshing the page or using a different mobile browser (Chrome, Firefox, Safari)."
+            : "🌐 Browser compatibility issue. Try refreshing the page, using a different browser, or ensure you're on HTTPS.";
         } else {
-          errorMessage = error.message || errorMessage;
+          errorMessage = `🔧 ${error.message || errorMessage}`;
         }
       }
 
@@ -890,49 +994,104 @@ function LearningPageContent() {
     }
   };
 
-  // Test microphone functionality
+  // Test microphone functionality with enhanced compatibility
   const testMicrophone = async () => {
     setIsMicTesting(true);
     setMicTestResult(null);
     setRecordingError(null);
 
     try {
-      console.log("Testing microphone access...");
+      console.log("🧪 Testing microphone access...");
 
       // Enhanced browser compatibility checks
       if (typeof window === "undefined") {
         throw new Error("Not running in browser environment");
       }
 
-      if (!navigator || !navigator.mediaDevices) {
-        throw new Error("MediaDevices API not supported in this browser");
-      }
-
-      if (!navigator.mediaDevices.getUserMedia) {
-        throw new Error("getUserMedia not supported in this browser");
-      }
+      console.log("🔍 Test - Checking browser capabilities:", {
+        hasNavigator: !!navigator,
+        hasMediaDevices: !!navigator?.mediaDevices,
+        hasGetUserMedia: !!navigator?.mediaDevices?.getUserMedia,
+        hasLegacyGetUserMedia:
+          !!(navigator as any)?.getUserMedia ||
+          !!(navigator as any)?.webkitGetUserMedia ||
+          !!(navigator as any)?.mozGetUserMedia,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
+      });
 
       // Check for HTTPS requirement (except localhost)
       if (
         location.protocol !== "https:" &&
-        !location.hostname.includes("localhost")
+        !location.hostname.includes("localhost") &&
+        !location.hostname.includes("127.0.0.1")
       ) {
         throw new Error("Microphone access requires HTTPS connection");
       }
 
-      console.log(
-        "Browser compatibility checks passed, requesting microphone..."
-      );
+      let stream: MediaStream;
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-        },
-      });
+      // Try modern API first, then fallback to legacy
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        console.log("🔄 Test - Using modern API...");
 
-      console.log("Microphone access granted, testing for 2 seconds...");
+        // Try with progressively simpler constraints
+        const constraints = [
+          {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              sampleRate: 44100,
+            },
+          },
+          { audio: { echoCancellation: true, noiseSuppression: true } },
+          { audio: true },
+        ];
+
+        let success = false;
+        for (let i = 0; i < constraints.length; i++) {
+          try {
+            console.log(
+              `🔄 Test - Trying constraint set ${i + 1}:`,
+              constraints[i]
+            );
+            stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+            success = true;
+            break;
+          } catch (constraintError) {
+            console.warn(
+              `❌ Test - Constraint set ${i + 1} failed:`,
+              constraintError
+            );
+            if (i === constraints.length - 1) {
+              throw constraintError;
+            }
+          }
+        }
+
+        if (!success) {
+          throw new Error("All modern API constraint sets failed");
+        }
+      } else {
+        console.log("🔄 Test - Falling back to legacy API...");
+
+        // Fallback to legacy API
+        const getUserMedia =
+          (navigator as any).getUserMedia ||
+          (navigator as any).webkitGetUserMedia ||
+          (navigator as any).mozGetUserMedia ||
+          (navigator as any).msGetUserMedia;
+
+        if (!getUserMedia) {
+          throw new Error("No getUserMedia API available in this browser");
+        }
+
+        stream = await new Promise<MediaStream>((resolve, reject) => {
+          getUserMedia.call(navigator, { audio: true }, resolve, reject);
+        });
+      }
+
+      console.log("✅ Microphone access granted, testing for 2 seconds...");
 
       // Create a promise that resolves after testing
       const testPromise = new Promise<void>((resolve) => {
@@ -944,10 +1103,10 @@ function LearningPageContent() {
                 track.stop();
               }
             });
-            console.log("Microphone test successful!");
+            console.log("🎉 Microphone test successful!");
             resolve();
           } catch (stopError) {
-            console.warn("Error stopping tracks:", stopError);
+            console.warn("⚠️ Error stopping tracks:", stopError);
             resolve(); // Still consider test successful
           }
         }, 2000);
@@ -957,33 +1116,40 @@ function LearningPageContent() {
       setMicTestResult("success");
       setIsMicTesting(false);
     } catch (error) {
-      console.error("Microphone test failed:", error);
+      console.error("❌ Microphone test failed:", error);
 
       let errorMessage = "Microphone test failed.";
 
       if (error instanceof Error) {
         if (error.name === "NotAllowedError") {
           errorMessage = isMobileDevice
-            ? "Microphone access denied. Please check your mobile browser settings and allow microphone access for this site."
-            : "Microphone access denied. Please click the microphone icon in your browser's address bar and allow access.";
+            ? "🚫 Microphone access denied. Please check your mobile browser settings and allow microphone access for this site."
+            : "🚫 Microphone access denied. Please click the microphone icon in your browser's address bar and allow access.";
         } else if (error.name === "NotFoundError") {
           errorMessage = isMobileDevice
-            ? "No microphone found. Please check that your mobile device's microphone is working and not blocked by another app."
-            : "No microphone found. Please connect a microphone and try again.";
+            ? "🎤 No microphone found. Please check that your mobile device's microphone is working and not blocked by another app."
+            : "🎤 No microphone found. Please connect a microphone and try again.";
         } else if (error.name === "NotSupportedError") {
           errorMessage =
-            "Audio recording is not supported in this browser. Try Chrome, Firefox, or Safari.";
+            "❌ Audio recording is not supported in this browser. Try Chrome, Firefox, or Safari.";
         } else if (error.name === "OverconstrainedError") {
           errorMessage =
-            "Microphone constraints not supported. Using a simpler configuration...";
+            "⚙️ Microphone constraints not supported. Using a simpler configuration...";
           // Try again with simpler constraints
           setTimeout(() => testMicrophoneWithBasicConfig(), 1000);
           return;
-        } else if (error.message.includes("HTTPS")) {
+        } else if (error.message?.includes("HTTPS")) {
           errorMessage =
-            "Microphone access requires a secure (HTTPS) connection. Please use https:// in the URL.";
+            "🔒 Microphone access requires a secure (HTTPS) connection. Please use https:// in the URL.";
+        } else if (error.message?.includes("object can not be found")) {
+          errorMessage = isMobileDevice
+            ? "📱 Browser compatibility issue. Try refreshing the page or using a different mobile browser (Chrome, Firefox, Safari)."
+            : "🌐 Browser compatibility issue. Try refreshing the page, using a different browser, or ensure you're on HTTPS.";
+        } else if (error.message?.includes("No getUserMedia API available")) {
+          errorMessage =
+            "🌐 This browser doesn't support audio recording. Please use a modern browser like Chrome, Firefox, or Safari.";
         } else {
-          errorMessage = error.message || errorMessage;
+          errorMessage = `🔧 ${error.message || errorMessage}`;
         }
       }
 
