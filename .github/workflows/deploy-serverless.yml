@@ -1947,6 +1947,96 @@ jobs:
           echo "📊 Monitor ML jobs in AWS Batch console: https://console.aws.amazon.com/batch/v2/home?region=${{ env.AWS_REGION }}#queues"
           echo "ML_BATCH_STATUS=PASSED" >> $GITHUB_ENV
 
+      - name: Health Check Database Infrastructure (Critical)
+        run: |
+          echo ""
+          echo "🗄️ Step 5: Testing Database Infrastructure (CRITICAL - must pass)"
+          
+          # Get environment details for database resource naming
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          SUB_ENVIRONMENT="${{ needs.detect-environment.outputs.sub_environment }}"
+          
+          # Determine correct naming pattern (same logic as other components)
+          if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
+            MAIN_ENV=$(echo "$ENVIRONMENT" | sed 's/[0-9].*//')
+            DB_CLUSTER_ID="${MAIN_ENV}-${ENVIRONMENT}-dpp-database"
+            DB_PROXY_NAME="${MAIN_ENV}-${ENVIRONMENT}-dpp-rds-proxy"
+            DB_SECRET_NAME="${MAIN_ENV}-${ENVIRONMENT}-dpp-database-password"
+          else
+            DB_CLUSTER_ID="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-database"
+            DB_PROXY_NAME="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-rds-proxy"
+            DB_SECRET_NAME="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-database-password"
+          fi
+          
+          echo "🎯 Database Cluster ID: $DB_CLUSTER_ID"
+          echo "🎯 RDS Proxy Name: $DB_PROXY_NAME"
+          echo "🎯 Database Secret: $DB_SECRET_NAME"
+          
+          # Test 1: Check RDS Cluster Status
+          echo ""
+          echo "🔍 Test 1: Checking RDS Cluster Status..."
+          CLUSTER_STATUS=$(aws rds describe-db-clusters --db-cluster-identifier "$DB_CLUSTER_ID" --query 'DBClusters[0].Status' --output text 2>/dev/null)
+          if [ "$CLUSTER_STATUS" = "available" ]; then
+            echo "✅ RDS Cluster is available: $DB_CLUSTER_ID"
+          else
+            echo "❌ RDS Cluster not available. Status: $CLUSTER_STATUS"
+            echo "❌ This indicates database deployment failed"
+            exit 1
+          fi
+          
+          # Test 2: Check RDS Proxy Status  
+          echo ""
+          echo "🔍 Test 2: Checking RDS Proxy Status..."
+          PROXY_STATUS=$(aws rds describe-db-proxies --db-proxy-name "$DB_PROXY_NAME" --query 'DBProxies[0].Status' --output text 2>/dev/null)
+          if [ "$PROXY_STATUS" = "available" ]; then
+            echo "✅ RDS Proxy is available: $DB_PROXY_NAME"
+          else
+            echo "❌ RDS Proxy not available. Status: $PROXY_STATUS"
+            echo "❌ This indicates database proxy deployment failed"
+            exit 1
+          fi
+          
+          # Test 3: Check Database Secret Access
+          echo ""
+          echo "🔍 Test 3: Checking Database Secret Access..."
+          if aws secretsmanager get-secret-value --secret-id "$DB_SECRET_NAME" --query 'SecretString' --output text >/dev/null 2>&1; then
+            echo "✅ Database secret is accessible: $DB_SECRET_NAME"
+          else
+            echo "❌ Database secret not accessible: $DB_SECRET_NAME"
+            echo "❌ This indicates secrets manager configuration failed"
+            exit 1
+          fi
+          
+          # Test 4: Verify Database Configuration
+          echo ""
+          echo "🔍 Test 4: Checking Database Configuration..."
+          DB_ENGINE=$(aws rds describe-db-clusters --db-cluster-identifier "$DB_CLUSTER_ID" --query 'DBClusters[0].Engine' --output text 2>/dev/null)
+          DB_VERSION=$(aws rds describe-db-clusters --db-cluster-identifier "$DB_CLUSTER_ID" --query 'DBClusters[0].EngineVersion' --output text 2>/dev/null)
+          
+          if [ -n "$DB_ENGINE" ] && [ -n "$DB_VERSION" ]; then
+            echo "✅ Database engine: $DB_ENGINE version $DB_VERSION"
+          else
+            echo "❌ Could not retrieve database configuration"
+            exit 1
+          fi
+          
+          # Test 5: Check RDS Proxy Endpoint
+          echo ""
+          echo "🔍 Test 5: Checking RDS Proxy Endpoint..."
+          PROXY_ENDPOINT=$(aws rds describe-db-proxies --db-proxy-name "$DB_PROXY_NAME" --query 'DBProxies[0].Endpoint' --output text 2>/dev/null)
+          if [ -n "$PROXY_ENDPOINT" ] && [ "$PROXY_ENDPOINT" != "None" ]; then
+            echo "✅ RDS Proxy endpoint available: $PROXY_ENDPOINT"
+          else
+            echo "❌ RDS Proxy endpoint not available"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ All Database infrastructure components verified successfully!"
+          echo "🗄️ Database cluster and proxy are ready for connections"
+          echo "📊 Monitor database in RDS console: https://console.aws.amazon.com/rds/home?region=${{ env.AWS_REGION }}#databases:"
+          echo "DATABASE_STATUS=PASSED" >> $GITHUB_ENV
+
       - name: Deployment Summary
         run: |
           echo ""
@@ -1958,6 +2048,7 @@ jobs:
           echo "  Internal API: ✅ PASSED (AWS infrastructure verified)"
           echo "  Internal S3 Website: ✅ PASSED (S3 static hosting verified)"
           echo "  ML Batch Infrastructure: ${ML_BATCH_STATUS:-UNKNOWN} (AWS Batch, ECR, SQS verified)"
+          echo "  Database Infrastructure: ${DATABASE_STATUS:-UNKNOWN} (RDS Cluster, Proxy, Secrets verified)"
           echo ""
           echo "🌐 Public Domain Status (DNS-dependent):"
           echo "  Public API: ${PUBLIC_API_STATUS:-UNKNOWN}"
@@ -1993,3 +2084,4 @@ jobs:
           echo "✅ Serverless deployment completed successfully!"
           echo "✅ All critical infrastructure components verified working!"
           echo "🤖 ML Batch infrastructure ready for processing jobs!"
+          echo "🗄️ Database cluster and proxy ready for connections!"
