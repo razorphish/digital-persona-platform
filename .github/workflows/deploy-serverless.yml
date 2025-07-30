@@ -1736,20 +1736,22 @@ jobs:
           ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
           SUB_ENVIRONMENT="${{ needs.detect-environment.outputs.sub_environment }}"
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          
-          # Determine correct naming pattern and display values
+
+                    # Determine correct naming pattern and display values
           if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
             # If sub_environment is empty but environment contains the full branch name (e.g., "dev01")
             MAIN_ENV=$(echo "$ENVIRONMENT" | sed 's/[0-9].*//')  # Extract "dev" from "dev01"
-            DISPLAY_SUB_ENV="$ENVIRONMENT"  # Use full branch name for display
+            DISPLAY_ENV="$MAIN_ENV"  # Show just "dev" for environment
+            DISPLAY_SUB_ENV="$ENVIRONMENT"  # Use full branch name for sub-environment display
             ECR_REPO="${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-service"  # Results in "dev-dev01-dpp-ml-service"
           else
             # Standard case where environment and sub_environment are properly separated
+            DISPLAY_ENV="$ENVIRONMENT"
             DISPLAY_SUB_ENV="$SUB_ENVIRONMENT"
             ECR_REPO="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-service"
           fi
           
-          echo "🎯 Environment: $ENVIRONMENT"
+          echo "🎯 Environment: $DISPLAY_ENV"
           echo "🎯 Sub-environment: $DISPLAY_SUB_ENV"
           echo "🎯 AWS Account: $AWS_ACCOUNT_ID"
 
