@@ -1727,6 +1727,116 @@ jobs:
             echo "WEBSITE_STATUS=PASSED" >> $GITHUB_ENV
           fi
 
+      - name: Health Check ML Batch Infrastructure (Critical)
+        run: |
+          echo ""
+          echo "🤖 Step 4: Testing ML Batch Infrastructure (CRITICAL - must pass)"
+
+          # Get environment details
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          SUB_ENVIRONMENT="${{ needs.detect-environment.outputs.sub_environment }}"
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+          echo "🎯 Environment: $ENVIRONMENT"
+          echo "🎯 Sub-environment: $SUB_ENVIRONMENT"
+          echo "🎯 AWS Account: $AWS_ACCOUNT_ID"
+
+          # Test 1: Check ECR Repository
+          echo ""
+          echo "🔍 Test 1: Checking ECR Repository..."
+          ECR_REPO="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-service"
+          if aws ecr describe-repositories --repository-names "$ECR_REPO" >/dev/null 2>&1; then
+            echo "✅ ECR Repository exists: $ECR_REPO"
+            
+            # Check if repository has images
+            IMAGE_COUNT=$(aws ecr list-images --repository-name "$ECR_REPO" --query 'imageIds | length(@)')
+            if [ "$IMAGE_COUNT" -gt 0 ]; then
+              echo "✅ ECR Repository has $IMAGE_COUNT images available"
+            else
+              echo "⚠️ WARNING: ECR Repository exists but has no images yet"
+            fi
+          else
+            echo "❌ ECR Repository does not exist: $ECR_REPO"
+            echo "❌ This indicates ML infrastructure deployment failed"
+            exit 1
+          fi
+
+          # Test 2: Check Batch Compute Environment
+          echo ""
+          echo "🔍 Test 2: Checking Batch Compute Environment..."
+          COMPUTE_ENV="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-compute"
+          if aws batch describe-compute-environments --compute-environments "$COMPUTE_ENV" --query 'computeEnvironments[0].state' --output text 2>/dev/null | grep -q "ENABLED"; then
+            echo "✅ Batch Compute Environment is ENABLED: $COMPUTE_ENV"
+          else
+            echo "❌ Batch Compute Environment not found or disabled: $COMPUTE_ENV"
+            echo "❌ This indicates ML infrastructure deployment failed"
+            exit 1
+          fi
+
+          # Test 3: Check Batch Job Queue
+          echo ""
+          echo "🔍 Test 3: Checking Batch Job Queue..."
+          JOB_QUEUE="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs-queue"
+          if aws batch describe-job-queues --job-queues "$JOB_QUEUE" --query 'jobQueues[0].state' --output text 2>/dev/null | grep -q "ENABLED"; then
+            echo "✅ Batch Job Queue is ENABLED: $JOB_QUEUE"
+          else
+            echo "❌ Batch Job Queue not found or disabled: $JOB_QUEUE"
+            echo "❌ This indicates ML infrastructure deployment failed"
+            exit 1
+          fi
+
+          # Test 4: Check SQS Queues
+          echo ""
+          echo "🔍 Test 4: Checking SQS Queues..."
+          ML_JOBS_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs"
+          ML_DLQ_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs-dlq"
+
+          if aws sqs get-queue-attributes --queue-url "$ML_JOBS_QUEUE" --attribute-names QueueArn >/dev/null 2>&1; then
+            echo "✅ ML Jobs Queue is accessible: $ML_JOBS_QUEUE"
+          else
+            echo "❌ ML Jobs Queue not accessible: $ML_JOBS_QUEUE"
+            echo "❌ This indicates ML infrastructure deployment failed"
+            exit 1
+          fi
+
+          if aws sqs get-queue-attributes --queue-url "$ML_DLQ_QUEUE" --attribute-names QueueArn >/dev/null 2>&1; then
+            echo "✅ ML Dead Letter Queue is accessible: $ML_DLQ_QUEUE"
+          else
+            echo "❌ ML Dead Letter Queue not accessible: $ML_DLQ_QUEUE"
+            echo "❌ This indicates ML infrastructure deployment failed"
+            exit 1
+          fi
+
+          # Test 5: Check CloudWatch Log Group
+          echo ""
+          echo "🔍 Test 5: Checking CloudWatch Log Group..."
+          LOG_GROUP="/aws/batch/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-processing"
+          if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[?logGroupName==`'$LOG_GROUP'`] | length(@)' --output text | grep -q "1"; then
+            echo "✅ CloudWatch Log Group exists: $LOG_GROUP"
+          else
+            echo "❌ CloudWatch Log Group not found: $LOG_GROUP"
+            echo "❌ This indicates ML infrastructure deployment failed"
+            exit 1
+          fi
+
+          # Test 6: Check Batch Job Definition
+          echo ""
+          echo "🔍 Test 6: Checking Batch Job Definition..."
+          JOB_DEFINITION="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-processor"
+          if aws batch describe-job-definitions --job-definition-name "$JOB_DEFINITION" --status ACTIVE --query 'jobDefinitions | length(@)' --output text | grep -q -v "0"; then
+            echo "✅ Batch Job Definition is active: $JOB_DEFINITION"
+          else
+            echo "❌ Batch Job Definition not found or inactive: $JOB_DEFINITION"
+            echo "❌ This indicates ML infrastructure deployment failed"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All ML Batch infrastructure components verified successfully!"
+          echo "🤖 ML service is ready to process jobs through SQS queue"
+          echo "📊 Monitor ML jobs in AWS Batch console: https://console.aws.amazon.com/batch/v2/home?region=${{ env.AWS_REGION }}#queues"
+          echo "ML_BATCH_STATUS=PASSED" >> $GITHUB_ENV
+
       - name: Deployment Summary
         run: |
           echo ""
@@ -1737,6 +1847,7 @@ jobs:
           echo "🔧 Infrastructure Status (Critical - All Verified ✅):"
           echo "  Internal API: ✅ PASSED (AWS infrastructure verified)"
           echo "  Internal S3 Website: ✅ PASSED (S3 static hosting verified)"
+          echo "  ML Batch Infrastructure: ${ML_BATCH_STATUS:-UNKNOWN} (AWS Batch, ECR, SQS verified)"
           echo ""
           echo "🌐 Public Domain Status (DNS-dependent):"
           echo "  Public API: ${PUBLIC_API_STATUS:-UNKNOWN}"
@@ -1771,3 +1882,4 @@ jobs:
           echo ""
           echo "✅ Serverless deployment completed successfully!"
           echo "✅ All critical infrastructure components verified working!"
+          echo "🤖 ML Batch infrastructure ready for processing jobs!"
