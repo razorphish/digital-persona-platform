@@ -1732,19 +1732,30 @@ jobs:
           echo ""
           echo "🤖 Step 4: Testing ML Batch Infrastructure (CRITICAL - must pass)"
 
-          # Get environment details
+                    # Get environment details
           ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
           SUB_ENVIRONMENT="${{ needs.detect-environment.outputs.sub_environment }}"
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
+          
           echo "🎯 Environment: $ENVIRONMENT"
           echo "🎯 Sub-environment: $SUB_ENVIRONMENT"
           echo "🎯 AWS Account: $AWS_ACCOUNT_ID"
-
+          
+          # Determine correct repository name based on actual AWS naming pattern
+          # Handle cases where sub_environment might be empty or environment detection differs
+          if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
+            # If sub_environment is empty but environment contains the full branch name (e.g., "dev01")
+            MAIN_ENV=$(echo "$ENVIRONMENT" | sed 's/[0-9].*//')  # Extract "dev" from "dev01"
+            ECR_REPO="${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-service"  # Results in "dev-dev01-dpp-ml-service"
+          else
+            # Standard case where environment and sub_environment are properly separated
+            ECR_REPO="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-service"
+          fi
+          
           # Test 1: Check ECR Repository
           echo ""
           echo "🔍 Test 1: Checking ECR Repository..."
-          ECR_REPO="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-service"
+          echo "🔍 Looking for repository: $ECR_REPO"
           if aws ecr describe-repositories --repository-names "$ECR_REPO" >/dev/null 2>&1; then
             echo "✅ ECR Repository exists: $ECR_REPO"
             
@@ -1764,7 +1775,11 @@ jobs:
           # Test 2: Check Batch Compute Environment
           echo ""
           echo "🔍 Test 2: Checking Batch Compute Environment..."
-          COMPUTE_ENV="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-compute"
+          if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
+            COMPUTE_ENV="${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-compute"
+          else
+            COMPUTE_ENV="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-compute"
+          fi
           if aws batch describe-compute-environments --compute-environments "$COMPUTE_ENV" --query 'computeEnvironments[0].state' --output text 2>/dev/null | grep -q "ENABLED"; then
             echo "✅ Batch Compute Environment is ENABLED: $COMPUTE_ENV"
           else
@@ -1776,7 +1791,11 @@ jobs:
           # Test 3: Check Batch Job Queue
           echo ""
           echo "🔍 Test 3: Checking Batch Job Queue..."
-          JOB_QUEUE="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs-queue"
+          if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
+            JOB_QUEUE="${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-jobs-queue"
+          else
+            JOB_QUEUE="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs-queue"
+          fi
           if aws batch describe-job-queues --job-queues "$JOB_QUEUE" --query 'jobQueues[0].state' --output text 2>/dev/null | grep -q "ENABLED"; then
             echo "✅ Batch Job Queue is ENABLED: $JOB_QUEUE"
           else
@@ -1788,8 +1807,13 @@ jobs:
           # Test 4: Check SQS Queues
           echo ""
           echo "🔍 Test 4: Checking SQS Queues..."
-          ML_JOBS_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs"
-          ML_DLQ_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs-dlq"
+          if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
+            ML_JOBS_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-jobs"
+            ML_DLQ_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-jobs-dlq"
+          else
+            ML_JOBS_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs"
+            ML_DLQ_QUEUE="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${AWS_ACCOUNT_ID}/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-jobs-dlq"
+          fi
 
           if aws sqs get-queue-attributes --queue-url "$ML_JOBS_QUEUE" --attribute-names QueueArn >/dev/null 2>&1; then
             echo "✅ ML Jobs Queue is accessible: $ML_JOBS_QUEUE"
@@ -1810,7 +1834,11 @@ jobs:
           # Test 5: Check CloudWatch Log Group
           echo ""
           echo "🔍 Test 5: Checking CloudWatch Log Group..."
-          LOG_GROUP="/aws/batch/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-processing"
+          if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
+            LOG_GROUP="/aws/batch/${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-processing"
+          else
+            LOG_GROUP="/aws/batch/${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-processing"
+          fi
           if aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[?logGroupName==`'$LOG_GROUP'`] | length(@)' --output text | grep -q "1"; then
             echo "✅ CloudWatch Log Group exists: $LOG_GROUP"
           else
@@ -1822,7 +1850,11 @@ jobs:
           # Test 6: Check Batch Job Definition
           echo ""
           echo "🔍 Test 6: Checking Batch Job Definition..."
-          JOB_DEFINITION="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-processor"
+          if [ -z "$SUB_ENVIRONMENT" ] && echo "$ENVIRONMENT" | grep -E "^(dev|qa|staging|hotfix)[0-9]{2}$"; then
+            JOB_DEFINITION="${MAIN_ENV}-${ENVIRONMENT}-dpp-ml-processor"
+          else
+            JOB_DEFINITION="${ENVIRONMENT}-${SUB_ENVIRONMENT}-dpp-ml-processor"
+          fi
           if aws batch describe-job-definitions --job-definition-name "$JOB_DEFINITION" --status ACTIVE --query 'jobDefinitions | length(@)' --output text | grep -q -v "0"; then
             echo "✅ Batch Job Definition is active: $JOB_DEFINITION"
           else
