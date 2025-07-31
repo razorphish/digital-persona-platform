@@ -2,9 +2,9 @@
 const nextConfig = {
   // Use export mode for static deployment, standalone for server deployment
   output: process.env.NEXT_BUILD_EXPORT === "true" ? "export" : "standalone",
-  // Add trailingSlash and unoptimized images for static export
+  // Add unoptimized images for static export
   ...(process.env.NEXT_BUILD_EXPORT === "true" && {
-    trailingSlash: true,
+    trailingSlash: false,
     images: {
       unoptimized: true,
     },
