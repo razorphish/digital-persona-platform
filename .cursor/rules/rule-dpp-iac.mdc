@@ -1,0 +1,4 @@
+---
+description: No adhoc queries for infrastructure changes.  Only make changes for infrastructure in terraform, workflow or deploy and cleanups scripts
+alwaysApply: false
+---

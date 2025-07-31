@@ -56,9 +56,16 @@ Tasks: Run Task → Clear All Development Ports
 
 ## Ports Used
 
+**Local Development:**
+
 - **Frontend**: http://localhost:4000
 - **Backend**: http://localhost:4001
 - **Debug Ports**: 9229, 9230, 9231
+
+**Docker Development:**
+
+- **Frontend**: http://localhost:3100 (external)
+- **Backend**: http://localhost:3101 (external)
 
 ## Environment Variables Set
 

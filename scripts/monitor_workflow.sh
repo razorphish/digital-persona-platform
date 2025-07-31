@@ -15,7 +15,7 @@ echo ""
 
 # Show available workflows first
 echo "📋 Available Workflows:"
-./check_workflow.sh --list
+./scripts/check_workflow.sh --list
 echo ""
 
 # Ask user which workflow to monitor
@@ -33,7 +33,7 @@ case "${monitor_choice:-1}" in
         ;;
     2)
         echo ""
-        ./check_workflow.sh --list
+        ./scripts/check_workflow.sh --list
         echo ""
         read -p "Enter workflow name to monitor: " WORKFLOW_NAME
         if [ -z "$WORKFLOW_NAME" ]; then
@@ -65,19 +65,19 @@ while [ $attempt -lt $MAX_ATTEMPTS ]; do
     
     if [ "$WORKFLOW_NAME" = "--all" ]; then
         # Monitor all recent runs
-        ./check_workflow.sh --all
+        ./scripts/check_workflow.sh --all
     elif [ -n "$WORKFLOW_NAME" ]; then
         # Monitor specific workflow
-        ./check_workflow.sh "$WORKFLOW_NAME"
+        ./scripts/check_workflow.sh "$WORKFLOW_NAME"
     else
         # Monitor most recent run
-        ./check_workflow.sh
+        ./scripts/check_workflow.sh
     fi
     
     # Check if any workflow is completed
     if [ "$WORKFLOW_NAME" = "--all" ]; then
         # For all runs, check if the most recent one is completed
-        RECENT_STATUS=$(./check_workflow.sh 2>/dev/null | grep "Status:" | head -1)
+        RECENT_STATUS=$(./scripts/check_workflow.sh 2>/dev/null | grep "Status:" | head -1)
         if echo "$RECENT_STATUS" | grep -q "COMPLETED\|FAILED\|CANCELLED\|SUCCESS\|✅ SUCCESS\|❌ FAILED"; then
             echo ""
             echo "🏁 A workflow has completed. Stopping monitoring."
@@ -86,9 +86,9 @@ while [ $attempt -lt $MAX_ATTEMPTS ]; do
     else
         # For specific workflow or most recent, check completion
         if [ -n "$WORKFLOW_NAME" ]; then
-            STATUS=$(./check_workflow.sh "$WORKFLOW_NAME" 2>/dev/null | grep "Status:" | head -1)
+            STATUS=$(./scripts/check_workflow.sh "$WORKFLOW_NAME" 2>/dev/null | grep "Status:" | head -1)
         else
-            STATUS=$(./check_workflow.sh 2>/dev/null | grep "Status:" | head -1)
+            STATUS=$(./scripts/check_workflow.sh 2>/dev/null | grep "Status:" | head -1)
         fi
         
         if echo "$STATUS" | grep -q "COMPLETED\|FAILED\|CANCELLED\|SUCCESS\|✅ SUCCESS\|❌ FAILED"; then

@@ -33,12 +33,12 @@ docker-compose -f docker-compose.debug-wait.yml up --build
 
 ## 🏗️ Container Architecture
 
-| Container             | Purpose                       | Ports | Debug Port     |
-| --------------------- | ----------------------------- | ----- | -------------- |
-| **nextjs-app**        | Next.js frontend & API routes | 3001  | 9229 (Node.js) |
-| **python-ml-service** | FastAPI ML/AI backend         | 8001  | 5678 (debugpy) |
-| **redis**             | Caching & session storage     | 6379  | -              |
-| **sqlite-web**        | Database viewer (optional)    | 8080  | -              |
+| Container             | Purpose                      | Ports | Debug Port     |
+| --------------------- | ---------------------------- | ----- | -------------- |
+| **frontend**          | Next.js frontend application | 3100  | 9229 (Node.js) |
+| **backend**           | tRPC Express API server      | 3101  | 9230 (Node.js) |
+| **postgres**          | PostgreSQL database          | 5432  | -              |
+| **python-ml-service** | Optional FastAPI ML service  | 8001  | 5678 (debugpy) |
 
 ## 🧪 Testing Your Docker Setup
 
@@ -83,7 +83,7 @@ docker-compose -f docker-compose.debug-wait.yml up --build
   "request": "attach",
   "port": 9229,
   "address": "localhost",
-  "localRoot": "${workspaceFolder}/nextjs-migration",
+  "localRoot": "${workspaceFolder}/apps/web",
   "remoteRoot": "/app"
 }
 ```
@@ -132,13 +132,14 @@ docker-compose -f docker-compose.debug-wait.yml up --build
 
 ## 🚀 Service URLs
 
-| Service         | URL                        | Status                           |
-| --------------- | -------------------------- | -------------------------------- |
-| Next.js App     | http://localhost:3001      | Ready immediately                |
-| Python ML API   | http://localhost:8001      | Ready after debugger (wait mode) |
-| ML Service Docs | http://localhost:8001/docs | Interactive API documentation    |
-| Redis           | localhost:6379             | Available for caching            |
-| SQLite Viewer   | http://localhost:8080      | Database inspection              |
+| Service         | URL                          | Status                     |
+| --------------- | ---------------------------- | -------------------------- |
+| Next.js App     | http://localhost:3100        | Ready immediately          |
+| tRPC Backend    | http://localhost:3101        | Ready immediately          |
+| Backend Health  | http://localhost:3101/health | API health check           |
+| PostgreSQL      | localhost:5432               | Database available         |
+| Python ML API   | http://localhost:8001        | Optional ML service        |
+| ML Service Docs | http://localhost:8001/docs   | Optional API documentation |
 
 ## 🛠️ Troubleshooting
 
@@ -187,8 +188,8 @@ docker stats
 
 1. `docker-compose -f docker-compose.dev.yml up -d`
 2. Wait for services to start (1-2 minutes)
-3. Open http://localhost:3001 to verify Next.js
-4. Open http://localhost:8001/docs to verify Python API
+3. Open http://localhost:3100 to verify frontend
+4. Open http://localhost:3101/health to verify backend
 5. Start coding with hot reload!
 
 ### For Debugging Session
@@ -207,14 +208,15 @@ docker stats
 
 ## 📁 Key Files
 
-| File                            | Purpose                         |
-| ------------------------------- | ------------------------------- |
-| `docker-compose.dev.yml`        | Standard development containers |
-| `docker-compose.debug-wait.yml` | Debug-first development         |
-| `test-docker-debugging.sh`      | Automated testing script        |
-| `.vscode/launch.json`           | VS Code debug configurations    |
-| `nextjs-migration/Dockerfile`   | Next.js container build         |
-| `python-ml-service/Dockerfile`  | Python ML service build         |
+| File                            | Purpose                          |
+| ------------------------------- | -------------------------------- |
+| `docker-compose.dev.yml`        | Standard development containers  |
+| `docker-compose.debug-wait.yml` | Debug-first development          |
+| `test-docker-debugging.sh`      | Automated testing script         |
+| `.vscode/launch.json`           | VS Code debug configurations     |
+| `apps/web/Dockerfile`           | Next.js container build          |
+| `apps/server/Dockerfile`        | tRPC backend container build     |
+| `python-ml-service/Dockerfile`  | Optional Python ML service build |
 
 ## 🎯 Best Practices
 

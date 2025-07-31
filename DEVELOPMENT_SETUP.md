@@ -8,18 +8,25 @@ This guide provides comprehensive instructions for setting up the Digital Person
 
 ```
 digital-persona-platform/
-├── frontend/                  # Main Next.js application with API routes
-├── python-ml-service/         # Specialized Python ML service
-├── app/                       # Original FastAPI backend (legacy)
-├── app_old_backup/           # Backup of original backend
-├── scripts/                   # Development and utility scripts
-├── docs/                     # Documentation files
-├── uploads/                  # File upload directory
-├── chroma_db/                # Vector database storage
-├── .vscode/                  # VS Code debugging configuration
-├── docker-compose.yml         # Production Docker setup
-├── docker-compose.dev.yml     # Development Docker setup
-└── README.md                  # Main project documentation
+├── apps/
+│   ├── web/                   # Next.js frontend application (SPA)
+│   │   ├── src/app/          # App router pages
+│   │   ├── src/components/   # React components & AuthGuard
+│   │   └── src/contexts/     # Authentication context
+│   └── server/               # tRPC Express backend
+│       ├── src/router.ts     # API endpoints
+│       ├── src/index.ts      # Server entry point
+│       └── src/utils/        # S3 and utilities
+├── packages/
+│   ├── database/             # Drizzle schema and database config
+│   └── shared/               # Shared types and utilities
+├── python-ml-service/        # Optional AI/ML capabilities
+├── scripts/                  # Development tools and AWS environment cleanup
+├── docs/                     # Comprehensive documentation
+├── .vscode/                  # VS Code debug configurations
+├── docker-compose*.yml       # Docker configurations
+├── docker-start.sh          # Docker startup script
+└── terraform/                # AWS infrastructure
 ```
 
 ## Quick Start
@@ -86,15 +93,23 @@ mkdir -p uploads chroma_db logs
 
 #### 3. Local Development (without Docker)
 
-**Start Next.js Application:**
+**Start Backend (tRPC API):**
 
 ```bash
-cd frontend
+cd apps/server
 npm install
 npm run dev
 ```
 
-**Start Python ML Service:**
+**Start Frontend (Next.js):**
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+**Optional: Start Python ML Service:**
 
 ```bash
 cd python-ml-service
@@ -132,13 +147,14 @@ docker compose up -d
 
 ## Service URLs
 
-| Service           | URL                        | Description           |
-| ----------------- | -------------------------- | --------------------- |
-| Next.js App       | http://localhost:3001      | Main application      |
-| Python ML Service | http://localhost:8001      | ML API service        |
-| ML Service Docs   | http://localhost:8001/docs | FastAPI documentation |
-| Redis             | localhost:6379             | Cache service         |
-| SQLite Web (dev)  | http://localhost:8080      | Database viewer       |
+| Service           | URL                          | Description           |
+| ----------------- | ---------------------------- | --------------------- |
+| Next.js Frontend  | http://localhost:4000        | Main application      |
+| tRPC Backend      | http://localhost:4001        | API server            |
+| Backend Health    | http://localhost:4001/health | Health check          |
+| PostgreSQL        | localhost:5432               | Primary database      |
+| Python ML Service | http://localhost:8001        | Optional ML API       |
+| ML Service Docs   | http://localhost:8001/docs   | Optional FastAPI docs |
 
 ## Debugging
 
@@ -202,10 +218,16 @@ python -c "import app.main; print('✅ Import successful')"
 **Test API Endpoints:**
 
 ```bash
-# Next.js API
-curl http://localhost:3001/api/auth/login
+# Frontend
+curl http://localhost:4000
 
-# Python ML Service
+# Backend API Health
+curl http://localhost:4001/health
+
+# Backend tRPC API
+curl http://localhost:4001/api/trpc/auth.me
+
+# Optional: Python ML Service
 curl http://localhost:8001/health
 curl http://localhost:8001/docs
 ```
@@ -241,24 +263,27 @@ The application includes advanced performance optimizations:
 ### Frontend (Next.js)
 
 - **Framework**: Next.js 14 with App Router
-- **Styling**: Tailwind CSS with glassmorphism design
-- **State Management**: React hooks and context
-- **Real-time**: Native WebSocket implementation
-- **Performance**: React.memo(), virtual scrolling, lazy loading
+- **Language**: TypeScript with React 18
+- **Styling**: Tailwind CSS for modern UI
+- **API Client**: tRPC for type-safe API calls
+- **Authentication**: JWT-based with automatic redirects
+- **Performance**: SPA build, lazy loading, React optimizations
 
-### Backend (Python ML Service)
+### Backend (tRPC/Express)
 
-- **Framework**: FastAPI with async support
-- **AI/ML**: OpenAI integration, ChromaDB vector storage
+- **Framework**: Express.js with tRPC for type-safe APIs
+- **Language**: TypeScript with Node.js
+- **Database**: Drizzle ORM with PostgreSQL
+- **Authentication**: JWT with Better Auth integration
 - **File Handling**: S3 integration for media uploads
-- **Performance**: Async processing, caching layers
+- **Performance**: Connection pooling, async operations
 
 ### Database
 
-- **Development**: SQLite for simplicity
-- **Production**: Configurable (SQLite/PostgreSQL)
-- **Caching**: Redis for session and API caching
-- **Vector Storage**: ChromaDB for AI embeddings
+- **Primary**: PostgreSQL for production
+- **ORM**: Drizzle ORM for type-safe database operations
+- **Migrations**: Drizzle Kit for schema management
+- **Optional**: Python ML service for AI/ML capabilities
 
 ## Deployment
 
@@ -298,8 +323,9 @@ The project supports multiple environments:
 
 ```bash
 # Kill processes on specific ports
-lsof -ti:3001 | xargs kill -9
-lsof -ti:8001 | xargs kill -9
+lsof -ti:4000 | xargs kill -9  # Frontend
+lsof -ti:4001 | xargs kill -9  # Backend
+lsof -ti:8001 | xargs kill -9  # Optional Python ML service
 ```
 
 **Docker Build Issues:**
@@ -315,13 +341,17 @@ docker compose build --no-cache
 **Module Import Errors:**
 
 ```bash
-# For Python service
+# For backend
+cd apps/server
+npm ci
+
+# For frontend
+cd apps/web
+npm ci
+
+# For Python service (optional)
 cd python-ml-service
 pip install -r requirements.txt
-
-# For Next.js
-cd frontend
-npm ci
 ```
 
 ### Debug Checklist
@@ -353,7 +383,7 @@ tail -f logs/*.log
 
 ```bash
 # Quick health check
-curl http://localhost:3001 && curl http://localhost:8001/health
+curl http://localhost:4000 && curl http://localhost:4001/health
 
 # Detailed system test
 ./scripts/test-system.sh

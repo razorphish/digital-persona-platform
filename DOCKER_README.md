@@ -11,12 +11,19 @@ This document describes how to run the Digital Persona Platform using Docker wit
 - **Redis**: Caching and session storage (development)
 - **PostgreSQL**: Optional database (can switch from SQLite)
 
-### Port Configuration (Docker-friendly 4xxx series)
+### Port Configuration
 
-- **4000**: Frontend (Next.js)
-- **4001**: Backend (tRPC API)
+**External Docker Ports (host access):**
+
+- **3100**: Frontend (Next.js) - http://localhost:3100
+- **3101**: Backend (tRPC API) - http://localhost:3101
 - **6379**: Redis (when enabled)
 - **5432**: PostgreSQL (when enabled)
+
+**Internal Container Ports:**
+
+- **4000**: Frontend internal port
+- **4001**: Backend internal port
 
 ## 🚀 Quick Start
 
@@ -193,16 +200,20 @@ docker-compose -f docker-compose.dev.yml exec postgres psql -U postgres -d digit
 
 #### Port Conflicts
 
-If ports 4000 or 4001 are in use:
+If Docker ports 3100 or 3101 are in use:
 
 ```bash
 # Check what's using the ports
-lsof -i :4000
-lsof -i :4001
+lsof -i :3100  # Docker frontend external port
+lsof -i :3101  # Docker backend external port
 
 # Kill processes if needed
-pkill -f "node.*4000"
-pkill -f "node.*4001"
+pkill -f "node.*3100"
+pkill -f "node.*3101"
+
+# For local development conflicts (4000/4001):
+lsof -i :4000  # Local frontend port
+lsof -i :4001  # Local backend port
 ```
 
 #### Build Failures
@@ -233,9 +244,9 @@ sudo chown -R $USER:$USER .
 #### Service Status
 
 ```bash
-# Check service health
-curl http://localhost:4001/health
-curl http://localhost:4000
+# Check service health (Docker external ports)
+curl http://localhost:3101/health  # Backend
+curl http://localhost:3100         # Frontend
 
 # Container status
 docker ps --filter "name=dpp-"

@@ -6,9 +6,10 @@ Your local debugging environment is now fully set up and tested. Both services a
 
 ## 📊 Current Status
 
-✅ **Next.js App** - Running on http://localhost:3000 (local) / http://localhost:3001 (Docker)  
-✅ **Python ML Service** - Running on http://localhost:8001  
-✅ **Python Debugger** - Available on port 5678  
+✅ **Next.js Frontend** - Running on http://localhost:4000 (local) / http://localhost:3100 (Docker)  
+✅ **tRPC Backend** - Running on http://localhost:4001 (local) / http://localhost:3101 (Docker)  
+✅ **PostgreSQL Database** - Running on localhost:5432  
+✅ **Python ML Service** - Optional on http://localhost:8001  
 ✅ **VS Code Debug Configurations** - Ready to use
 
 ## 🐛 Available Debug Configurations
@@ -84,13 +85,15 @@ Your local debugging environment is now fully set up and tested. Both services a
 
 ## 📡 Service URLs for Testing
 
-| Service              | URL                          | Purpose                      |
-| -------------------- | ---------------------------- | ---------------------------- |
-| Next.js App (Local)  | http://localhost:3000        | Main application (local dev) |
-| Next.js App (Docker) | http://localhost:3001        | Main application (Docker)    |
-| Python ML Service    | http://localhost:8001        | API endpoints                |
-| ML Service Docs      | http://localhost:8001/docs   | Swagger documentation        |
-| ML Service Health    | http://localhost:8001/health | Health check                 |
+| Service           | URL                          | Purpose                      |
+| ----------------- | ---------------------------- | ---------------------------- |
+| Frontend (Local)  | http://localhost:4000        | Next.js application (local)  |
+| Frontend (Docker) | http://localhost:3100        | Next.js application (Docker) |
+| Backend (Local)   | http://localhost:4001        | tRPC API server (local)      |
+| Backend (Docker)  | http://localhost:3101        | tRPC API server (Docker)     |
+| Backend Health    | http://localhost:4001/health | API health check             |
+| Python ML Service | http://localhost:8001        | Optional ML API endpoints    |
+| ML Service Docs   | http://localhost:8001/docs   | Optional API documentation   |
 
 ## 🧪 Testing Debug Setup
 
@@ -160,8 +163,9 @@ This script will:
 
 ### Application Entry Points
 
-- `nextjs-migration/src/app/layout.tsx` - Next.js root layout
-- `python-ml-service/app/main.py` - FastAPI application entry
+- `apps/web/src/app/layout.tsx` - Next.js root layout
+- `apps/server/src/index.ts` - tRPC backend entry point
+- `python-ml-service/app/main.py` - Optional FastAPI application entry
 
 ## 🐳 Docker Debugging (Alternative)
 

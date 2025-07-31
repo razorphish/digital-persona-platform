@@ -69,8 +69,8 @@
 ./docker-start.sh dev --build
 
 # View application
-open http://localhost:4000    # Frontend
-open http://localhost:4001    # Backend API
+open http://localhost:3100    # Frontend
+open http://localhost:3101    # Backend API
 ```
 
 ### **Quick Start (Production)**
@@ -93,16 +93,20 @@ open http://localhost:4001    # Backend API
 ./docker-stop.sh all --clean
 ```
 
-## 🔧 **Port Configuration (Docker-Friendly 4xxx Series)**
+## 🔧 **Port Configuration**
+
+**Docker External Ports (host access):**
 
 | Service    | Port | URL                          | Description               |
 | ---------- | ---- | ---------------------------- | ------------------------- |
-| Frontend   | 4000 | http://localhost:4000        | Next.js React Application |
-| Backend    | 4001 | http://localhost:4001        | tRPC API Server           |
-| Health     | 4001 | http://localhost:4001/health | Backend Health Check      |
-| Test       | 4000 | http://localhost:4000/test   | Full-Stack Test Page      |
+| Frontend   | 3100 | http://localhost:3100        | Next.js React Application |
+| Backend    | 3101 | http://localhost:3101        | tRPC API Server           |
+| Health     | 3101 | http://localhost:3101/health | Backend Health Check      |
+| Test       | 3100 | http://localhost:3100/test   | Full-Stack Test Page      |
 | Redis      | 6379 | -                            | Caching (when enabled)    |
 | PostgreSQL | 5432 | -                            | Database (when enabled)   |
+
+**Internal Container Ports:** 4000 (frontend), 4001 (backend)
 
 ## 🛠️ **Development Features**
 
@@ -188,9 +192,9 @@ docker-compose -f docker-compose.dev.yml logs -f
 ./docker-stop.sh all --volumes --clean
 ./docker-start.sh dev --build
 
-# Test connectivity
-curl http://localhost:4001/health
-curl http://localhost:4001/api/trpc/hello
+# Test connectivity (Docker external ports)
+curl http://localhost:3101/health
+curl http://localhost:3101/api/trpc/hello
 ```
 
 ## 📚 **Next Steps**
