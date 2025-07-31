@@ -15,7 +15,26 @@ const port = Number(process.env.PORT) || 4001;
 // Middleware
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:4000",
+    origin: function (origin, callback) {
+      const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
+        o.trim()
+      ) || ["http://localhost:4000"];
+
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      // Check if the origin is in the allowed list
+      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        console.error(
+          `CORS blocked request from origin: ${origin}. Allowed origins: ${allowedOrigins.join(
+            ", "
+          )}`
+        );
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );

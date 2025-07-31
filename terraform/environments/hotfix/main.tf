@@ -477,7 +477,7 @@ module "lambda_backend" {
 
   # Environment variables - Using RDS Proxy for connection pooling
   database_url     = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${module.rds_proxy.proxy_endpoint}:${module.rds_proxy.proxy_port}/${aws_rds_cluster.database.database_name}"
-  cors_origin      = "https://${module.s3_website.cloudfront_domain_name}"
+  cors_origin      = "https://${module.s3_website.cloudfront_domain_name},https://${local.website_domain}"
   ml_sqs_queue_url = module.aws_batch_ml.sqs_queue_url
   ml_sqs_queue_arn = module.aws_batch_ml.sqs_queue_arn
 

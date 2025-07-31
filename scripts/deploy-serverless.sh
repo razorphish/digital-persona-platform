@@ -139,7 +139,7 @@ if [[ "$SKIP_BUILD" == false ]]; then
     
     # Set environment variables for build
     export NODE_ENV=production
-    export NEXT_PUBLIC_API_URL="https://api-${SUB_ENVIRONMENT}.hibiji.com"  # Will be updated after infrastructure
+    export NEXT_PUBLIC_API_URL="https://${SUB_ENVIRONMENT}-api.hibiji.com"  # Matches terraform domain pattern
     
     if [[ "$DRY_RUN" == false ]]; then
         npm run build
