@@ -24,6 +24,9 @@ import {
 // Import persona service
 import { PersonaService } from "./services/personaService.js";
 
+// Import Airica intelligence services
+import { ConversationIntelligenceService } from "./services/conversationIntelligence.js";
+
 // Import enhanced types
 import {
   createUserSchema,
@@ -658,7 +661,10 @@ const learningRouter = router({
     }),
 });
 
-// Chat router (existing functionality with learning integration)
+// Initialize conversation intelligence service
+const conversationIntelligence = new ConversationIntelligenceService();
+
+// Enhanced Chat router with Airica intelligence
 const chatRouter = router({
   // List conversations
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -736,42 +742,201 @@ const chatRouter = router({
       };
     }),
 
-  // Send message
+  // Initialize Airica session with dynamic greeting
+  initializeSession: protectedProcedure
+    .input(z.object({ 
+      conversationId: z.string().uuid().optional() 
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const greeting = await conversationIntelligence.initializeSession(
+          ctx.user.id, 
+          input.conversationId
+        );
+
+        return {
+          success: true,
+          greeting,
+          relationshipStage: await conversationIntelligence.determineRelationshipStage(ctx.user.id)
+        };
+      } catch (error) {
+        logger.error('Failed to initialize Airica session:', error);
+        return {
+          success: false,
+          greeting: "Hello! I'm Airica, your AI companion. How are you doing today?",
+          relationshipStage: null
+        };
+      }
+    }),
+
+  // Enhanced send message with Airica intelligence
   sendMessage: protectedProcedure
     .input(sendMessageSchema)
     .mutation(async ({ input, ctx }) => {
-      // Create user message
-      const [userMessage] = await db
-        .insert(messages)
-        .values({
-          conversationId: input.conversationId,
-          role: "user",
-          content: input.content,
-        })
-        .returning();
+      try {
+        // Create user message
+        const [userMessage] = await db
+          .insert(messages)
+          .values({
+            conversationId: input.conversationId,
+            role: "user",
+            content: input.content,
+            messageType: "text",
+            isLearningData: true, // Mark as potential learning data
+          })
+          .returning();
 
-      // TODO: Generate AI response based on persona
-      // For now, create a simple acknowledgment
-      const [aiMessage] = await db
-        .insert(messages)
-        .values({
-          conversationId: input.conversationId,
-          role: "assistant",
-          content:
-            "Thank you for sharing that with me. I'm learning more about you every day!",
-        })
-        .returning();
+        // Process user response with conversation intelligence
+        const { followUpQuestion, insights } = await conversationIntelligence.processUserResponse(
+          ctx.user.id,
+          input.conversationId,
+          input.content
+        );
 
-      return {
-        userMessage: {
-          ...userMessage,
-          createdAt: userMessage.createdAt.toISOString(),
-        },
-        aiMessage: {
-          ...aiMessage,
-          createdAt: aiMessage.createdAt.toISOString(),
-        },
-      };
+        // Generate Airica's response
+        let airicaResponse = "Thank you for sharing that with me!";
+        
+        if (followUpQuestion) {
+          airicaResponse = followUpQuestion;
+        } else {
+          // Generate a contextual acknowledgment
+          const responses = [
+            "That's really interesting! I'm getting to know you better.",
+            "I appreciate you sharing that with me.",
+            "That gives me great insight into who you are.",
+            "Thanks for opening up about that!",
+            "I'm learning so much about what makes you unique."
+          ];
+          airicaResponse = responses[Math.floor(Math.random() * responses.length)];
+        }
+
+        // Create Airica's message
+        const [aiMessage] = await db
+          .insert(messages)
+          .values({
+            conversationId: input.conversationId,
+            role: "assistant",
+            content: airicaResponse,
+            messageType: followUpQuestion ? "learning_response" : "text",
+            personalityInsights: insights.length > 0 ? JSON.stringify(insights) : null,
+          })
+          .returning();
+
+        // Update conversation timestamp
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date() })
+          .where(eq(conversations.id, input.conversationId));
+
+        return {
+          success: true,
+          userMessage: {
+            ...userMessage,
+            createdAt: userMessage.createdAt.toISOString(),
+          },
+          aiMessage: {
+            ...aiMessage,
+            createdAt: aiMessage.createdAt.toISOString(),
+          },
+          insights: insights.length,
+          isLearningQuestion: !!followUpQuestion
+        };
+
+      } catch (error) {
+        logger.error('Error in enhanced sendMessage:', error);
+        
+        // Fallback to simple message creation
+        const [userMessage] = await db
+          .insert(messages)
+          .values({
+            conversationId: input.conversationId,
+            role: "user",
+            content: input.content,
+          })
+          .returning();
+
+        const [aiMessage] = await db
+          .insert(messages)
+          .values({
+            conversationId: input.conversationId,
+            role: "assistant",
+            content: "Thank you for sharing that with me. I'm here to listen and learn about you!",
+          })
+          .returning();
+
+        return {
+          success: false,
+          userMessage: {
+            ...userMessage,
+            createdAt: userMessage.createdAt.toISOString(),
+          },
+          aiMessage: {
+            ...aiMessage,
+            createdAt: aiMessage.createdAt.toISOString(),
+          },
+          insights: 0,
+          isLearningQuestion: false
+        };
+      }
+    }),
+
+  // Get Airica's relationship assessment
+  getRelationshipStatus: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        const stage = await conversationIntelligence.determineRelationshipStage(ctx.user.id);
+        return {
+          success: true,
+          stage: stage.stage,
+          name: stage.name,
+          description: stage.description,
+          messageThreshold: stage.messageThreshold,
+          intimacyLevel: stage.intimacyLevel
+        };
+      } catch (error) {
+        logger.error('Error getting relationship status:', error);
+        return {
+          success: false,
+          stage: 'stranger',
+          name: 'Getting to Know You',
+          description: 'Learning the basics about who you are',
+          messageThreshold: 0,
+          intimacyLevel: 2
+        };
+      }
+    }),
+
+  // Generate a random learning question (for testing/manual triggers)
+  getLearningQuestion: protectedProcedure
+    .input(z.object({
+      conversationId: z.string().uuid().optional(),
+      category: z.string().optional()
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const stage = await conversationIntelligence.determineRelationshipStage(ctx.user.id);
+        
+        // Try to get AI-generated question first
+        const greeting = await conversationIntelligence.initializeSession(
+          ctx.user.id,
+          input.conversationId
+        );
+
+        return {
+          success: true,
+          question: greeting,
+          stage: stage.stage,
+          source: 'ai-generated'
+        };
+      } catch (error) {
+        logger.error('Error generating learning question:', error);
+        return {
+          success: false,
+          question: "What's something that's been on your mind lately?",
+          stage: 'stranger',
+          source: 'fallback'
+        };
+      }
     }),
 });
 

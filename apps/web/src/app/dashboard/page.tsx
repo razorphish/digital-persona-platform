@@ -28,6 +28,29 @@ function DashboardPageContent() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [message, setMessage] = useState("");
 
+  // Airica intelligence states
+  const [airicaMessages, setAiricaMessages] = useState<Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: Date;
+    isLearningQuestion?: boolean;
+    insights?: number;
+  }>>([]);
+  const [isAiricaLoading, setIsAiricaLoading] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const [relationshipStage, setRelationshipStage] = useState<any>(null);
+
+  // Airica tRPC hooks
+  const initializeSession = trpc.chat.initializeSession.useQuery(
+    { conversationId: undefined },
+    { enabled: !hasInitialized, retry: false }
+  );
+  const sendChatMessage = trpc.chat.sendMessage.useMutation();
+  const getRelationshipStatus = trpc.chat.getRelationshipStatus.useQuery(
+    undefined,
+    { enabled: hasInitialized, refetchInterval: false }
+  );
+
   // Navigation menu state
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -704,8 +727,45 @@ function DashboardPageContent() {
     setUploadedFiles((prev) => prev.filter((f) => f.file.name !== fileName));
   };
 
+  // Initialize Airica session on component mount
+  React.useEffect(() => {
+    if (initializeSession.data && !hasInitialized) {
+      setHasInitialized(true);
+      if (initializeSession.data.success) {
+        setAiricaMessages([{
+          role: 'assistant',
+          content: initializeSession.data.greeting,
+          timestamp: new Date(),
+          isLearningQuestion: false,
+          insights: 0
+        }]);
+        setRelationshipStage(initializeSession.data.relationshipStage);
+      }
+    }
+  }, [initializeSession.data, hasInitialized]);
+
+  // Update relationship status when available
+  React.useEffect(() => {
+    if (getRelationshipStatus.data?.success) {
+      setRelationshipStage(getRelationshipStatus.data);
+    }
+  }, [getRelationshipStatus.data]);
+
   const sendMessage = async () => {
-    if (message.trim() || uploadedFiles.length > 0) {
+    if (!message.trim() && uploadedFiles.length === 0) return;
+
+    setIsAiricaLoading(true);
+    
+    try {
+      // Add user message to chat immediately for UI responsiveness
+      if (message.trim()) {
+        setAiricaMessages(prev => [...prev, {
+          role: 'user',
+          content: message.trim(),
+          timestamp: new Date(),
+        }]);
+      }
+
       // Upload any pending files first
       const pendingFiles = uploadedFiles.filter(
         (f) => f.uploadStatus === "pending"
@@ -762,16 +822,45 @@ function DashboardPageContent() {
         }
       }
 
-      // Here you would send the message with file references to your chat system
-      console.log("Sending message:", message);
-      console.log(
-        "With files:",
-        uploadedFiles.filter((f) => f.uploadStatus === "completed")
-      );
+      // Send message to Airica if there's text content
+      if (message.trim()) {
+        const response = await sendChatMessage.mutateAsync({
+          conversationId: "dashboard-chat", // Use a special ID for dashboard chat
+          content: message.trim(),
+          mediaFiles: uploadedFiles
+            .filter((f) => f.uploadStatus === "completed")
+            .map((f) => f.fileId)
+            .filter(Boolean) as string[]
+        });
+
+        if (response.success && response.aiMessage) {
+          // Add Airica's response to chat
+          setAiricaMessages(prev => [...prev, {
+            role: 'assistant',
+            content: response.aiMessage.content,
+            timestamp: new Date(response.aiMessage.createdAt),
+            isLearningQuestion: response.isLearningQuestion,
+            insights: response.insights
+          }]);
+        }
+      }
 
       // Clear the input
       setMessage("");
       setUploadedFiles([]);
+
+    } catch (error) {
+      console.error("Error sending message to Airica:", error);
+      // Add error message to chat
+      setAiricaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "I'm sorry, I had trouble processing that. Could you try again?",
+        timestamp: new Date(),
+        isLearningQuestion: false,
+        insights: 0
+      }]);
+    } finally {
+      setIsAiricaLoading(false);
     }
   };
 
@@ -939,65 +1028,130 @@ function DashboardPageContent() {
               {/* Chat Messages */}
               <div className="flex-1 overflow-y-auto mb-4">
                 <div className="space-y-4">
-                  {/* AI Greeting Message */}
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg
-                        className="w-4 h-4 text-white"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
-                        />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <div className="bg-gray-100 rounded-lg p-4 max-w-lg">
-                        <p className="text-gray-800">
-                          Hello{" "}
-                          <span className="font-semibold text-indigo-600">
-                            {user?.name}
-                          </span>
-                          ! 👋 I'm{" "}
-                          <span className="font-semibold text-purple-600">
-                            Airica (Erica)
-                          </span>
-                          , your AI companion.
-                        </p>
-                        <p className="text-gray-800 mt-3">
-                          I'm here to help you create and develop your digital
-                          persona through our conversations. As we chat, I'll
-                          learn about your personality, interests, values, and
-                          unique traits to build an authentic digital
-                          representation of who you are.
-                        </p>
-                        <p className="text-gray-800 mt-3">
-                          This platform combines AI-powered conversations with
-                          social media integration to understand your
-                          communication style and preferences. Together, we'll
-                          craft a digital persona that truly reflects your
-                          authentic self.
-                        </p>
-                        <p className="text-gray-800 mt-3 font-medium">
-                          So tell me, what makes you uniquely you? What are your
-                          passions, goals, or something interesting about
-                          yourself? ✨
-                        </p>
-                        <div className="mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-400">
-                          <p className="text-blue-800 text-sm">
-                            💬 You can respond using text or by recording your
-                            voice using the microphone button below!
+                  {/* Airica Conversation Messages */}
+                  {airicaMessages.map((msg, index) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      {msg.role === 'assistant' && (
+                        <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                          <svg
+                            className="w-4 h-4 text-white"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                      <div className={`flex-1 ${msg.role === 'user' ? 'ml-12' : ''}`}>
+                        <div className={`rounded-lg p-4 max-w-lg ${
+                          msg.role === 'user' 
+                            ? 'bg-indigo-500 text-white ml-auto' 
+                            : 'bg-gray-100'
+                        }`}>
+                          {msg.role === 'assistant' && (
+                            <div className="flex items-center space-x-2 mb-2">
+                              <span className="font-semibold text-purple-600">Airica</span>
+                              <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs">
+                                AI Companion
+                              </span>
+                              {msg.isLearningQuestion && (
+                                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                                  🧠 Learning
+                                </span>
+                              )}
+                              {msg.insights && msg.insights > 0 && (
+                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                                  ✨ {msg.insights} insight{msg.insights > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <p className={msg.role === 'user' ? 'text-white' : 'text-gray-800'}>
+                            {msg.content}
                           </p>
                         </div>
+                        <p className={`text-xs mt-1 ${
+                          msg.role === 'user' ? 'text-gray-500 text-right' : 'text-gray-500'
+                        }`}>
+                          {msg.timestamp.toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">Just now</p>
                     </div>
-                  </div>
+                  ))}
+
+                  {/* Loading indicator */}
+                  {isAiricaLoading && (
+                    <div className="flex items-start space-x-3">
+                      <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg
+                          className="w-4 h-4 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
+                          />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <div className="bg-gray-100 rounded-lg p-4 max-w-lg">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-75"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
+                            <span className="text-gray-500 text-sm ml-2">Airica is thinking...</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Relationship Status Indicator */}
+                  {relationshipStage && (
+                    <div className="text-center">
+                      <div className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full">
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></div>
+                        <span className="text-sm text-indigo-700 font-medium">
+                          {relationshipStage.name} • {relationshipStage.stage}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty state when no messages */}
+                  {airicaMessages.length === 0 && !initializeSession.isLoading && (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg
+                          className="w-8 h-8 text-indigo-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                          />
+                        </svg>
+                      </div>
+                      <p className="text-gray-500 text-sm">Airica is getting ready to chat with you...</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
