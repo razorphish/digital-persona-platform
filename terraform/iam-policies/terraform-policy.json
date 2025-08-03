@@ -225,6 +225,7 @@
         "budgets:CreateBudget",
         "budgets:ModifyBudget",
         "budgets:DeleteBudget",
+        "budgets:ListTagsForResource",
         "cloudwatch:GetMetricStatistics",
         "cloudwatch:ListMetrics"
       ],
