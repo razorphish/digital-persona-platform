@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { uploadFile, FileUploadResult } from "@/services/fileUpload";
 import { AuthUtils } from "@/lib/auth";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { trpc } from "@/lib/trpc";
 
 interface UploadedFile {
   file: File;
@@ -21,6 +22,8 @@ interface UploadedFile {
 
 function DashboardPageContent() {
   const { user, logout } = useAuth();
+  const requestPresignedUrl = trpc.media.requestPresignedUrl.useMutation();
+  const updateFileStatus = trpc.media.updateFileStatus.useMutation();
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [message, setMessage] = useState("");
@@ -561,7 +564,9 @@ function DashboardPageContent() {
                 : f
             )
           );
-        }
+        },
+        requestPresignedUrl, // Pass the tRPC mutation
+        updateFileStatus // Pass the tRPC mutation
       );
 
       if (result.success) {
@@ -733,7 +738,9 @@ function DashboardPageContent() {
                     : f
                 )
               );
-            }
+            },
+            requestPresignedUrl, // Pass the tRPC mutation
+            updateFileStatus // Pass the tRPC mutation
           );
 
           // Update final status

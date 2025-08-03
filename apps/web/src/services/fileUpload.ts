@@ -22,16 +22,6 @@ export interface FileUploadResult {
   error?: string;
 }
 
-// We'll use the tRPC client directly instead of manual HTTP calls
-// This function is kept for backward compatibility but will be replaced
-export async function requestPresignedUrl(
-  fileData: FileUploadRequest,
-  token: string
-): Promise<PresignedUrlResponse> {
-  // This function is deprecated - use tRPC client directly
-  throw new Error("Use tRPC client directly for presigned URL requests");
-}
-
 // Upload file directly to S3
 export async function uploadFileToS3(
   file: File,
@@ -53,33 +43,24 @@ export async function uploadFileToS3(
   }
 }
 
-// Update file status in backend
-export async function updateFileStatus(
-  fileId: string,
-  status: "completed" | "failure",
-  token: string
-): Promise<boolean> {
-  // This function is deprecated - use tRPC client directly
-  throw new Error("Use tRPC client directly for file status updates");
-}
-
-// Complete file upload process using tRPC client
+// Complete file upload process using tRPC mutations
 export async function uploadFile(
   file: File,
   token: string,
   conversationId?: string,
   personaId?: string,
   onProgress?: (progress: number) => void,
-  trpcClient?: any // We'll pass the tRPC client from the component
+  requestPresignedUrlMutation?: any,
+  updateFileStatusMutation?: any
 ): Promise<FileUploadResult> {
   try {
-    if (!trpcClient) {
-      throw new Error("tRPC client is required for file uploads");
+    if (!requestPresignedUrlMutation || !updateFileStatusMutation) {
+      throw new Error("tRPC mutations are required for file uploads");
     }
 
     // Step 1: Request presigned URL using tRPC
     onProgress?.(10);
-    const presignedData = await trpcClient.media.requestPresignedUrl.mutate({
+    const presignedData = await requestPresignedUrlMutation.mutateAsync({
       fileName: file.name,
       fileType: file.type,
       fileSize: file.size,
@@ -97,7 +78,7 @@ export async function uploadFile(
     // Step 3: Update status using tRPC
     onProgress?.(80);
     const status = uploadSuccess ? "completed" : "failure";
-    await trpcClient.media.updateFileStatus.mutate({
+    await updateFileStatusMutation.mutateAsync({
       fileId: presignedData.fileId,
       status,
       uploadedAt: status === "completed" ? new Date() : undefined,
@@ -107,7 +88,7 @@ export async function uploadFile(
 
     return {
       fileId: presignedData.fileId,
-      s3Url: `https://dev-dev01-dpp-uploads.s3.us-east-1.amazonaws.com/${presignedData.s3Key}`,
+      s3Url: `https://local-mars-dpp-uploads.s3.us-west-1.amazonaws.com/${presignedData.s3Key}`,
       success: uploadSuccess,
       error: uploadSuccess ? undefined : "Upload to S3 failed",
     };
