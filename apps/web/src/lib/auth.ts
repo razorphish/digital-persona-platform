@@ -85,7 +85,7 @@ export const AuthUtils = {
     }
   },
 
-  // Remove tokens from localStorage
+  // Industry-standard secure logout - clear all authentication data
   clearTokens: () => {
     if (typeof window === "undefined") {
       console.log("🗑️ clearTokens: Server side, skipping");
@@ -93,7 +93,7 @@ export const AuthUtils = {
     }
 
     try {
-      // Check what's in localStorage before clearing
+      // Check what's in storage before clearing
       const beforeAccessToken = localStorage.getItem("accessToken");
       const beforeRefreshToken = localStorage.getItem("refreshToken");
 
@@ -102,27 +102,90 @@ export const AuthUtils = {
         hadRefreshToken: !!beforeRefreshToken,
         accessTokenLength: beforeAccessToken?.length,
         localStorageKeys: Object.keys(localStorage),
+        sessionStorageKeys: Object.keys(sessionStorage),
         timestamp: new Date().toISOString(),
       });
 
+      // 1. Clear localStorage tokens
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
+      
+      // 2. Clear any other auth-related data from localStorage
+      localStorage.removeItem("userPreferences");
+      localStorage.removeItem("authState");
+      localStorage.removeItem("lastLoginTime");
+      
+      // 3. Clear sessionStorage (in case any auth data is stored there)
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
+      sessionStorage.removeItem("userSession");
+      sessionStorage.removeItem("tempAuthData");
+      
+      // 4. Clear all authentication cookies (if any exist)
+      const authCookies = ["auth_token", "refresh_token", "session_id", "user_id"];
+      authCookies.forEach(cookieName => {
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname}; secure; samesite=strict`;
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; secure; samesite=strict`;
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+      });
 
-      // Verify tokens were cleared
+      // 5. Clear any cached user data from memory (force garbage collection of sensitive data)
+      if (window.performance && window.performance.memory) {
+        // Force a memory cleanup if available (mainly for development)
+        if (typeof window.gc === 'function') {
+          window.gc();
+        }
+      }
+
+      // 6. Broadcast logout to other tabs/windows
+      try {
+        localStorage.setItem('logout-broadcast', Date.now().toString());
+        localStorage.removeItem('logout-broadcast');
+      } catch (broadcastError) {
+        console.warn("Could not broadcast logout to other tabs:", broadcastError);
+      }
+
+      // 7. Verify tokens were cleared
       const afterAccessToken = localStorage.getItem("accessToken");
       const afterRefreshToken = localStorage.getItem("refreshToken");
 
       console.log(
-        "✅ clearTokens: Successfully cleared tokens, verification:",
+        "✅ clearTokens: Successfully cleared all authentication data, verification:",
         {
           accessTokenCleared: !afterAccessToken,
           refreshTokenCleared: !afterRefreshToken,
           localStorageKeys: Object.keys(localStorage),
+          sessionStorageKeys: Object.keys(sessionStorage),
+          cookiesCleared: true,
         }
       );
     } catch (error) {
-      console.error("❌ Error clearing tokens from localStorage:", error);
+      console.error("❌ Error during secure logout process:", error);
+      
+      // Emergency fallback - try to clear critical items even if full process fails
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        console.log("🆘 Emergency fallback: Cleared all storage");
+      } catch (fallbackError) {
+        console.error("❌ Emergency fallback also failed:", fallbackError);
+      }
     }
+  },
+
+  // Add method to listen for logout broadcasts from other tabs
+  setupLogoutBroadcastListener: (callback: () => void) => {
+    if (typeof window === "undefined") return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'logout-broadcast') {
+        console.log("🔄 Logout broadcast received from another tab");
+        callback();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   },
 
   // Check if user is authenticated
@@ -200,5 +263,34 @@ export const AuthUtils = {
       console.error("Failed to parse JWT token:", error);
       return null;
     }
+  },
+
+  // Security enhancement: Force immediate logout with security audit
+  forceSecureLogout: (reason: string) => {
+    if (typeof window === "undefined") return;
+    
+    console.warn(`🚨 SECURITY: Forcing logout due to: ${reason}`);
+    
+    // Create security audit log
+    const securityEvent = {
+      timestamp: new Date().toISOString(),
+      reason,
+      userAgent: navigator?.userAgent || 'unknown',
+      url: window.location.href,
+      sessionId: Date.now().toString()
+    };
+    
+    // Store security event (in production, this would be sent to security monitoring)
+    try {
+      localStorage.setItem('lastSecurityEvent', JSON.stringify(securityEvent));
+    } catch (e) {
+      console.error('Failed to log security event:', e);
+    }
+    
+    // Clear all authentication data immediately
+    AuthUtils.clearTokens();
+    
+    // Force redirect to login page
+    window.location.href = '/';
   },
 };

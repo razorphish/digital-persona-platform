@@ -49,17 +49,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Re-enable tRPC mutations for proper API calls
   const loginMutation = trpc.auth.login.useMutation();
   const registerMutation = trpc.auth.register.useMutation();
+  const logoutMutation = trpc.auth.logout.useMutation();
 
-  // Centralized logout function
-  const logout = useCallback(() => {
-    console.log("🚪 logout: Starting logout process...");
-    AuthUtils.clearTokens();
-    setUser(null);
-    setError(null);
-    setIsLoading(false);
-    // Keep isInitialized as true since we've explicitly logged out
-    console.log("✅ logout: Logout completed, redirecting to home");
-    router.push("/");
+  // Industry-standard secure logout function
+  const logout = useCallback(async (skipServerLogout = false) => {
+    console.log("🚪 logout: Starting secure logout process...");
+    
+    try {
+      // 1. Attempt server-side logout first (if available and not skipped)
+      if (!skipServerLogout) {
+        try {
+          const tokens = AuthUtils.getTokens();
+          if (tokens?.accessToken) {
+            console.log("🔌 logout: Attempting server-side logout...");
+            await logoutMutation.mutateAsync();
+          }
+        } catch (serverError) {
+          console.warn("⚠️ logout: Server-side logout failed, continuing with client-side logout:", serverError);
+          // Continue with client-side logout even if server logout fails
+        }
+      }
+
+      // 2. Clear all client-side authentication data (industry standard)
+      AuthUtils.clearTokens();
+      
+      // 3. Clear all user state and cached data
+      setUser(null);
+      setError(null);
+      setIsLoading(false);
+      
+      // 4. Clear any cached API data (if using query cache)
+      // This would clear tRPC cache if needed in the future
+      
+      console.log("✅ logout: Secure logout completed, redirecting to home");
+      
+      // 5. Redirect to public page
+      router.push("/");
+      
+    } catch (error) {
+      console.error("❌ logout: Error during logout process:", error);
+      
+      // Emergency logout - clear everything even if there are errors
+      AuthUtils.clearTokens();
+      setUser(null);
+      setError(null);
+      setIsLoading(false);
+      router.push("/");
+    }
   }, [router]);
 
   // Enhanced authentication checking with better error handling
@@ -197,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [user, logout, isInitialized]);
 
-  // Listen for storage changes (token updates in other tabs)
+  // Listen for storage changes and logout broadcasts (cross-tab security)
   useEffect(() => {
     // Only listen for storage changes after initialization
     if (!isInitialized) return;
@@ -222,9 +258,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Set up logout broadcast listener for cross-tab security
+    const cleanupBroadcastListener = AuthUtils.setupLogoutBroadcastListener(() => {
+      console.log("🔄 Logout broadcast received, logging out current tab");
+      // Skip server logout since it was already done in the originating tab
+      logout(true);
+    });
+
     window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [checkAuthState, isInitialized]);
+    
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      if (cleanupBroadcastListener) cleanupBroadcastListener();
+    };
+  }, [checkAuthState, isInitialized, logout]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -275,7 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const errorMessage = ErrorHandler.getAuthErrorMessage(err);
       setError(errorMessage);
 
-      // Clear any potentially corrupted tokens
+      // Industry-standard: Clear any potentially corrupted tokens on login failure
       AuthUtils.clearTokens();
       setUser(null);
 
@@ -315,7 +362,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const errorMessage = ErrorHandler.getAuthErrorMessage(err);
       setError(errorMessage);
 
-      // Clear any potentially corrupted tokens
+      // Industry-standard: Clear any potentially corrupted tokens on registration failure
       AuthUtils.clearTokens();
       setUser(null);
 
