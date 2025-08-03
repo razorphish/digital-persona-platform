@@ -222,8 +222,19 @@
         "ce:ListCostAndUsageSpecifications",
         "budgets:ViewBudget",
         "budgets:ViewBudgetAction",
+        "budgets:CreateBudget",
+        "budgets:ModifyBudget",
+        "budgets:DeleteBudget",
         "cloudwatch:GetMetricStatistics",
         "cloudwatch:ListMetrics"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TerraformSNSAccess",
+      "Effect": "Allow",
+      "Action": [
+        "sns:*"
       ],
       "Resource": "*"
     }
