@@ -626,5 +626,456 @@ export const mediaFilesRelations = relations(mediaFiles, ({ one }) => ({
   }),
 }));
 
+// Creator Verification System
+export const creatorVerifications = pgTable("creator_verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Verification status
+  status: text("status", {
+    enum: ["pending", "in_review", "approved", "rejected", "suspended"],
+  }).default("pending"),
+  verificationLevel: text("verification_level", {
+    enum: ["basic", "enhanced", "premium"],
+  }).default("basic"),
+
+  // Identity verification
+  legalName: text("legal_name"),
+  dateOfBirth: timestamp("date_of_birth"),
+  governmentIdType: text("government_id_type", {
+    enum: ["drivers_license", "passport", "state_id", "national_id"],
+  }),
+  governmentIdNumber: text("government_id_number"), // Encrypted
+  governmentIdExpiryDate: timestamp("government_id_expiry_date"),
+  
+  // Address verification
+  addressLine1: text("address_line1"),
+  addressLine2: text("address_line2"),
+  city: text("city"),
+  state: text("state"),
+  postalCode: text("postal_code"),
+  country: text("country").default("US"),
+  
+  // Facial recognition verification
+  faceVerificationScore: decimal("face_verification_score", { precision: 4, scale: 3 }),
+  faceVerificationProvider: text("face_verification_provider", {
+    enum: ["aws_rekognition", "azure_face", "google_vision"],
+  }),
+  faceVerificationId: text("face_verification_id"),
+  faceVerificationCompletedAt: timestamp("face_verification_completed_at"),
+
+  // Banking information
+  bankAccountVerified: boolean("bank_account_verified").default(false),
+  bankName: text("bank_name"),
+  bankAccountType: text("bank_account_type", {
+    enum: ["checking", "savings"],
+  }),
+  bankAccountLast4: text("bank_account_last4"), // Only last 4 digits stored
+  routingNumber: text("routing_number"), // Encrypted
+  
+  // Tax information
+  taxIdType: text("tax_id_type", {
+    enum: ["ssn", "ein", "itin"],
+  }),
+  taxIdLast4: text("tax_id_last4"), // Only last 4 digits stored
+  taxFormsSubmitted: jsonb("tax_forms_submitted").$type<{
+    w9: boolean;
+    w8: boolean;
+    additionalForms: string[];
+  }>(),
+  
+  // Verification metadata
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  verificationDocumentIds: jsonb("verification_document_ids").$type<string[]>(),
+  verificationNotes: text("verification_notes"),
+  reviewedBy: uuid("reviewed_by"), // Admin user ID
+  reviewedAt: timestamp("reviewed_at"),
+  
+  // Rejection/suspension details
+  rejectionReason: text("rejection_reason"),
+  suspensionReason: text("suspension_reason"),
+  appealSubmittedAt: timestamp("appeal_submitted_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  approvedAt: timestamp("approved_at"),
+  rejectedAt: timestamp("rejected_at"),
+  suspendedAt: timestamp("suspended_at"),
+});
+
+// Verification Documents Storage
+export const verificationDocuments = pgTable("verification_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  verificationId: uuid("verification_id")
+    .notNull()
+    .references(() => creatorVerifications.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Document details
+  documentType: text("document_type", {
+    enum: [
+      "government_id_front",
+      "government_id_back", 
+      "selfie_with_id",
+      "utility_bill",
+      "bank_statement",
+      "tax_document",
+      "business_license",
+      "proof_of_address"
+    ],
+  }).notNull(),
+  documentName: text("document_name").notNull(),
+  
+  // File storage
+  s3Bucket: text("s3_bucket").notNull(),
+  s3Key: text("s3_key").notNull(),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+  
+  // Processing status
+  status: text("status", {
+    enum: ["uploaded", "processing", "verified", "rejected"],
+  }).default("uploaded"),
+  
+  // AI verification results
+  ocrText: text("ocr_text"), // Extracted text from document
+  confidenceScore: decimal("confidence_score", { precision: 4, scale: 3 }),
+  processingResults: jsonb("processing_results").$type<Record<string, any>>(),
+  
+  // Security
+  encryptionKey: text("encryption_key"), // For sensitive documents
+  retentionExpiryDate: timestamp("retention_expiry_date"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  verifiedAt: timestamp("verified_at"),
+});
+
+// Stripe Connect Accounts for Creator Payouts
+export const stripeAccounts = pgTable("stripe_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  verificationId: uuid("verification_id")
+    .references(() => creatorVerifications.id, { onDelete: "set null" }),
+
+  // Stripe account details
+  stripeAccountId: text("stripe_account_id").unique().notNull(),
+  stripeAccountType: text("stripe_account_type", {
+    enum: ["standard", "express", "custom"],
+  }).default("express"),
+  
+  // Account status
+  chargesEnabled: boolean("charges_enabled").default(false),
+  payoutsEnabled: boolean("payouts_enabled").default(false),
+  detailsSubmitted: boolean("details_submitted").default(false),
+  
+  // Onboarding
+  onboardingUrl: text("onboarding_url"),
+  onboardingExpiresAt: timestamp("onboarding_expires_at"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at"),
+  
+  // Requirements tracking
+  currentlyDue: jsonb("currently_due").$type<string[]>(),
+  eventuallyDue: jsonb("eventually_due").$type<string[]>(),
+  pastDue: jsonb("past_due").$type<string[]>(),
+  pendingVerification: jsonb("pending_verification").$type<string[]>(),
+  
+  // Account capabilities
+  capabilities: jsonb("capabilities").$type<Record<string, string>>(),
+  requirements: jsonb("requirements").$type<Record<string, any>>(),
+  
+  // Payout settings
+  payoutSchedule: jsonb("payout_schedule").$type<{
+    interval: "daily" | "weekly" | "monthly";
+    monthlyAnchor?: number;
+    weeklyAnchor?: string;
+    delayDays?: number;
+  }>(),
+  defaultCurrency: text("default_currency").default("usd"),
+  
+  // Status tracking
+  isActive: boolean("is_active").default(true),
+  lastWebhookAt: timestamp("last_webhook_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Creator Earnings and Revenue Tracking
+export const creatorEarnings = pgTable("creator_earnings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  stripeAccountId: uuid("stripe_account_id")
+    .notNull()
+    .references(() => stripeAccounts.id, { onDelete: "cascade" }),
+
+  // Earnings period
+  periodType: text("period_type", {
+    enum: ["daily", "weekly", "monthly", "yearly"],
+  }).notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Revenue breakdown
+  grossRevenue: decimal("gross_revenue", { precision: 12, scale: 2 }).default("0.00"),
+  platformFee: decimal("platform_fee", { precision: 12, scale: 2 }).default("0.00"), // 3%
+  processingFee: decimal("processing_fee", { precision: 12, scale: 2 }).default("0.00"), // Stripe fees
+  netEarnings: decimal("net_earnings", { precision: 12, scale: 2 }).default("0.00"), // 97% to creator
+  
+  // Subscription metrics
+  totalSubscribers: integer("total_subscribers").default(0),
+  newSubscribers: integer("new_subscribers").default(0),
+  cancelledSubscribers: integer("cancelled_subscribers").default(0),
+  
+  // Interaction metrics
+  totalInteractions: integer("total_interactions").default(0),
+  paidInteractions: integer("paid_interactions").default(0),
+  freeInteractions: integer("free_interactions").default(0),
+  
+  // Time-based billing
+  totalBillableMinutes: integer("total_billable_minutes").default(0),
+  averageSessionLength: decimal("average_session_length", { precision: 6, scale: 2 }),
+  
+  // Payout status
+  payoutStatus: text("payout_status", {
+    enum: ["pending", "processing", "paid", "failed", "cancelled"],
+  }).default("pending"),
+  payoutId: text("payout_id"), // Stripe payout ID
+  payoutDate: timestamp("payout_date"),
+  payoutAmount: decimal("payout_amount", { precision: 12, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Subscription Payments and Transaction History
+export const subscriptionPayments = pgTable("subscription_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Payment participants
+  payerId: uuid("payer_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  creatorId: uuid("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  personaId: uuid("persona_id")
+    .notNull()
+    .references(() => personas.id, { onDelete: "cascade" }),
+  subscriptionPlanId: uuid("subscription_plan_id")
+    .references(() => subscriptionPlans.id, { onDelete: "set null" }),
+  
+  // Stripe payment details
+  stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeInvoiceId: text("stripe_invoice_id"),
+  stripeCustomerId: text("stripe_customer_id"),
+  
+  // Payment details
+  paymentType: text("payment_type", {
+    enum: ["subscription", "time_based", "tip", "one_time"],
+  }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").default("USD"),
+  
+  // Revenue split
+  creatorAmount: decimal("creator_amount", { precision: 10, scale: 2 }).notNull(), // 97%
+  platformAmount: decimal("platform_amount", { precision: 10, scale: 2 }).notNull(), // 3%
+  processingFee: decimal("processing_fee", { precision: 10, scale: 2 }).default("0.00"),
+  
+  // Payment status
+  status: text("status", {
+    enum: ["pending", "processing", "succeeded", "failed", "cancelled", "refunded"],
+  }).default("pending"),
+  
+  // Billing period (for subscriptions)
+  billingPeriodStart: timestamp("billing_period_start"),
+  billingPeriodEnd: timestamp("billing_period_end"),
+  
+  // Time-based billing details
+  sessionMinutes: integer("session_minutes"), // For time-based payments
+  hourlyRate: decimal("hourly_rate", { precision: 8, scale: 2 }),
+  
+  // Payment metadata
+  description: text("description"),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  
+  // Refund information
+  refundAmount: decimal("refund_amount", { precision: 10, scale: 2 }),
+  refundReason: text("refund_reason"),
+  refundedAt: timestamp("refunded_at"),
+  
+  // Failure details
+  failureCode: text("failure_code"),
+  failureMessage: text("failure_message"),
+  failedAt: timestamp("failed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  paidAt: timestamp("paid_at"),
+});
+
+// Monetization Settings per Persona
+export const personaMonetization = pgTable("persona_monetization", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  personaId: uuid("persona_id")
+    .notNull()
+    .references(() => personas.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Monetization status
+  isMonetized: boolean("is_monetized").default(false),
+  requiresVerification: boolean("requires_verification").default(true),
+  
+  // Pricing strategy
+  pricingModel: text("pricing_model", {
+    enum: ["subscription_only", "time_based_only", "hybrid", "free_with_limits"],
+  }).default("hybrid"),
+  
+  // Subscription tiers
+  basicTierPrice: decimal("basic_tier_price", { precision: 8, scale: 2 }),
+  basicTierFeatures: jsonb("basic_tier_features").$type<{
+    messagesPerDay: number;
+    allowPhotos: boolean;
+    allowVoice: boolean;
+    responseTime: "instant" | "fast" | "standard";
+    customFeatures: string[];
+  }>(),
+  
+  averageTierPrice: decimal("average_tier_price", { precision: 8, scale: 2 }),
+  averageTierFeatures: jsonb("average_tier_features").$type<{
+    messagesPerDay: number;
+    allowPhotos: boolean;
+    allowVoice: boolean;
+    allowVideo: boolean;
+    responseTime: "instant" | "fast" | "standard";
+    prioritySupport: boolean;
+    customFeatures: string[];
+  }>(),
+  
+  advancedTierPrice: decimal("advanced_tier_price", { precision: 8, scale: 2 }),
+  advancedTierFeatures: jsonb("advanced_tier_features").$type<{
+    messagesPerDay: number;
+    allowPhotos: boolean;
+    allowVoice: boolean;
+    allowVideo: boolean;
+    allowPersonalInfo: boolean;
+    responseTime: "instant" | "fast" | "standard";
+    prioritySupport: boolean;
+    exclusiveContent: boolean;
+    customFeatures: string[];
+  }>(),
+  
+  // Time-based pricing
+  timeBasedEnabled: boolean("time_based_enabled").default(false),
+  hourlyRate: decimal("hourly_rate", { precision: 8, scale: 2 }),
+  minimumSessionMinutes: integer("minimum_session_minutes").default(15),
+  
+  // Free interaction limits
+  freeMessagesPerDay: integer("free_messages_per_day").default(3),
+  freeMinutesPerDay: integer("free_minutes_per_day").default(10),
+  
+  // Creator controls
+  autoAcceptSubscriptions: boolean("auto_accept_subscriptions").default(true),
+  requireManualApproval: boolean("require_manual_approval").default(false),
+  allowTips: boolean("allow_tips").default(true),
+  
+  // Performance metrics
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0.00"),
+  totalSubscribers: integer("total_subscribers").default(0),
+  averageSessionRevenue: decimal("average_session_revenue", { precision: 8, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Relations for Creator Economy tables
+export const creatorVerificationsRelations = relations(creatorVerifications, ({ one, many }) => ({
+  user: one(users, {
+    fields: [creatorVerifications.userId],
+    references: [users.id],
+  }),
+  documents: many(verificationDocuments),
+  stripeAccount: one(stripeAccounts, {
+    fields: [creatorVerifications.userId],
+    references: [stripeAccounts.userId],
+  }),
+}));
+
+export const verificationDocumentsRelations = relations(verificationDocuments, ({ one }) => ({
+  verification: one(creatorVerifications, {
+    fields: [verificationDocuments.verificationId],
+    references: [creatorVerifications.id],
+  }),
+  user: one(users, {
+    fields: [verificationDocuments.userId],
+    references: [users.id],
+  }),
+}));
+
+export const stripeAccountsRelations = relations(stripeAccounts, ({ one, many }) => ({
+  user: one(users, {
+    fields: [stripeAccounts.userId],
+    references: [users.id],
+  }),
+  verification: one(creatorVerifications, {
+    fields: [stripeAccounts.verificationId],
+    references: [creatorVerifications.id],
+  }),
+  earnings: many(creatorEarnings),
+}));
+
+export const creatorEarningsRelations = relations(creatorEarnings, ({ one }) => ({
+  user: one(users, {
+    fields: [creatorEarnings.userId],
+    references: [users.id],
+  }),
+  stripeAccount: one(stripeAccounts, {
+    fields: [creatorEarnings.stripeAccountId],
+    references: [stripeAccounts.id],
+  }),
+}));
+
+export const subscriptionPaymentsRelations = relations(subscriptionPayments, ({ one }) => ({
+  payer: one(users, {
+    fields: [subscriptionPayments.payerId],
+    references: [users.id],
+  }),
+  creator: one(users, {
+    fields: [subscriptionPayments.creatorId],
+    references: [users.id],
+  }),
+  persona: one(personas, {
+    fields: [subscriptionPayments.personaId],
+    references: [personas.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [subscriptionPayments.subscriptionPlanId],
+    references: [subscriptionPlans.id],
+  }),
+}));
+
+export const personaMonetizationRelations = relations(personaMonetization, ({ one }) => ({
+  persona: one(personas, {
+    fields: [personaMonetization.personaId],
+    references: [personas.id],
+  }),
+  user: one(users, {
+    fields: [personaMonetization.userId],
+    references: [users.id],
+  }),
+}));
+
 // Export the database connection
 export { drizzle } from "drizzle-orm/postgres-js";

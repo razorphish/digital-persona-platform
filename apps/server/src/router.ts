@@ -27,6 +27,10 @@ import { PersonaService } from "./services/personaService.js";
 // Import Airica intelligence services
 import { ConversationIntelligenceService } from "./services/conversationIntelligence.js";
 
+// Import creator economy services
+import { CreatorVerificationService } from "./services/creatorVerificationService.js";
+import { StripeService } from "./services/stripeService.js";
+
 // Import enhanced types
 import {
   createUserSchema,
@@ -1104,6 +1108,399 @@ const socialRouter = router({
   }),
 });
 
+// Initialize creator economy services
+const creatorVerificationService = new CreatorVerificationService();
+const stripeService = new StripeService();
+
+// Creator Verification Router
+const creatorVerificationRouter = router({
+  // Start verification process
+  startVerification: protectedProcedure
+    .input(z.object({
+      ipAddress: z.string(),
+      userAgent: z.string()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await creatorVerificationService.startVerification(
+          ctx.user.id,
+          input.ipAddress,
+          input.userAgent
+        );
+      } catch (error) {
+        logger.error('Error starting creator verification:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to start verification process'
+        });
+      }
+    }),
+
+  // Submit identity verification
+  submitIdentityVerification: protectedProcedure
+    .input(z.object({
+      verificationId: z.string().uuid(),
+      legalName: z.string().min(2).max(100),
+      dateOfBirth: z.date(),
+      governmentIdType: z.enum(['drivers_license', 'passport', 'state_id', 'national_id']),
+      governmentIdNumber: z.string().min(6).max(20),
+      governmentIdExpiryDate: z.date()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const { verificationId, ...identityData } = input;
+        return await creatorVerificationService.submitIdentityVerification(
+          ctx.user.id,
+          verificationId,
+          identityData
+        );
+      } catch (error) {
+        logger.error('Error submitting identity verification:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to submit identity verification'
+        });
+      }
+    }),
+
+  // Submit address verification
+  submitAddressVerification: protectedProcedure
+    .input(z.object({
+      verificationId: z.string().uuid(),
+      addressLine1: z.string().min(5).max(100),
+      addressLine2: z.string().max(100).optional(),
+      city: z.string().min(2).max(50),
+      state: z.string().min(2).max(50),
+      postalCode: z.string().min(5).max(10),
+      country: z.string().default('US')
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const { verificationId, ...addressData } = input;
+        return await creatorVerificationService.submitAddressVerification(
+          ctx.user.id,
+          verificationId,
+          addressData
+        );
+      } catch (error) {
+        logger.error('Error submitting address verification:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to submit address verification'
+        });
+      }
+    }),
+
+  // Submit banking verification
+  submitBankingVerification: protectedProcedure
+    .input(z.object({
+      verificationId: z.string().uuid(),
+      bankName: z.string().min(2).max(100),
+      bankAccountType: z.enum(['checking', 'savings']),
+      routingNumber: z.string().length(9),
+      accountNumber: z.string().min(4).max(20)
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const { verificationId, ...bankingData } = input;
+        return await creatorVerificationService.submitBankingVerification(
+          ctx.user.id,
+          verificationId,
+          bankingData
+        );
+      } catch (error) {
+        logger.error('Error submitting banking verification:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to submit banking verification'
+        });
+      }
+    }),
+
+  // Submit tax verification
+  submitTaxVerification: protectedProcedure
+    .input(z.object({
+      verificationId: z.string().uuid(),
+      taxIdType: z.enum(['ssn', 'ein', 'itin']),
+      taxId: z.string().min(9).max(11),
+      w9FormSubmitted: z.boolean()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const { verificationId, ...taxData } = input;
+        return await creatorVerificationService.submitTaxVerification(
+          ctx.user.id,
+          verificationId,
+          taxData
+        );
+      } catch (error) {
+        logger.error('Error submitting tax verification:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to submit tax verification'
+        });
+      }
+    }),
+
+  // Submit verification for review
+  submitForReview: protectedProcedure
+    .input(z.object({
+      verificationId: z.string().uuid()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await creatorVerificationService.submitForReview(
+          ctx.user.id,
+          input.verificationId
+        );
+      } catch (error) {
+        logger.error('Error submitting verification for review:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to submit verification for review'
+        });
+      }
+    }),
+
+  // Get verification status
+  getVerificationStatus: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        return await creatorVerificationService.getVerificationStatus(ctx.user.id);
+      } catch (error) {
+        logger.error('Error getting verification status:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get verification status'
+        });
+      }
+    }),
+});
+
+// Creator Monetization Router
+const creatorMonetizationRouter = router({
+  // Create Stripe Connect account
+  createStripeAccount: protectedProcedure
+    .input(z.object({
+      verificationId: z.string().uuid(),
+      email: z.string().email(),
+      country: z.string().default('US')
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await stripeService.createConnectAccount(
+          ctx.user.id,
+          input.verificationId,
+          input.email,
+          input.country
+        );
+      } catch (error) {
+        logger.error('Error creating Stripe Connect account:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create payment account'
+        });
+      }
+    }),
+
+  // Create subscription for persona
+  createSubscription: protectedProcedure
+    .input(z.object({
+      creatorId: z.string().uuid(),
+      personaId: z.string().uuid(),
+      priceId: z.string(),
+      tierType: z.enum(['basic', 'average', 'advanced'])
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await stripeService.createSubscription(
+          ctx.user.id, // payerId
+          input.creatorId,
+          input.personaId,
+          input.priceId,
+          input.tierType
+        );
+      } catch (error) {
+        logger.error('Error creating subscription:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create subscription'
+        });
+      }
+    }),
+
+  // Create time-based payment
+  createTimeBasedPayment: protectedProcedure
+    .input(z.object({
+      creatorId: z.string().uuid(),
+      personaId: z.string().uuid(),
+      sessionMinutes: z.number().min(1).max(1440), // Max 24 hours
+      hourlyRate: z.number().min(0.01).max(1000)
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await stripeService.createTimeBasedPayment(
+          ctx.user.id, // payerId
+          input.creatorId,
+          input.personaId,
+          input.sessionMinutes,
+          input.hourlyRate
+        );
+      } catch (error) {
+        logger.error('Error creating time-based payment:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create payment'
+        });
+      }
+    }),
+
+  // Get creator earnings summary
+  getEarningsSummary: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        // TODO: Implement earnings summary calculation
+        return {
+          totalEarnings: 0,
+          monthlyEarnings: 0,
+          pendingPayouts: 0,
+          totalSubscribers: 0,
+          activeSubscriptions: 0
+        };
+      } catch (error) {
+        logger.error('Error getting earnings summary:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get earnings summary'
+        });
+      }
+    }),
+
+  // Stripe webhook endpoint (handled via raw HTTP)
+  processWebhook: protectedProcedure
+    .input(z.object({
+      body: z.string(),
+      signature: z.string()
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        await stripeService.processWebhook(input.body, input.signature);
+        return { success: true };
+      } catch (error) {
+        logger.error('Error processing Stripe webhook:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to process webhook'
+        });
+      }
+    }),
+});
+
+// Persona Monetization Settings Router
+const personaMonetizationRouter = router({
+  // Configure persona monetization
+  configureMonetization: protectedProcedure
+    .input(z.object({
+      personaId: z.string().uuid(),
+      isMonetized: z.boolean(),
+      pricingModel: z.enum(['subscription_only', 'time_based_only', 'hybrid', 'free_with_limits']),
+      basicTierPrice: z.number().min(0).optional(),
+      averageTierPrice: z.number().min(0).optional(),
+      advancedTierPrice: z.number().min(0).optional(),
+      timeBasedEnabled: z.boolean().optional(),
+      hourlyRate: z.number().min(0).optional(),
+      freeMessagesPerDay: z.number().min(0).default(3),
+      freeMinutesPerDay: z.number().min(0).default(10)
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        // Update persona monetization settings
+        await db
+          .insert(personaMonetization)
+          .values({
+            personaId: input.personaId,
+            userId: ctx.user.id,
+            isMonetized: input.isMonetized,
+            pricingModel: input.pricingModel,
+            basicTierPrice: input.basicTierPrice?.toString(),
+            averageTierPrice: input.averageTierPrice?.toString(),
+            advancedTierPrice: input.advancedTierPrice?.toString(),
+            timeBasedEnabled: input.timeBasedEnabled || false,
+            hourlyRate: input.hourlyRate?.toString(),
+            freeMessagesPerDay: input.freeMessagesPerDay,
+            freeMinutesPerDay: input.freeMinutesPerDay
+          })
+          .onConflictDoUpdate({
+            target: personaMonetization.personaId,
+            set: {
+              isMonetized: input.isMonetized,
+              pricingModel: input.pricingModel,
+              basicTierPrice: input.basicTierPrice?.toString(),
+              averageTierPrice: input.averageTierPrice?.toString(),
+              advancedTierPrice: input.advancedTierPrice?.toString(),
+              timeBasedEnabled: input.timeBasedEnabled || false,
+              hourlyRate: input.hourlyRate?.toString(),
+              freeMessagesPerDay: input.freeMessagesPerDay,
+              freeMinutesPerDay: input.freeMinutesPerDay,
+              updatedAt: new Date()
+            }
+          });
+
+        return { success: true };
+      } catch (error) {
+        logger.error('Error configuring persona monetization:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to configure monetization'
+        });
+      }
+    }),
+
+  // Get persona monetization settings
+  getMonetizationSettings: protectedProcedure
+    .input(z.object({
+      personaId: z.string().uuid()
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const settings = await db
+          .select()
+          .from(personaMonetization)
+          .where(and(
+            eq(personaMonetization.personaId, input.personaId),
+            eq(personaMonetization.userId, ctx.user.id)
+          ))
+          .limit(1);
+
+        if (settings.length === 0) {
+          return {
+            isMonetized: false,
+            pricingModel: 'free_with_limits',
+            freeMessagesPerDay: 3,
+            freeMinutesPerDay: 10
+          };
+        }
+
+        const setting = settings[0];
+        return {
+          ...setting,
+          basicTierPrice: setting.basicTierPrice ? parseFloat(setting.basicTierPrice) : undefined,
+          averageTierPrice: setting.averageTierPrice ? parseFloat(setting.averageTierPrice) : undefined,
+          advancedTierPrice: setting.advancedTierPrice ? parseFloat(setting.advancedTierPrice) : undefined,
+          hourlyRate: setting.hourlyRate ? parseFloat(setting.hourlyRate) : undefined,
+          createdAt: setting.createdAt.toISOString(),
+          updatedAt: setting.updatedAt.toISOString()
+        };
+      } catch (error) {
+        logger.error('Error getting persona monetization settings:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get monetization settings'
+        });
+      }
+    }),
+});
+
 // Main app router
 export const appRouter = router({
   auth: authRouter,
@@ -1112,6 +1509,9 @@ export const appRouter = router({
   chat: chatRouter,
   media: mediaRouter,
   social: socialRouter,
+  creatorVerification: creatorVerificationRouter,
+  creatorMonetization: creatorMonetizationRouter,
+  personaMonetization: personaMonetizationRouter,
 });
 
 export type AppRouter = typeof appRouter;
