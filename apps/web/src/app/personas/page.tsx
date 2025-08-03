@@ -238,33 +238,7 @@ function PersonasPageContent() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-lg bg-purple-100">
-                <svg
-                  className="w-6 h-6 text-purple-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
-                  Learning Active
-                </p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {personas?.filter((p) => p.learningEnabled).length || 0}
-                </p>
-              </div>
-            </div>
-          </div>
+
 
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center">
@@ -324,8 +298,8 @@ function PersonasPageContent() {
                     <p className="text-sm text-gray-600">Interactions</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-green-600">85%</p>
-                    <p className="text-sm text-gray-600">Learning</p>
+                    <p className="text-2xl font-bold text-green-600">Active</p>
+                    <p className="text-sm text-gray-600">Status</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-purple-600">
@@ -340,12 +314,7 @@ function PersonasPageContent() {
                 </div>
 
                 <div className="flex space-x-3">
-                  <button
-                    onClick={() => router.push("/learning")}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Start Learning Session
-                  </button>
+
                   <button
                     onClick={() => router.push("/chat")}
                     className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
@@ -550,37 +519,7 @@ function PersonasPageContent() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 ml-3">
-                Start Learning
-              </h3>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Begin an AI learning session to improve your personas
-            </p>
-            <button
-              onClick={() => router.push("/learning")}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Begin Interview
-            </button>
-          </div>
+
 
           <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
             <div className="flex items-center mb-4">

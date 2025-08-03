@@ -36,7 +36,7 @@ export function AuthMiddleware() {
       "/social",
       "/analytics",
       "/personas",
-      "/learning",
+  
       "/monetization",
       "/privacy",
     ],

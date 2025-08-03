@@ -74,7 +74,6 @@ function DashboardPageContent() {
   const navigationItems = [
     { name: "Dashboard", href: "/dashboard", icon: "🏠" },
     { name: "Personas", href: "/personas", icon: "👤" },
-    { name: "Learning", href: "/learning", icon: "📚" },
     { name: "Account", href: "/account", icon: "⚙️" },
     { name: "Analytics", href: "/analytics", icon: "📊" },
   ];
@@ -869,87 +868,7 @@ function DashboardPageContent() {
             </p>
           </div>
 
-          {/* Learning Session Encouragement Section */}
-          <div className="mb-8">
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-6">
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                    <svg
-                      className="w-6 h-6 text-white"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                      />
-                    </svg>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-purple-900 mb-2">
-                    🚀 Start Your Learning Journey
-                  </h3>
-                  <p className="text-purple-700 mb-4">
-                    Get the most out of your digital persona by starting with
-                    structured learning sessions. These guided conversations
-                    help us understand your personality, values, and unique
-                    traits more effectively.
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={() => router.push("/learning")}
-                      className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg"
-                    >
-                      <svg
-                        className="w-4 h-4 mr-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M13 10V3L4 14h7v7l9-11h-7z"
-                        />
-                      </svg>
-                      Start Learning Session
-                    </button>
-                    <button
-                      onClick={() =>
-                        router.push("/learning?type=interactive_discussion")
-                      }
-                      className="inline-flex items-center px-4 py-2 border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 transition-colors"
-                    >
-                      <svg
-                        className="w-4 h-4 mr-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                        />
-                      </svg>
-                      Interactive Discussion
-                    </button>
-                  </div>
-                  <div className="mt-3 text-sm text-purple-600">
-                    💡 Tip: Learning sessions use both text and audio to create
-                    a more natural conversation experience.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+
 
           {/* Chat Window */}
           <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8 shadow-lg">
@@ -1655,35 +1574,7 @@ function DashboardPageContent() {
               </button>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
-              <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mb-4">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Learning Sessions
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Structured conversations to build your digital persona
-              </p>
-              <button
-                onClick={() => router.push("/learning")}
-                className="text-purple-600 hover:text-purple-500 font-medium"
-              >
-                Start Learning →
-              </button>
-            </div>
+
 
             <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
               <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
@@ -1759,9 +1650,8 @@ function DashboardPageContent() {
                 personality insights.
               </p>
               <div className="mt-4 text-sm text-green-600">
-                💡 <strong>Pro tip:</strong> Start with a learning session to
-                get the best results, or jump into a general discussion right
-                here with voice and text!
+                💡 <strong>Pro tip:</strong> Jump into a conversation right
+                here with voice and text to start building your digital persona!
               </div>
             </div>
           </div>
