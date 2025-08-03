@@ -22,38 +22,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # MinIO (S3-compatible storage)
-  minio:
-    image: minio/minio:latest
-    container_name: dpp-local-minio
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    networks:
-      - dpp-local
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 30s
-      timeout: 20s
-      retries: 3
 
-  # MinIO Client - Creates bucket on startup
-  minio-init:
-    image: minio/mc:latest
-    container_name: dpp-local-minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    networks:
-      - dpp-local
-    entrypoint: >
-      /bin/sh -c " mc alias set myminio http://minio:9000 minioadmin minioadmin123; mc mb myminio/digital-persona-uploads || true; mc policy set public myminio/digital-persona-uploads; echo 'MinIO bucket created and configured'; "
 
   # Backend API Server
   backend:
@@ -67,12 +36,13 @@ services:
       DATABASE_URL: postgresql://dpp_admin:local_dev_password@postgres:5432/digital_persona
       JWT_SECRET: local-development-jwt-secret-change-in-production
       CORS_ORIGIN: http://localhost:3000,http://frontend:3000
-      AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin123
-      AWS_ENDPOINT_URL: http://minio:9000
-      S3_BUCKET: digital-persona-uploads
-      S3_FORCE_PATH_STYLE: "true"
+      # AWS S3 Configuration (using real AWS S3)
+      # Set your AWS credentials in .env file
+      AWS_REGION: us-west-1
+      S3_BUCKET: local-mars-dpp-uploads
+      # AWS credentials should be loaded from .env file:
+      # AWS_ACCESS_KEY_ID: your-aws-access-key-id
+      # AWS_SECRET_ACCESS_KEY: your-aws-secret-access-key
     ports:
       - "3001:3001"
     volumes:
@@ -83,8 +53,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   # Frontend Web App
@@ -128,8 +96,7 @@ services:
 volumes:
   postgres_data:
     name: dpp-local-postgres-data
-  minio_data:
-    name: dpp-local-minio-data
+
   redis_data:
     name: dpp-local-redis-data
 

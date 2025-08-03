@@ -57,12 +57,6 @@ else
     echo -e "${RED}❌ PostgreSQL is not ready${NC}"
 fi
 
-# Check MinIO
-if curl -f http://localhost:9000/minio/health/live > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ MinIO is ready${NC}"
-else
-    echo -e "${YELLOW}⚠️  MinIO may still be starting up${NC}"
-fi
 
 # Check Redis
 if docker-compose -f docker-compose.local.yml exec -T redis redis-cli ping | grep -q PONG; then
@@ -77,7 +71,7 @@ echo
 echo -e "${YELLOW}📋 Service URLs:${NC}"
 echo "  Frontend:     http://localhost:3000"
 echo "  Backend API:  http://localhost:3001"
-echo "  MinIO Console: http://localhost:9001 (minioadmin / minioadmin123)"
+echo "  AWS S3:       Use AWS Console or CLI with your configured credentials"
 echo "  PostgreSQL:   localhost:5432 (dpp_admin / local_dev_password)"
 echo "  Redis:        localhost:6379"
 echo

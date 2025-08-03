@@ -11,24 +11,17 @@ function initializeS3Config() {
     // Debug logging for S3 configuration
     console.log("🔧 S3 Configuration:", {
       bucket: process.env.S3_BUCKET || "dev-dev01-dpp-uploads",
-      region: process.env.AWS_REGION || "us-east-1",
+      region: process.env.AWS_REGION || "us-west-1",
       hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
       hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
-      endpointUrl: process.env.AWS_ENDPOINT_URL || "default AWS",
-      forcePathStyle: process.env.S3_FORCE_PATH_STYLE,
     });
 
     s3Client = new S3Client({
-      region: process.env.AWS_REGION || "us-east-1",
+      region: process.env.AWS_REGION || "us-west-1",
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
       },
-      // Support for local MinIO development
-      ...(process.env.AWS_ENDPOINT_URL && {
-        endpoint: process.env.AWS_ENDPOINT_URL,
-        forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
-      }),
     });
 
     S3_BUCKET = process.env.S3_BUCKET || "dev-dev01-dpp-uploads";
@@ -79,12 +72,10 @@ export async function generatePresignedUrl(
   const expiresIn = 300; // 5 minutes
   const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn });
 
-  // Build S3 URL - handle MinIO vs AWS differently
-  const s3Url = process.env.AWS_ENDPOINT_URL
-    ? `${process.env.AWS_ENDPOINT_URL}/${S3_BUCKET}/${s3Key}`
-    : `https://${S3_BUCKET}.s3.${
-        process.env.AWS_REGION || "us-east-1"
-      }.amazonaws.com/${s3Key}`;
+  // Build S3 URL for AWS
+  const s3Url = `https://${S3_BUCKET}.s3.${
+    process.env.AWS_REGION || "us-west-1"
+  }.amazonaws.com/${s3Key}`;
 
   return {
     fileId,
