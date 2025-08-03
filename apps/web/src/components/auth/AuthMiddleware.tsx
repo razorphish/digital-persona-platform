@@ -90,7 +90,7 @@ export function AuthMiddleware() {
           console.warn(
             `Access denied to protected route: ${pathname} - no valid token found`
           );
-          router.replace("/auth/login");
+          router.replace("/");
         } else {
           console.log(
             `Protected route access delayed - token exists, waiting for auth context`
@@ -102,7 +102,7 @@ export function AuthMiddleware() {
               console.warn(
                 `Final redirect to login - auth state not resolved for ${pathname}`
               );
-              router.replace("/auth/login");
+              router.replace("/");
             }
           }, 300); // Additional delay if token exists
         }
