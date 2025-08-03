@@ -1,140 +1,137 @@
 import Link from "next/link";
 import { Button } from "../components/ui/Button";
+import { Footer } from "../components/Footer";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
       {/* Navigation */}
       <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+          <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                Digital Persona Platform
-              </h1>
+              <img src="/logo.svg" alt="Hibiji" className="h-8 w-auto" />
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/auth/login">
-                <Button variant="ghost">Login</Button>
+                <Button variant="ghost">Sign In</Button>
               </Link>
               <Link href="/auth/register">
-                <Button>Get Started</Button>
+                <Button>Join Now</Button>
               </Link>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center">
-          <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
-            <span className="block">Create Your</span>
-            <span className="block text-indigo-600">Digital Persona</span>
-          </h1>
-          <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-            Build an AI-powered digital version of yourself through intelligent
-            conversations and social media integration. Discover insights about
-            your personality and preferences.
-          </p>
-          <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
-            <div className="rounded-md shadow">
-              <Link href="/auth/register">
-                <Button size="lg" className="w-full">
-                  Start Building Your Persona
-                </Button>
-              </Link>
-            </div>
-            <div className="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
+      {/* Main Content */}
+      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
+        <div className="max-w-md w-full">
+          {/* Hero Section */}
+          <div className="text-center mb-8">
+            <img src="/logo.svg" alt="Hibiji" className="h-12 w-auto mx-auto mb-6" />
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">
+              Welcome to Hibiji
+            </h1>
+            <p className="text-lg text-gray-600 mb-2">
+              Connect with friends and build your digital persona.
+            </p>
+            <p className="text-base text-gray-500">
+              Join the social platform where AI helps you discover and share your authentic self.
+            </p>
+          </div>
+
+          {/* Login Form */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 text-center">
+              Sign in to Hibiji
+            </h2>
+            <form className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email or username
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter your email"
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter your password"
+                />
+              </div>
               <Link href="/auth/login">
-                <Button variant="outline" size="lg" className="w-full">
+                <Button size="lg" className="w-full">
                   Sign In
                 </Button>
               </Link>
+            </form>
+            
+            <div className="mt-4 text-center">
+              <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-800">
+                Forgot your password?
+              </Link>
             </div>
           </div>
-        </div>
 
-        {/* Features Section */}
-        <div className="mt-20">
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                  />
+          {/* Sign Up Section */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-3 text-center">
+              New to Hibiji?
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-4">
+              Join millions of people sharing their stories and building their digital personas.
+            </p>
+            <Link href="/auth/register">
+              <Button variant="outline" size="lg" className="w-full">
+                Create Account
+              </Button>
+            </Link>
+          </div>
+
+          {/* Features Preview */}
+          <div className="mt-8 grid grid-cols-1 gap-4">
+            <div className="flex items-center space-x-3 text-sm text-gray-600">
+              <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-2-2V10a2 2 0 012-2h2m2-4h6a2 2 0 012 2v6a2 2 0 01-2 2h-6l-4 4V8a2 2 0 012-2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900">
-                AI-Powered Chat
-              </h3>
-              <p className="mt-2 text-gray-600">
-                Engage in intelligent conversations that help build and refine
-                your digital persona through natural dialogue.
-              </p>
+              <span>AI-powered conversations that understand you</span>
             </div>
-
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
+            <div className="flex items-center space-x-3 text-sm text-gray-600">
+              <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900">
-                Social Media Integration
-              </h3>
-              <p className="mt-2 text-gray-600">
-                Connect your social media accounts to automatically learn from
-                your posts and interactions.
-              </p>
+              <span>Connect with friends and discover new communities</span>
             </div>
-
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
+            <div className="flex items-center space-x-3 text-sm text-gray-600">
+              <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900">
-                Personality Insights
-              </h3>
-              <p className="mt-2 text-gray-600">
-                Get detailed insights into your personality traits, preferences,
-                and behavioral patterns.
-              </p>
+              <span>Privacy-focused with complete control over your data</span>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }

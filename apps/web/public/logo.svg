@@ -1,0 +1,11 @@
+<svg width="120" height="40" viewBox="0 0 120 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="20" cy="20" r="18" fill="#4F46E5" stroke="#3730A3" stroke-width="2"/>
+  
+  <!-- Letter "h" in white -->
+  <path d="M12 10v20M12 18h8M20 10v20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Company name -->
+  <text x="48" y="16" font-family="Arial, sans-serif" font-size="14" font-weight="600" fill="#1F2937">hibiji</text>
+  <text x="48" y="30" font-family="Arial, sans-serif" font-size="8" fill="#6B7280">SOCIAL PLATFORM</text>
+</svg>

@@ -8,9 +8,20 @@ import { AuthMiddleware } from "../components/auth/AuthMiddleware";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Hibiji - AI-Powered Digital Persona Platform",
+  title: "Hibiji - Connect, Share, and Build Your Digital Persona",
   description:
-    "Create and manage your digital personas with AI-powered conversations and social media integration",
+    "Join Hibiji, the social platform where you connect with friends and build your AI-powered digital persona through conversations and shared experiences.",
+  keywords: "social media, digital persona, AI, social network, connect, share",
+  openGraph: {
+    title: "Hibiji - Connect, Share, and Build Your Digital Persona",
+    description: "Join Hibiji, the social platform where you connect with friends and build your AI-powered digital persona.",
+    type: "website",
+  },
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
