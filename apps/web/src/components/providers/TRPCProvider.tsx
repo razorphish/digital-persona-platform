@@ -90,7 +90,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         AuthUtils.clearTokens();
 
         // Redirect to login page
-        window.location.href = "/auth/login";
+        window.location.href = "/";
       }
     }
   };
@@ -167,7 +167,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
                 // Add a small delay to prevent race conditions
                 setTimeout(() => {
                   if (!window.location.pathname.startsWith("/auth/")) {
-                    window.location.href = "/auth/login";
+                    window.location.href = "/";
                   }
                 }, 100);
               } else {

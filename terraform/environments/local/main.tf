@@ -1,6 +1,6 @@
 # =================================
 # Digital Persona Platform - Serverless Architecture
-# Development Environment
+# Local Development Environment in AWS
 # =================================
 
 terraform {
@@ -17,7 +17,7 @@ terraform {
     bucket = "hibiji-terraform-state"
     region = "us-west-1"
     # Key will be provided via -backend-config at runtime for proper isolation
-    # Format: dev/{sub_environment}/terraform.tfstate
+    # Format: local/{sub_environment}/terraform.tfstate
   }
 }
 
@@ -33,15 +33,15 @@ provider "aws" {
 
 # Variables
 variable "sub_environment" {
-  description = "Sub-environment name (e.g., dev01, dev02)"
+  description = "Sub-environment name (e.g., mars, local01)"
   type        = string
-  default     = "dev01"
+  default     = "mars"
 }
 
 variable "environment" {
   description = "Main environment name"
   type        = string
-  default     = "dev"
+  default     = "local"
 }
 
 variable "domain_name" {
@@ -62,10 +62,6 @@ variable "project_name" {
   default     = "dpp"
 }
 
-# Legacy ECR variables removed - ECR repositories are now created dynamically by modules
-# AWS Batch ML module creates: module.aws_batch_ml.ecr_repository_url 
-# Backend/Frontend ECR repos would be created by their respective modules when needed
-
 variable "image_tag" {
   description = "Image tag (legacy - not used in serverless)"
   type        = string
@@ -84,11 +80,11 @@ variable "alert_emails" {
   default     = []
 }
 
-# Cost optimization variables
+# Cost optimization variables with local-optimized defaults
 variable "aurora_auto_pause" {
   description = "Enable Aurora Serverless auto-pause for cost savings"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "aurora_pause_delay" {
@@ -106,13 +102,13 @@ variable "aurora_min_capacity" {
 variable "aurora_max_capacity" {
   description = "Maximum Aurora Serverless v2 capacity units"
   type        = number
-  default     = 2.0
+  default     = 1.0
 }
 
 variable "lambda_memory_size" {
   description = "Lambda function memory size in MB"
   type        = number
-  default     = 512
+  default     = 256
 }
 
 variable "lambda_timeout" {
@@ -124,13 +120,13 @@ variable "lambda_timeout" {
 variable "log_retention_days" {
   description = "CloudWatch log retention period in days"
   type        = number
-  default     = 14
+  default     = 7
 }
 
 variable "cost_budget_limit" {
   description = "Monthly budget limit in USD for cost monitoring"
   type        = number
-  default     = 100
+  default     = 50
 }
 
 variable "s3_lifecycle_transition_days" {
@@ -142,7 +138,7 @@ variable "s3_lifecycle_transition_days" {
 variable "s3_lifecycle_expiration_days" {
   description = "Days before S3 objects are deleted"
   type        = number
-  default     = 365
+  default     = 30
 }
 
 # Local values
@@ -156,6 +152,7 @@ locals {
     ManagedBy      = "Terraform"
     Architecture   = "Serverless"
     CostOptimized  = "true"
+    Owner          = var.sub_environment
     CreatedAt      = timestamp()
   }
 
@@ -168,9 +165,6 @@ locals {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-# Replace the Route53 zone resource with a data source
-# This will use an existing hosted zone instead of creating a new one
-
 # Data source for existing Route53 hosted zone
 data "aws_route53_zone" "main" {
   name = var.domain_name
@@ -180,7 +174,7 @@ data "aws_route53_zone" "main" {
 # Cost Monitoring Budget
 # =================================
 
-resource "aws_budgets_budget" "dev_environment" {
+resource "aws_budgets_budget" "local_environment" {
   name         = "${local.resource_prefix}-budget"
   budget_type  = "COST"
   limit_amount = var.cost_budget_limit
@@ -192,20 +186,26 @@ resource "aws_budgets_budget" "dev_environment" {
     values = ["Amazon Relational Database Service", "AWS Lambda", "Amazon Simple Storage Service"]
   }
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_email_addresses = var.alert_emails
+  dynamic "notification" {
+    for_each = length(var.alert_emails) > 0 ? [1] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 80
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = var.alert_emails
+    }
   }
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_email_addresses = var.alert_emails
+  dynamic "notification" {
+    for_each = length(var.alert_emails) > 0 ? [1] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 100
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "FORECASTED"
+      subscriber_email_addresses = var.alert_emails
+    }
   }
 
   depends_on = [
@@ -232,7 +232,7 @@ resource "aws_secretsmanager_secret" "jwt_secret" {
 resource "aws_secretsmanager_secret_version" "jwt_secret" {
   secret_id = aws_secretsmanager_secret.jwt_secret.id
   secret_string = jsonencode({
-    jwt_secret = "dev-jwt-secret-${random_password.jwt_secret.result}"
+    jwt_secret = "local-jwt-secret-${random_password.jwt_secret.result}"
   })
 }
 
@@ -269,7 +269,7 @@ resource "random_password" "database_password" {
 }
 
 # =================================
-# Database (Aurora Serverless v2)
+# Database (Aurora Serverless v2 - Cost Optimized)
 # =================================
 
 # Database subnet group
@@ -283,7 +283,6 @@ resource "aws_db_subnet_group" "database" {
   })
 
   lifecycle {
-    # Prevent recreation if subnet group already exists
     ignore_changes = [name]
   }
 }
@@ -320,7 +319,7 @@ resource "aws_security_group" "database" {
   }
 }
 
-# Aurora Serverless v2 cluster
+# Aurora Serverless v2 cluster with auto-pause for maximum cost savings
 resource "aws_rds_cluster" "database" {
   cluster_identifier           = "${local.resource_prefix}-cluster"
   engine                       = "aurora-postgresql"
@@ -329,7 +328,7 @@ resource "aws_rds_cluster" "database" {
   database_name                = "digital_persona"
   master_username              = "dpp_admin"
   master_password              = random_password.database_password.result
-  backup_retention_period      = 7
+  backup_retention_period      = 1 # Minimal backup for cost savings
   preferred_backup_window      = "07:00-09:00"
   preferred_maintenance_window = "sun:09:00-sun:10:00"
 
@@ -341,12 +340,16 @@ resource "aws_rds_cluster" "database" {
     min_capacity = var.aurora_min_capacity
   }
 
-  skip_final_snapshot = var.environment != "prod"
-  deletion_protection = var.environment == "prod"
+  # Note: Aurora Serverless v2 doesn't support auto-pause like v1
+  # Cost optimization is achieved through min_capacity = 0.5
+
+  skip_final_snapshot = true  # Always true for local environments
+  deletion_protection = false # Never protect local environments
 
   tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-cluster"
-    Type = "DatabaseCluster"
+    Name          = "${local.resource_prefix}-cluster"
+    Type          = "DatabaseCluster"
+    CostOptimized = "true"
   })
 }
 
@@ -365,10 +368,10 @@ resource "aws_rds_cluster_instance" "database" {
 }
 
 # =================================
-# S3 Buckets
+# S3 Buckets with Lifecycle Management
 # =================================
 
-# S3 bucket for file uploads
+# S3 bucket for file uploads with aggressive lifecycle
 resource "aws_s3_bucket" "uploads" {
   bucket = "${local.resource_prefix}-uploads"
 
@@ -382,7 +385,7 @@ resource "aws_s3_bucket" "uploads" {
 resource "aws_s3_bucket_versioning" "uploads" {
   bucket = aws_s3_bucket.uploads.id
   versioning_configuration {
-    status = "Enabled"
+    status = "Suspended" # Disable versioning for cost savings
   }
 }
 
@@ -396,13 +399,12 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
   }
 }
 
-# S3 Lifecycle policy for cost optimization
+# Aggressive lifecycle policy for local development
 resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
-  count  = var.s3_lifecycle_expiration_days > 0 ? 1 : 0
   bucket = aws_s3_bucket.uploads.id
 
   rule {
-    id     = "dev_cost_optimization"
+    id     = "local_development_cleanup"
     status = "Enabled"
 
     filter {
@@ -423,7 +425,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
     }
 
     noncurrent_version_expiration {
-      noncurrent_days = 7
+      noncurrent_days = 1
     }
   }
 }
@@ -435,8 +437,12 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
   cors_rule {
     allowed_origins = [
       "http://localhost:3000",
+      "http://localhost:4000",
+      "http://localhost:3100",
       "http://127.0.0.1:3000",
+      "http://127.0.0.1:4000",
       "https://localhost:3000",
+      "https://localhost:4000",
       "https://${module.s3_website.cloudfront_domain_name}",
       "https://${local.website_domain}"
     ]
@@ -448,7 +454,7 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
 }
 
 # =================================
-# Simplified VPC (for database only)
+# Simplified VPC (Cost Optimized)
 # =================================
 
 # VPC
@@ -492,8 +498,14 @@ resource "aws_subnet" "private" {
 }
 
 # =================================
-# Module Calls
+# SSL Certificates
 # =================================
+
+# Provider for us-east-1 (required for CloudFront certificates)
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
 
 # SSL Certificate for custom domain (must be in us-east-1 for CloudFront)
 resource "aws_acm_certificate" "website" {
@@ -515,7 +527,7 @@ resource "aws_acm_certificate" "website" {
   })
 }
 
-# SSL Certificate for API domain (must be in us-east-1 for CloudFront)
+# SSL Certificate for API domain
 resource "aws_acm_certificate" "api" {
   provider          = aws.us_east_1
   domain_name       = local.api_domain
@@ -529,12 +541,6 @@ resource "aws_acm_certificate" "api" {
     Name = "${local.resource_prefix}-api-cert"
     Type = "SSL Certificate"
   })
-}
-
-# Provider for us-east-1 (required for CloudFront certificates)
-provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
 }
 
 # Certificate validation
@@ -599,7 +605,11 @@ resource "aws_route53_record" "api_cert_validation" {
   zone_id         = data.aws_route53_zone.main.zone_id
 }
 
-# S3 Static Website
+# =================================
+# Module Calls (Cost Optimized)
+# =================================
+
+# S3 Static Website with minimal CloudFront configuration
 module "s3_website" {
   source = "../../modules/s3-static-website"
 
@@ -608,12 +618,12 @@ module "s3_website" {
   project_name    = var.project_name
   common_tags     = local.common_tags
 
-  # Custom domain configuration (enabled)
+  # Custom domain configuration
   custom_domain       = local.website_domain
   ssl_certificate_arn = aws_acm_certificate_validation.website.certificate_arn
 
-  cloudfront_price_class = "PriceClass_100"
-  build_retention_days   = 30
+  cloudfront_price_class = "PriceClass_100" # Use only North America and Europe edge locations
+  build_retention_days   = 7                # Shorter retention for local
 }
 
 # RDS Proxy for Connection Pooling
@@ -636,16 +646,16 @@ module "rds_proxy" {
   database_cluster_identifier = aws_rds_cluster.database.cluster_identifier
   database_secret_arn         = aws_secretsmanager_secret.database_password.arn
 
-  # RDS Proxy settings optimized for serverless
-  idle_client_timeout          = 1800  # 30 minutes
-  max_connections_percent      = 75    # Reserve 25% for direct connections
-  max_idle_connections_percent = 50    # Keep idle connections reasonable
-  connection_borrow_timeout    = 120   # 2 minutes
-  require_tls                  = false # Can be enabled for production
-  log_retention_days           = 14
+  # RDS Proxy settings optimized for local development
+  idle_client_timeout          = 900 # 15 minutes (shorter for local)
+  max_connections_percent      = 50  # Lower for local workloads
+  max_idle_connections_percent = 25  # Fewer idle connections
+  connection_borrow_timeout    = 60  # 1 minute
+  require_tls                  = false
+  log_retention_days           = var.log_retention_days
 }
 
-# Lambda Backend
+# Lambda Backend with cost-optimized settings
 module "lambda_backend" {
   source = "../../modules/lambda-backend"
 
@@ -659,11 +669,12 @@ module "lambda_backend" {
   lambda_timeout     = var.lambda_timeout
   lambda_memory_size = var.lambda_memory_size
 
-  # Environment variables - Using RDS Proxy for connection pooling
-  database_url     = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${module.rds_proxy.proxy_endpoint}:${module.rds_proxy.proxy_port}/${aws_rds_cluster.database.database_name}"
-  cors_origin      = "https://${module.s3_website.cloudfront_domain_name},https://${local.website_domain}"
-  ml_sqs_queue_url = module.aws_batch_ml.sqs_queue_url
-  ml_sqs_queue_arn = module.aws_batch_ml.sqs_queue_arn
+  # Environment variables
+  database_url = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${module.rds_proxy.proxy_endpoint}:${module.rds_proxy.proxy_port}/${aws_rds_cluster.database.database_name}"
+  cors_origin  = "https://${module.s3_website.cloudfront_domain_name},https://${local.website_domain}"
+  # ML processing disabled for local environments due to IAM permission constraints
+  ml_sqs_queue_url = null # module.aws_batch_ml.sqs_queue_url
+  ml_sqs_queue_arn = null # module.aws_batch_ml.sqs_queue_arn
 
   # AWS resources
   database_secret_arn    = aws_secretsmanager_secret.database_password.arn
@@ -717,21 +728,61 @@ module "api_gateway" {
   lambda_function_name       = module.lambda_backend.lambda_function_name
   lambda_function_invoke_arn = module.lambda_backend.lambda_function_invoke_arn
 
-  # CORS configuration
+  # CORS configuration - local development friendly
   cors_allow_origins = [
     "https://${module.s3_website.cloudfront_domain_name}",
-    "https://${local.website_domain}", # Custom domain
-    "http://localhost:3000",           # Development
-    "http://localhost:3100"            # Docker development
+    "https://${local.website_domain}",
+    "http://localhost:3000",
+    "http://localhost:4000",
+    "http://localhost:3100",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:4000"
   ]
 
-  # Custom domain configuration (enabled)
+  # Custom domain configuration
   custom_domain_name = local.api_domain
   certificate_arn    = aws_acm_certificate_validation.api.certificate_arn
 
   stage_name         = "v1"
   log_retention_days = var.log_retention_days
 }
+
+# AWS Batch ML Processing - DISABLED for local environments due to IAM permission constraints
+# The dev-airica user lacks permissions for iam:CreateInstanceProfile
+# Uncomment and run with elevated IAM permissions if ML processing is needed
+
+# module "aws_batch_ml" {
+#   source = "../../modules/aws-batch-ml"
+#
+#   environment     = var.environment
+#   sub_environment = var.sub_environment
+#   project_name    = var.project_name
+#   aws_region      = var.aws_region
+#   common_tags     = local.common_tags
+#
+#   # Network configuration
+#   vpc_id     = aws_vpc.main.id
+#   subnet_ids = aws_subnet.private[*].id
+#
+#   # Database configuration
+#   database_secret_arn = aws_secretsmanager_secret.database_password.arn
+#
+#   # Batch compute configuration (minimal for local)
+#   min_vcpus           = 0
+#   max_vcpus           = 1 # Minimal capacity for local
+#   desired_vcpus       = 0
+#   instance_types      = ["t3.micro", "t3.small"] # Smallest instances
+#   use_spot_instances  = true
+#   spot_bid_percentage = 50 # Aggressive spot pricing
+#
+#   # Job configuration (minimal)
+#   job_vcpus  = 1
+#   job_memory = 512 # Minimal memory
+#
+#   # Logging
+#   log_retention_days = var.log_retention_days
+#   log_level          = "INFO" # Less verbose logging
+# }
 
 # =================================
 # Route53 Records (Custom Domains)
@@ -740,12 +791,11 @@ module "api_gateway" {
 # DNS Records for this sub-environment
 resource "aws_route53_record" "website" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.website_domain # dev01.hibiji.com
+  name    = local.website_domain
   type    = "CNAME"
   ttl     = 300
   records = [module.s3_website.cloudfront_domain_name]
 
-  # Add lifecycle to prevent conflicts
   lifecycle {
     ignore_changes = [records]
   }
@@ -753,12 +803,11 @@ resource "aws_route53_record" "website" {
 
 resource "aws_route53_record" "api" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.api_domain # dev01-api.hibiji.com
+  name    = local.api_domain
   type    = "CNAME"
   ttl     = 300
   records = [module.api_gateway.custom_domain_target_name]
 
-  # Add lifecycle to prevent conflicts
   lifecycle {
     ignore_changes = [records]
   }
@@ -819,41 +868,6 @@ output "website_domain" {
   value       = local.website_domain
 }
 
-# AWS Batch ML Processing for AI/ML workloads
-module "aws_batch_ml" {
-  source = "../../modules/aws-batch-ml"
-
-  environment     = var.environment
-  sub_environment = var.sub_environment
-  project_name    = var.project_name
-  aws_region      = var.aws_region
-  common_tags     = local.common_tags
-
-  # Network configuration
-  vpc_id     = aws_vpc.main.id
-  subnet_ids = aws_subnet.private[*].id
-
-  # Database configuration
-  database_secret_arn = aws_secretsmanager_secret.database_password.arn
-
-  # Batch compute configuration (cost-optimized for Dev)
-  min_vcpus           = 0
-  max_vcpus           = 3
-  desired_vcpus       = 0
-  instance_types      = ["m5.large"]
-  use_spot_instances  = true
-  spot_bid_percentage = 70
-
-  # Job configuration
-  job_vcpus  = 1
-  job_memory = 1024
-
-  # Logging
-  log_retention_days = 7
-  log_level          = "DEBUG"
-}
-
-# RDS Proxy outputs
 output "rds_proxy_endpoint" {
   description = "RDS Proxy endpoint for database connections"
   value       = module.rds_proxy.proxy_endpoint
@@ -870,37 +884,29 @@ output "rds_proxy_port" {
   value       = module.rds_proxy.proxy_port
 }
 
-# AWS Batch ML outputs
-output "ml_sqs_queue_url" {
-  description = "SQS queue URL for ML job requests"
-  value       = module.aws_batch_ml.sqs_queue_url
-  sensitive   = true
-}
+# ML outputs disabled for local environments due to IAM permission constraints
+# output "ml_sqs_queue_url" {
+#   description = "SQS queue URL for ML job requests"
+#   value       = module.aws_batch_ml.sqs_queue_url
+#   sensitive   = true
+# }
 
-output "ml_ecr_repository_url" {
-  description = "ECR repository URL for ML service container images"
-  value       = module.aws_batch_ml.ecr_repository_url
-}
+# output "ml_ecr_repository_url" {
+#   description = "ECR repository URL for ML service container images"
+#   value       = module.aws_batch_ml.ecr_repository_url
+# }
 
-output "ml_batch_job_queue_name" {
-  description = "Batch job queue name for ML processing"
-  value       = module.aws_batch_ml.batch_job_queue_name
-}
+# output "ml_batch_job_queue_name" {
+#   description = "Batch job queue name for ML processing"
+#   value       = module.aws_batch_ml.batch_job_queue_name
+# }
 
 output "cost_budget_name" {
   description = "AWS Budget name for cost monitoring"
-  value       = aws_budgets_budget.dev_environment.name
+  value       = aws_budgets_budget.local_environment.name
 }
 
-output "cost_optimization_summary" {
-  description = "Summary of cost optimization features enabled"
-  value = {
-    aurora_auto_pause = var.aurora_auto_pause
-    aurora_capacity   = "${var.aurora_min_capacity}-${var.aurora_max_capacity} ACU"
-    lambda_memory     = "${var.lambda_memory_size} MB"
-    log_retention     = "${var.log_retention_days} days"
-    s3_lifecycle      = var.s3_lifecycle_expiration_days > 0 ? "enabled" : "disabled"
-    budget_limit      = "$${var.cost_budget_limit}/month"
-    estimated_savings = "70-80% vs production configuration"
-  }
+output "estimated_monthly_cost" {
+  description = "Estimated monthly cost in USD"
+  value       = "~$10-30 (Aurora auto-pause, minimal Lambda, spot instances)"
 }

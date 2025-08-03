@@ -297,6 +297,31 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
   }
 }
 
+# CORS configuration for file uploads
+resource "aws_s3_bucket_cors_configuration" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  cors_rule {
+    allowed_origins = [
+      "http://localhost:3000",
+      "http://localhost:3100",
+      "http://localhost:4000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3100",
+      "http://127.0.0.1:4000",
+      "https://localhost:3000",
+      "https://localhost:3100",
+      "https://localhost:4000",
+      "https://${module.s3_website.cloudfront_domain_name}",
+      "https://${local.website_domain}"
+    ]
+    allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
+    allowed_headers = ["*"]
+    expose_headers  = ["ETag", "x-amz-server-side-encryption", "x-amz-request-id", "x-amz-id-2"]
+    max_age_seconds = 86400
+  }
+}
+
 # =================================
 # Simplified VPC (for database only)
 # =================================

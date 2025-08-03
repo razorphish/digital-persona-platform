@@ -568,6 +568,36 @@ function LearningPageContent() {
   const [requiresUserInteraction, setRequiresUserInteraction] = useState(false);
   const isRecordingRef = useRef(false);
 
+  // Helper function to determine if an error is microphone-related
+  const isMicrophoneRelatedError = (error: string | null): boolean => {
+    if (!error) return false;
+
+    const microphoneErrorKeywords = [
+      "microphone",
+      "mic",
+      "audio",
+      "recording",
+      "permission",
+      "denied",
+      "blocked",
+      "getUserMedia",
+      "NotAllowedError",
+      "NotFoundError",
+      "DevicesNotFoundError",
+      "PermissionDeniedError",
+      "MediaDevices",
+      "stream",
+      "capture",
+      "input device",
+      "audio device",
+    ];
+
+    const errorLowerCase = error.toLowerCase();
+    return microphoneErrorKeywords.some((keyword) =>
+      errorLowerCase.includes(keyword.toLowerCase())
+    );
+  };
+
   // tRPC queries
   const {
     data: personas,
@@ -611,8 +641,24 @@ function LearningPageContent() {
 
   // tRPC mutations
   const startInterviewMutation = trpc.learning.startInterview.useMutation();
-
   const answerQuestionMutation = trpc.learning.answerQuestion.useMutation();
+
+  // Media mutations for file uploads
+  const requestPresignedUrlMutation =
+    trpc.media.requestPresignedUrl.useMutation();
+  const updateFileStatusMutation = trpc.media.updateFileStatus.useMutation();
+
+  // Create a client object for the uploadFile function
+  const trpcClient = {
+    media: {
+      requestPresignedUrl: {
+        mutate: requestPresignedUrlMutation.mutateAsync,
+      },
+      updateFileStatus: {
+        mutate: updateFileStatusMutation.mutateAsync,
+      },
+    },
+  };
 
   // Initialize with main persona
   useEffect(() => {
@@ -1470,7 +1516,8 @@ function LearningPageContent() {
         tokens.accessToken,
         undefined, // conversationId
         selectedPersonaId, // personaId for learning context
-        (progress) => setAudioUploadProgress(progress)
+        (progress) => setAudioUploadProgress(progress),
+        trpcClient // pass properly structured tRPC client
       );
 
       if (uploadResult.success) {
@@ -2060,60 +2107,65 @@ function LearningPageContent() {
                           </button>
                         </div>
 
-                        {/* Microphone Setup Instructions */}
-                        <MicrophoneSetupInstructions
-                          onTestMicrophone={testMicrophone}
-                          isTesting={isMicTesting}
-                          testResult={micTestResult}
-                          isMobileDevice={isMobileDevice}
-                          requiresUserInteraction={requiresUserInteraction}
-                          onRequestPermission={requestMicrophonePermission}
-                          isRequestingPermission={isRequestingPermission}
-                          onDiagnoseAudio={async () => {
-                            const diagnostics = await diagnoseAudioDevices();
-                            console.log("🔍 Manual diagnostics:", diagnostics);
+                        {/* Microphone Setup Instructions - Only show for audio-related errors */}
+                        {isMicrophoneRelatedError(recordingError) && (
+                          <MicrophoneSetupInstructions
+                            onTestMicrophone={testMicrophone}
+                            isTesting={isMicTesting}
+                            testResult={micTestResult}
+                            isMobileDevice={isMobileDevice}
+                            requiresUserInteraction={requiresUserInteraction}
+                            onRequestPermission={requestMicrophonePermission}
+                            isRequestingPermission={isRequestingPermission}
+                            onDiagnoseAudio={async () => {
+                              const diagnostics = await diagnoseAudioDevices();
+                              console.log(
+                                "🔍 Manual diagnostics:",
+                                diagnostics
+                              );
 
-                            // Type guard to check if devices has audioInputs property
-                            const hasAudioInputs =
-                              diagnostics.devices &&
-                              typeof diagnostics.devices === "object" &&
-                              !Array.isArray(diagnostics.devices) &&
-                              "audioInputs" in diagnostics.devices;
+                              // Type guard to check if devices has audioInputs property
+                              const hasAudioInputs =
+                                diagnostics.devices &&
+                                typeof diagnostics.devices === "object" &&
+                                !Array.isArray(diagnostics.devices) &&
+                                "audioInputs" in diagnostics.devices;
 
-                            // Type assertion for devices when hasAudioInputs is true
-                            const audioDevices = hasAudioInputs
-                              ? (diagnostics.devices as {
-                                  audioInputs: {
-                                    deviceId: string;
-                                    label: string;
-                                    groupId: string;
-                                  }[];
-                                  audioOutputs: number;
-                                  videoInputs: number;
-                                })
-                              : null;
+                              // Type assertion for devices when hasAudioInputs is true
+                              const audioDevices = hasAudioInputs
+                                ? (diagnostics.devices as {
+                                    audioInputs: {
+                                      deviceId: string;
+                                      label: string;
+                                      groupId: string;
+                                    }[];
+                                    audioOutputs: number;
+                                    videoInputs: number;
+                                  })
+                                : null;
 
-                            alert(
-                              `Audio Device Diagnostics:\n\n${
-                                diagnostics.success &&
-                                hasAudioInputs &&
-                                audioDevices
-                                  ? `✅ Found ${
-                                      audioDevices.audioInputs?.length || 0
-                                    } microphone(s)\n\nDevices:\n${
-                                      audioDevices.audioInputs
-                                        ?.map((d) => `• ${d.label}`)
-                                        .join("\n") || "None"
-                                    }`
-                                  : `❌ ${
-                                      diagnostics.error
-                                    }\n\nRecommendations:\n${diagnostics.recommendations
-                                      .map((r) => `• ${r}`)
-                                      .join("\n")}`
-                              }`
-                            );
-                          }}
-                        />
+                              alert(
+                                `Audio Device Diagnostics:\n\n${
+                                  diagnostics.success &&
+                                  hasAudioInputs &&
+                                  audioDevices
+                                    ? `✅ Found ${
+                                        audioDevices.audioInputs?.length || 0
+                                      } microphone(s)\n\nDevices:\n${
+                                        audioDevices.audioInputs
+                                          ?.map((d) => `• ${d.label}`)
+                                          .join("\n") || "None"
+                                      }`
+                                    : `❌ ${
+                                        diagnostics.error
+                                      }\n\nRecommendations:\n${diagnostics.recommendations
+                                        .map((r) => `• ${r}`)
+                                        .join("\n")}`
+                                }`
+                              );
+                            }}
+                          />
+                        )}
                       </div>
                     )}
                   </div>
@@ -2130,7 +2182,7 @@ function LearningPageContent() {
                   <button
                     onClick={() => handleAnswerQuestion(false)}
                     disabled={
-                      !currentResponse.trim() ||
+                      (!currentResponse.trim() && !recordedAudio) ||
                       isUploadingAudio ||
                       answerQuestionMutation.isLoading
                     }
@@ -2444,60 +2496,65 @@ function LearningPageContent() {
                           </button>
                         </div>
 
-                        {/* Microphone Setup Instructions */}
-                        <MicrophoneSetupInstructions
-                          onTestMicrophone={testMicrophone}
-                          isTesting={isMicTesting}
-                          testResult={micTestResult}
-                          isMobileDevice={isMobileDevice}
-                          requiresUserInteraction={requiresUserInteraction}
-                          onRequestPermission={requestMicrophonePermission}
-                          isRequestingPermission={isRequestingPermission}
-                          onDiagnoseAudio={async () => {
-                            const diagnostics = await diagnoseAudioDevices();
-                            console.log("🔍 Manual diagnostics:", diagnostics);
+                        {/* Microphone Setup Instructions - Only show for audio-related errors */}
+                        {isMicrophoneRelatedError(recordingError) && (
+                          <MicrophoneSetupInstructions
+                            onTestMicrophone={testMicrophone}
+                            isTesting={isMicTesting}
+                            testResult={micTestResult}
+                            isMobileDevice={isMobileDevice}
+                            requiresUserInteraction={requiresUserInteraction}
+                            onRequestPermission={requestMicrophonePermission}
+                            isRequestingPermission={isRequestingPermission}
+                            onDiagnoseAudio={async () => {
+                              const diagnostics = await diagnoseAudioDevices();
+                              console.log(
+                                "🔍 Manual diagnostics:",
+                                diagnostics
+                              );
 
-                            // Type guard to check if devices has audioInputs property
-                            const hasAudioInputs =
-                              diagnostics.devices &&
-                              typeof diagnostics.devices === "object" &&
-                              !Array.isArray(diagnostics.devices) &&
-                              "audioInputs" in diagnostics.devices;
+                              // Type guard to check if devices has audioInputs property
+                              const hasAudioInputs =
+                                diagnostics.devices &&
+                                typeof diagnostics.devices === "object" &&
+                                !Array.isArray(diagnostics.devices) &&
+                                "audioInputs" in diagnostics.devices;
 
-                            // Type assertion for devices when hasAudioInputs is true
-                            const audioDevices = hasAudioInputs
-                              ? (diagnostics.devices as {
-                                  audioInputs: {
-                                    deviceId: string;
-                                    label: string;
-                                    groupId: string;
-                                  }[];
-                                  audioOutputs: number;
-                                  videoInputs: number;
-                                })
-                              : null;
+                              // Type assertion for devices when hasAudioInputs is true
+                              const audioDevices = hasAudioInputs
+                                ? (diagnostics.devices as {
+                                    audioInputs: {
+                                      deviceId: string;
+                                      label: string;
+                                      groupId: string;
+                                    }[];
+                                    audioOutputs: number;
+                                    videoInputs: number;
+                                  })
+                                : null;
 
-                            alert(
-                              `Audio Device Diagnostics:\n\n${
-                                diagnostics.success &&
-                                hasAudioInputs &&
-                                audioDevices
-                                  ? `✅ Found ${
-                                      audioDevices.audioInputs?.length || 0
-                                    } microphone(s)\n\nDevices:\n${
-                                      audioDevices.audioInputs
-                                        ?.map((d) => `• ${d.label}`)
-                                        .join("\n") || "None"
-                                    }`
-                                  : `❌ ${
-                                      diagnostics.error
-                                    }\n\nRecommendations:\n${diagnostics.recommendations
-                                      .map((r) => `• ${r}`)
-                                      .join("\n")}`
-                              }`
-                            );
-                          }}
-                        />
+                              alert(
+                                `Audio Device Diagnostics:\n\n${
+                                  diagnostics.success &&
+                                  hasAudioInputs &&
+                                  audioDevices
+                                    ? `✅ Found ${
+                                        audioDevices.audioInputs?.length || 0
+                                      } microphone(s)\n\nDevices:\n${
+                                        audioDevices.audioInputs
+                                          ?.map((d) => `• ${d.label}`)
+                                          .join("\n") || "None"
+                                      }`
+                                    : `❌ ${
+                                        diagnostics.error
+                                      }\n\nRecommendations:\n${diagnostics.recommendations
+                                        .map((r) => `• ${r}`)
+                                        .join("\n")}`
+                                }`
+                              );
+                            }}
+                          />
+                        )}
                       </div>
                     )}
                   </div>
@@ -2516,6 +2573,7 @@ function LearningPageContent() {
                   onClick={() => handleAnswerQuestion(false)}
                   disabled={
                     (!currentResponse.trim() &&
+                      !recordedAudio &&
                       currentQuestion.type !== "choice") ||
                     isUploadingAudio ||
                     answerQuestionMutation.isLoading

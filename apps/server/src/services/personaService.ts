@@ -10,6 +10,7 @@ import {
 } from "@digital-persona/database";
 import { eq, and, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { randomUUID } from "crypto";
 
 // Learning questions for persona development
 export const LEARNING_QUESTIONS = {
@@ -252,9 +253,11 @@ export class PersonaService {
       .limit(1);
 
     if (persona && persona.userId === userId) {
+      const interviewId = randomUUID();
       const updatedTraits = {
         ...persona.traits,
         activeInterview: {
+          id: interviewId,
           sessionType,
           questions,
           status: "in_progress",
@@ -270,7 +273,7 @@ export class PersonaService {
         .set({ traits: updatedTraits })
         .where(eq(personas.id, personaId));
 
-      return { id: `temp-${personaId}`, questions, status: "in_progress" };
+      return { id: interviewId, questions, status: "in_progress" };
     }
 
     throw new TRPCError({
@@ -389,14 +392,22 @@ export class PersonaService {
   ) {
     try {
       // For now, work with the temporary interview stored in persona traits
-      const personaId = interviewId.replace("temp-", "");
-      const [persona] = await db
+      // Find the persona that has the active interview with this ID
+      const allPersonas = await db
         .select()
         .from(personas)
-        .where(eq(personas.id, personaId))
-        .limit(1);
+        .where(eq(personas.userId, userId));
 
-      if (!persona || persona.userId !== userId) {
+      let persona = null;
+      for (const p of allPersonas) {
+        const traits = p.traits as any;
+        if (traits?.activeInterview?.id === interviewId) {
+          persona = p;
+          break;
+        }
+      }
+
+      if (!persona) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Interview not found",
@@ -455,7 +466,7 @@ export class PersonaService {
       // If not skipped, process the response for personality insights
       if (!skipQuestion && response) {
         await this.processLearningResponse(
-          personaId,
+          persona.id,
           activeInterview.questions[questionIndex],
           response,
           mediaFiles
@@ -471,7 +482,7 @@ export class PersonaService {
       await db
         .update(personas)
         .set({ traits: updatedTraits })
-        .where(eq(personas.id, personaId));
+        .where(eq(personas.id, persona.id));
 
       return activeInterview;
     } catch (error) {

@@ -51,7 +51,7 @@ resource "aws_iam_role" "lambda_execution" {
   })
 
   tags = {}
-  
+
   # Workaround for IAM permission issues during deployment
   # This prevents Terraform from trying to read role policies when user lacks iam:GetRolePolicy permission
   lifecycle {
@@ -79,7 +79,7 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       # S3 access for file uploads
       {
         Effect = "Allow"
@@ -103,8 +103,9 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
           var.database_secret_arn,
           var.jwt_secret_arn
         ]
-      },
-      # SQS access for ML job queuing
+      }
+      ], var.ml_sqs_queue_arn != null ? [
+      # SQS access for ML job queuing (only when ML queue is enabled)
       {
         Effect = "Allow"
         Action = [
@@ -112,9 +113,9 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
           "sqs:GetQueueAttributes",
           "sqs:GetQueueUrl"
         ]
-        Resource = var.ml_sqs_queue_arn != null ? [var.ml_sqs_queue_arn] : []
+        Resource = [var.ml_sqs_queue_arn]
       }
-    ]
+    ] : [])
   })
 }
 
@@ -128,11 +129,11 @@ data "archive_file" "placeholder" {
 # Main Lambda function for tRPC API
 resource "aws_lambda_function" "api" {
   function_name = "${var.environment}-${var.sub_environment}-${var.project_name}-api"
-  role         = aws_iam_role.lambda_execution.arn
-  handler      = "index.handler"
-  runtime      = var.lambda_runtime
-  timeout      = var.lambda_timeout
-  memory_size  = var.lambda_memory_size
+  role          = aws_iam_role.lambda_execution.arn
+  handler       = "index.handler"
+  runtime       = var.lambda_runtime
+  timeout       = var.lambda_timeout
+  memory_size   = var.lambda_memory_size
 
   # Placeholder zip for initial Terraform deployment
   # Actual code will be updated by CI/CD pipeline via aws lambda update-function-code
@@ -140,14 +141,14 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = merge({
-      NODE_ENV                = var.environment
-      DATABASE_URL           = var.database_url
-      JWT_SECRET_ARN         = var.jwt_secret_arn
-      DATABASE_SECRET_ARN    = var.database_secret_arn
-      CORS_ORIGIN           = var.cors_origin
-      S3_UPLOADS_BUCKET     = var.s3_uploads_bucket_name
-      ML_SQS_QUEUE_URL      = var.ml_sqs_queue_url != null ? var.ml_sqs_queue_url : ""
-      AWS_ACCOUNT_ID        = data.aws_caller_identity.current.account_id
+      NODE_ENV            = var.environment
+      DATABASE_URL        = var.database_url
+      JWT_SECRET_ARN      = var.jwt_secret_arn
+      DATABASE_SECRET_ARN = var.database_secret_arn
+      CORS_ORIGIN         = var.cors_origin
+      S3_UPLOADS_BUCKET   = var.s3_uploads_bucket_name
+      ML_SQS_QUEUE_URL    = var.ml_sqs_queue_url != null ? var.ml_sqs_queue_url : ""
+      AWS_ACCOUNT_ID      = data.aws_caller_identity.current.account_id
       # AWS_REGION is reserved by AWS Lambda and cannot be set manually
     }, var.additional_environment_variables)
   }
@@ -194,10 +195,10 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 
 # Lambda Layer for shared dependencies (optional)
 resource "aws_lambda_layer_version" "dependencies" {
-  count           = var.create_dependencies_layer ? 1 : 0
-  filename        = var.dependencies_layer_filename
-  layer_name      = "${var.environment}-${var.sub_environment}-${var.project_name}-dependencies"
-  description     = "Shared dependencies for ${var.project_name} Lambda functions"
+  count       = var.create_dependencies_layer ? 1 : 0
+  filename    = var.dependencies_layer_filename
+  layer_name  = "${var.environment}-${var.sub_environment}-${var.project_name}-dependencies"
+  description = "Shared dependencies for ${var.project_name} Lambda functions"
 
   compatible_runtimes = [var.lambda_runtime]
 

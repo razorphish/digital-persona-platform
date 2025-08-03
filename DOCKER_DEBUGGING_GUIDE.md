@@ -21,10 +21,10 @@ docker-compose -f docker-compose.dev.yml up --build
 
 ### 2. **Debug Wait Mode**
 
-**File:** `docker-compose.debug-wait.yml`
+**File:** `docker-compose.dev.yml`
 
 ```bash
-docker-compose -f docker-compose.debug-wait.yml up --build
+docker-compose -f docker-compose.dev.yml up --build
 ```
 
 - ⏳ Python service waits for debugger client
@@ -35,8 +35,8 @@ docker-compose -f docker-compose.debug-wait.yml up --build
 
 | Container             | Purpose                      | Ports | Debug Port     |
 | --------------------- | ---------------------------- | ----- | -------------- |
-| **frontend**          | Next.js frontend application | 3100  | 9229 (Node.js) |
-| **backend**           | tRPC Express API server      | 3101  | 9230 (Node.js) |
+| **frontend**          | Next.js frontend application | 3100  | 9230 (Node.js) |
+| **backend**           | tRPC Express API server      | 3101  | 9231 (Node.js) |
 | **postgres**          | PostgreSQL database          | 5432  | -              |
 | **python-ml-service** | Optional FastAPI ML service  | 8001  | 5678 (debugpy) |
 
@@ -57,7 +57,7 @@ docker-compose -f docker-compose.debug-wait.yml up --build
 docker-compose -f docker-compose.dev.yml up --build
 
 # Debug wait mode (for debugging from start)
-docker-compose -f docker-compose.debug-wait.yml up --build
+docker-compose -f docker-compose.dev.yml up --build
 ```
 
 ## 🐛 VS Code Docker Debugging
@@ -70,7 +70,7 @@ docker-compose -f docker-compose.debug-wait.yml up --build
 4. **Select debug configuration:**
    - `Debug Next.js App (Docker)` - Attach to Node.js in container
    - `Debug Python ML Service (Docker)` - Attach to Python in container
-   - `Debug Full Stack (Docker)` - Debug both services
+   - `Debug Full Stack (Docker)` - Debug both services with containerized environment
 
 ### Debug Configuration Details
 
@@ -81,9 +81,23 @@ docker-compose -f docker-compose.debug-wait.yml up --build
   "name": "Debug Next.js App (Docker)",
   "type": "node",
   "request": "attach",
-  "port": 9229,
+  "port": 9230,
   "address": "localhost",
   "localRoot": "${workspaceFolder}/apps/web",
+  "remoteRoot": "/app"
+}
+```
+
+#### tRPC Backend Docker Debugging
+
+```json
+{
+  "name": "Debug tRPC Backend (Docker)",
+  "type": "node",
+  "request": "attach",
+  "port": 9231,
+  "address": "localhost",
+  "localRoot": "${workspaceFolder}/apps/server",
   "remoteRoot": "/app"
 }
 ```
@@ -194,9 +208,9 @@ docker stats
 
 ### For Debugging Session
 
-1. `docker-compose -f docker-compose.debug-wait.yml up -d`
+1. `docker-compose -f docker-compose.dev.yml up -d`
 2. Open VS Code → Run & Debug
-3. Select "Debug Full Stack (Docker)"
+3. Select **"Debug Full Stack (Docker)"**
 4. Press F5 to attach debuggers
 5. Set breakpoints and start debugging!
 
@@ -208,15 +222,15 @@ docker stats
 
 ## 📁 Key Files
 
-| File                            | Purpose                          |
-| ------------------------------- | -------------------------------- |
-| `docker-compose.dev.yml`        | Standard development containers  |
-| `docker-compose.debug-wait.yml` | Debug-first development          |
-| `test-docker-debugging.sh`      | Automated testing script         |
-| `.vscode/launch.json`           | VS Code debug configurations     |
-| `apps/web/Dockerfile`           | Next.js container build          |
-| `apps/server/Dockerfile`        | tRPC backend container build     |
-| `python-ml-service/Dockerfile`  | Optional Python ML service build |
+| File                           | Purpose                          |
+| ------------------------------ | -------------------------------- |
+| `docker-compose.dev.yml`       | Standard development containers  |
+| `docker-compose.dev.yml`       | Debug-enabled development        |
+| `test-docker-debugging.sh`     | Automated testing script         |
+| `.vscode/launch.json`          | VS Code debug configurations     |
+| `apps/web/Dockerfile`          | Next.js container build          |
+| `apps/server/Dockerfile`       | tRPC backend container build     |
+| `python-ml-service/Dockerfile` | Optional Python ML service build |
 
 ## 🎯 Best Practices
 

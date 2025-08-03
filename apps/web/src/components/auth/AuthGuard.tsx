@@ -22,7 +22,7 @@ interface AuthGuardProps {
 export function AuthGuard({
   children,
   fallback,
-  redirectTo = "/auth/login",
+  redirectTo = "/",
   requiresAuth = true,
 }: AuthGuardProps) {
   const { user, isLoading, isAuthenticated } = useAuth();

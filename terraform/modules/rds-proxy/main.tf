@@ -23,10 +23,10 @@ resource "aws_iam_role" "rds_proxy" {
     ]
   })
 
-  tags = merge(var.common_tags, {
-    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-rds-proxy-role"
-    Type = "IAMRole"
-  })
+  # tags = merge(var.common_tags, {
+  #   Name = "${var.environment}-${var.sub_environment}-${var.project_name}-rds-proxy-role"
+  #   Type = "IAMRole"
+  # })  # Commented out due to IAM permission constraints
 }
 
 # IAM policy for RDS Proxy to access Secrets Manager
@@ -119,22 +119,22 @@ resource "aws_security_group_rule" "rds_allow_proxy" {
 
 # RDS Proxy
 resource "aws_db_proxy" "main" {
-  name                   = "${var.environment}-${var.sub_environment}-${var.project_name}-rds-proxy"
-  engine_family          = "POSTGRESQL"
+  name          = "${var.environment}-${var.sub_environment}-${var.project_name}-rds-proxy"
+  engine_family = "POSTGRESQL"
   auth {
     auth_scheme = "SECRETS"
     secret_arn  = var.database_secret_arn
     description = "Database credentials for ${var.environment}-${var.sub_environment}-${var.project_name}"
   }
-  
+
   role_arn               = aws_iam_role.rds_proxy.arn
   vpc_subnet_ids         = var.subnet_ids
   vpc_security_group_ids = [aws_security_group.rds_proxy.id]
 
   # Connection settings optimized for serverless
-  idle_client_timeout    = var.idle_client_timeout
-  require_tls            = var.require_tls
-  
+  idle_client_timeout = var.idle_client_timeout
+  require_tls         = var.require_tls
+
   tags = merge(var.common_tags, {
     Name = "${var.environment}-${var.sub_environment}-${var.project_name}-rds-proxy"
     Type = "RDSProxy"

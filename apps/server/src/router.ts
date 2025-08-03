@@ -789,7 +789,7 @@ const mediaRouter = router({
           ${presignedData.fileId}, ${input.fileName}, ${input.fileName}, 
           ${input.fileSize}, ${input.fileType}, ${mediaType},
           ${presignedData.s3Key}, ${
-        process.env.S3_BUCKET || "digital-persona-uploads"
+        process.env.S3_BUCKET || "dev-dev01-dpp-uploads"
       }, 
           ${presignedData.presignedUrl}, ${ctx.user.id}, 
           ${input.conversationId || null}, 
@@ -834,7 +834,7 @@ const mediaRouter = router({
         updateData.uploaded_at = new Date();
         // Generate final S3 URL
         const s3Url = `https://${
-          process.env.S3_BUCKET || "digital-persona-uploads"
+          process.env.S3_BUCKET || "dev-dev01-dpp-uploads"
         }.s3.${process.env.AWS_REGION || "us-east-1"}.amazonaws.com/`;
         await db.execute(sql`
           UPDATE media_files 

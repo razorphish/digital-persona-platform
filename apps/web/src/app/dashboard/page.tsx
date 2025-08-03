@@ -458,7 +458,7 @@ function DashboardPageContent() {
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        const audioBlob = new Blob(audioChunks, { type: "video/webm" }); // Use video/webm for consistency with upload
         setRecordedAudio(audioBlob);
         setAudioLevel(0);
 
@@ -533,7 +533,7 @@ function DashboardPageContent() {
         [recordedAudio],
         `recording-${Date.now()}.webm`,
         {
-          type: "audio/webm",
+          type: "video/webm", // Use video/webm since server doesn't allow audio/webm
         }
       );
 

@@ -61,6 +61,7 @@ echo "4. Debug FastAPI with Debugpy - Launch Python service with debugpy for rem
 echo "5. Attach to Python ML Service - Attach to running Python service"
 echo "6. Debug Full Stack - Launch both services together"
 echo "7. Debug Full Stack (Alternative) - Launch both services with alternative ports"
+echo "8. Debug Full Stack (Docker) - Launch full Docker environment with debugging"
 
 echo ""
 echo -e "${BLUE}🚀 Testing API endpoints...${NC}"

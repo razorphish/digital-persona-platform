@@ -196,6 +196,166 @@ Environment: dev/dev01
 - 🧹 **Easy Cleanup** - Environment-specific cleanup
 - 📈 **Unlimited Environments** - Dynamic sub-environment support
 
+## 💰 Cost-Optimized AWS Deployment
+
+Deploy personal development environments and cost-optimized test environments with aggressive savings (70-90% cost reduction vs production).
+
+### 🏗️ Environment Types
+
+| Environment | Monthly Cost | Use Case             | Auto-Pause | Capacity             |
+| ----------- | ------------ | -------------------- | ---------- | -------------------- |
+| **local**   | ~$10-30      | Personal AWS sandbox | 5 min      | Minimal (0.5-1 ACU)  |
+| **dev**     | ~$50-100     | Team development     | 5 min      | Standard (0.5-2 ACU) |
+| **qa**      | ~$75-150     | QA testing           | 10 min     | Testing (0.5-4 ACU)  |
+
+### 🚀 Quick Cost-Optimized Deployment
+
+```bash
+# Deploy your personal local environment
+./scripts/deploy-cost-optimized.sh local mars    # → https://mars.hibiji.com (~$10-30/month)
+
+# Deploy cost-optimized dev environment
+./scripts/deploy-cost-optimized.sh dev dev01     # → https://dev01.hibiji.com (~$50-100/month)
+
+# Deploy QA environment with higher capacity
+./scripts/deploy-cost-optimized.sh qa qa03       # → https://qa03.hibiji.com (~$75-150/month)
+```
+
+### 💡 Cost Optimization Features
+
+**🏗️ Infrastructure Optimizations:**
+
+- ✅ **Aurora Auto-Pause**: Database shuts down after 5-10 minutes of inactivity
+- ✅ **Minimal Lambda Memory**: 256-512MB vs 1024MB+ in production
+- ✅ **Spot Instances**: 50-70% savings on AWS Batch ML workloads
+- ✅ **Aggressive S3 Lifecycle**: Auto-cleanup of old files (7-365 days)
+- ✅ **Reduced Log Retention**: 7-30 days vs 90+ days in production
+- ✅ **Single AZ**: No multi-AZ redundancy for test environments
+
+**💰 Cost Monitoring:**
+
+- ✅ **AWS Budgets**: Automatic budget alerts per environment
+- ✅ **Email Notifications**: 80% usage warning, 100% forecast alert
+- ✅ **Resource Tagging**: `CostOptimized=true` for easy tracking
+
+### 📋 Deployment Options
+
+```bash
+# Plan deployment (preview changes)
+./scripts/deploy-cost-optimized.sh local mars --plan
+
+# Deploy with custom budget
+./scripts/deploy-cost-optimized.sh dev dev01 --budget 75
+
+# Deploy with faster auto-pause
+./scripts/deploy-cost-optimized.sh local mars --pause-delay 300
+
+# Force deployment (skip confirmations)
+./scripts/deploy-cost-optimized.sh qa qa03 --force
+
+# Destroy environment
+./scripts/deploy-cost-optimized.sh local mars --destroy
+```
+
+### 🧹 Automated Cleanup
+
+Cost-optimized environments include automated cleanup to prevent cost overruns:
+
+```bash
+# Clean all cost-optimized environments
+./scripts/cleanup-cost-optimized.sh all
+
+# Clean specific environment (dry run)
+./scripts/cleanup-cost-optimized.sh local --dry-run
+
+# Aggressive cleanup (7-day retention)
+./scripts/cleanup-cost-optimized.sh dev --aggressive
+
+# Clean only CloudWatch logs
+./scripts/cleanup-cost-optimized.sh qa --logs-only
+```
+
+**🗂️ What Gets Cleaned:**
+
+- 📝 **CloudWatch Logs**: Old log streams and groups
+- 🗂️ **S3 Objects**: Files past lifecycle policy
+- 📸 **RDS Snapshots**: Manual snapshots older than 7 days
+- ⚡ **Lambda Versions**: Keep only latest 5 versions
+- 📊 **Batch Jobs**: Cancel queued/pending jobs
+
+### 🎯 Personal Local Environment (`local-mars-###`)
+
+Perfect for individual developers who want their own AWS sandbox:
+
+```bash
+# Deploy your personal environment
+./scripts/deploy-cost-optimized.sh local mars
+
+# Resources created:
+# - local-mars-dpp-uploads (S3 bucket)
+# - local-mars-dpp-cluster (Aurora database)
+# - local-mars-dpp-api (Lambda function)
+# - https://mars.hibiji.com (your personal domain)
+# - https://mars-api.hibiji.com (your API)
+```
+
+**📊 Personal Environment Benefits:**
+
+- 🔐 **Isolated**: Your own AWS resources, no conflicts
+- 💰 **Cheap**: ~$10-30/month with auto-pause
+- 🚀 **Fast**: Single-command deployment
+- 🧹 **Clean**: Automatic lifecycle management
+- 🔗 **Professional**: Real HTTPS domain
+
+### 💳 Cost Breakdown
+
+**Local Environment (~$10-30/month):**
+
+- Aurora Serverless v2: ~$5-15 (auto-pause after 5 min)
+- Lambda: ~$1-3 (256MB memory)
+- S3: ~$2-5 (aggressive lifecycle)
+- CloudWatch: ~$1-2 (7-day retention)
+- Other AWS services: ~$1-5
+
+**Dev/QA Environment (~$50-150/month):**
+
+- Aurora Serverless v2: ~$20-60 (auto-pause, higher capacity)
+- Lambda: ~$5-15 (512MB memory)
+- S3: ~$5-15 (moderate lifecycle)
+- CloudWatch: ~$5-10 (14-30 day retention)
+- AWS Batch: ~$10-30 (spot instances)
+- Other AWS services: ~$5-20
+
+### 🔧 Local Development Integration
+
+After deploying your cost-optimized environment, update your local `.env`:
+
+```env
+# Point to your personal AWS environment
+DATABASE_URL=postgresql://user:pass@local-mars-dpp-cluster.cluster-xxx.rds.amazonaws.com:5432/digital_persona
+S3_BUCKET=local-mars-dpp-uploads
+AWS_REGION=us-west-1
+
+# Use your AWS credentials
+AWS_ACCESS_KEY_ID=your-aws-access-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+
+# Local development still on localhost
+NEXT_PUBLIC_API_URL=http://localhost:4001
+```
+
+### 📈 Cost Comparison
+
+| Configuration              | Monthly Cost | Auto-Pause | Use Case               |
+| -------------------------- | ------------ | ---------- | ---------------------- |
+| **Production**             | ~$300-500    | ❌ Never   | Always-on, multi-AZ    |
+| **Staging**                | ~$200-300    | ❌ Never   | Pre-production testing |
+| **Dev (Cost-Optimized)**   | ~$50-100     | ✅ 5 min   | Team development       |
+| **QA (Cost-Optimized)**    | ~$75-150     | ✅ 10 min  | Testing & validation   |
+| **Local (Cost-Optimized)** | ~$10-30      | ✅ 5 min   | Personal sandbox       |
+
+**💰 Savings: 70-90% cost reduction for development environments!**
+
 ## 💻 Local Development Setup
 
 ### 1. Clone and Setup
@@ -238,6 +398,7 @@ S3_BUCKET=your-bucket-name
 #### Option A: VS Code (Recommended)
 
 - Press `F5` or use "Debug Full Stack" configuration
+- For containerized debugging: Use "Debug Full Stack (Docker)" configuration
 - Automatic port cleanup and environment setup
 - Both frontend and backend with debugging support
 
@@ -661,7 +822,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 **For immediate development:**
 
 1. **Docker (Recommended)**: `./docker-start.sh dev --logs`
-2. **VS Code**: Use "Debug Full Stack" configuration
+2. **VS Code**: Use "Debug Full Stack" or "Debug Full Stack (Docker)" configuration
 3. **Manual**: Follow the Local Development Setup above
 
 **For production deployment:**

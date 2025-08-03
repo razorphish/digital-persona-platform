@@ -4,25 +4,36 @@
 
 ### 🚀 **Full Stack Configurations**
 
-| Configuration                      | Description                      | Port Cleanup   | Use Case                 |
-| ---------------------------------- | -------------------------------- | -------------- | ------------------------ |
-| **Launch Full Stack**              | Both services, no debugging      | ✅ Automatic   | General development      |
-| **Debug Full Stack**               | Frontend + Backend debugging     | ✅ Automatic   | Backend debugging needed |
-| **Debug Full Stack (Interactive)** | Prompts before killing processes | 🤔 Interactive | When you want control    |
+| Configuration                         | Description                      | Port Cleanup   | Use Case                 |
+| ------------------------------------- | -------------------------------- | -------------- | ------------------------ |
+| **🚀 Launch Full Stack**              | Both services, no debugging      | ✅ Automatic   | General development      |
+| **🐛 Debug Full Stack**               | Frontend + Backend debugging     | ✅ Automatic   | Backend debugging needed |
+| **🤔 Debug Full Stack (Interactive)** | Prompts before killing processes | 🤔 Interactive | When you want control    |
+| **🐳 Debug Full Stack (Docker)**      | Full containerized environment   | ✅ Automatic   | Production-like testing  |
+| **🌟 Debug Complete Platform**        | All services including Python ML | ✅ Automatic   | Complete stack debugging |
 
 ### 🌐 **Frontend Only**
 
-| Configuration          | Description                 | Port Cleanup | Use Case            |
-| ---------------------- | --------------------------- | ------------ | ------------------- |
-| **Launch Next.js App** | Frontend development server | ✅ Port 4000 | Frontend-only work  |
-| **Debug Next.js App**  | Frontend with debugging     | ✅ Port 4000 | Debug frontend code |
+| Configuration         | Description                      | Port Cleanup | Use Case            |
+| --------------------- | -------------------------------- | ------------ | ------------------- |
+| **Frontend (Launch)** | Frontend development server      | ✅ Port 4000 | Frontend-only work  |
+| **Frontend (Debug)**  | Frontend with debugging          | ✅ Port 4000 | Debug frontend code |
+| **Frontend (Docker)** | Attach to containerized frontend | -            | Docker debugging    |
 
 ### 🔧 **Backend Only**
 
-| Configuration           | Description               | Port Cleanup | Use Case           |
-| ----------------------- | ------------------------- | ------------ | ------------------ |
-| **Launch tRPC Backend** | Backend without debugging | ✅ Port 4001 | Backend-only work  |
-| **Debug tRPC Backend**  | Backend with debugging    | ✅ Port 4001 | Debug backend code |
+| Configuration        | Description                     | Port Cleanup | Use Case           |
+| -------------------- | ------------------------------- | ------------ | ------------------ |
+| **Backend (Launch)** | Backend without debugging       | ✅ Port 4001 | Backend-only work  |
+| **Backend (Debug)**  | Backend with debugging          | ✅ Port 4001 | Debug backend code |
+| **Backend (Docker)** | Attach to containerized backend | -            | Docker debugging   |
+
+### 🐍 **Python ML Service**
+
+| Configuration          | Description                    | Port Cleanup | Use Case                |
+| ---------------------- | ------------------------------ | ------------ | ----------------------- |
+| **Python ML (Local)**  | Local FastAPI service          | -            | Python ML debugging     |
+| **Python ML (Docker)** | Attach to containerized Python | -            | Docker Python debugging |
 
 ## How to Use
 
@@ -35,12 +46,13 @@
 
 ### Automatic (Recommended)
 
-- **"Launch Full Stack"** - Best for daily development
-- **"Debug Full Stack"** - Best when you need to debug backend
+- **"🚀 Launch Full Stack"** - Best for daily development
+- **"🐛 Debug Full Stack"** - Best when you need to debug backend
+- **"🐳 Debug Full Stack (Docker)"** - Production-like environment with debugging
 
 ### Interactive
 
-- **"Debug Full Stack (Interactive)"** - Shows what processes will be killed
+- **"🤔 Debug Full Stack (Interactive)"** - Shows what processes will be killed
 - Gives you options: Kill, Skip, or Abort
 
 ### Manual
@@ -64,8 +76,9 @@ Tasks: Run Task → Clear All Development Ports
 
 **Docker Development:**
 
-- **Frontend**: http://localhost:3100 (external)
-- **Backend**: http://localhost:3101 (external)
+- **Frontend**: http://localhost:3100 (external → internal 4000)
+- **Backend**: http://localhost:3101 (external → internal 4001)
+- **Docker Debug Ports**: 9230 (frontend), 9231 (backend)
 
 ## Environment Variables Set
 

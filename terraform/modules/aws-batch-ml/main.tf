@@ -90,7 +90,7 @@ resource "aws_iam_role" "batch_service" {
     ]
   })
 
-  tags = var.common_tags
+  # tags = var.common_tags  # Commented out due to IAM permission constraints
 }
 
 # Attach AWS managed policy for Batch service
@@ -116,7 +116,7 @@ resource "aws_iam_role" "batch_instance" {
     ]
   })
 
-  tags = var.common_tags
+  # tags = var.common_tags  # Commented out due to IAM permission constraints
 }
 
 # Attach AWS managed policies for ECS instances
@@ -130,7 +130,7 @@ resource "aws_iam_instance_profile" "batch_instance" {
   name = "${var.environment}-${var.sub_environment}-${var.project_name}-batch-instance-profile"
   role = aws_iam_role.batch_instance.name
 
-  tags = var.common_tags
+  # tags = var.common_tags  # Commented out due to IAM permission constraints
 }
 
 # IAM role for Batch execution (job execution)
@@ -150,7 +150,7 @@ resource "aws_iam_role" "batch_execution" {
     ]
   })
 
-  tags = var.common_tags
+  # tags = var.common_tags  # Commented out due to IAM permission constraints
 }
 
 # Batch execution role policies
@@ -229,7 +229,7 @@ resource "aws_batch_compute_environment" "ml_processing" {
   compute_resources {
     type                = "EC2"
     allocation_strategy = "BEST_FIT_PROGRESSIVE"
-    
+
     min_vcpus     = var.min_vcpus
     max_vcpus     = var.max_vcpus
     desired_vcpus = var.desired_vcpus
@@ -306,10 +306,10 @@ resource "aws_batch_job_definition" "ml_processor" {
 
   container_properties = jsonencode({
     image = "${aws_ecr_repository.ml_service.repository_url}:latest"
-    
+
     vcpus  = var.job_vcpus
     memory = var.job_memory
-    
+
     jobRoleArn       = aws_iam_role.batch_execution.arn
     executionRoleArn = aws_iam_role.batch_execution.arn
 
@@ -319,7 +319,7 @@ resource "aws_batch_job_definition" "ml_processor" {
         value = var.environment
       },
       {
-        name  = "SUB_ENVIRONMENT" 
+        name  = "SUB_ENVIRONMENT"
         value = var.sub_environment
       },
       {

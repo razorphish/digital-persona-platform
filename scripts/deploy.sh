@@ -42,7 +42,7 @@ for arg in "$@"; do
             ;;
         "simple") 
             ENVIRONMENT="simple"
-            DOCKER_COMPOSE_FILE="docker-compose.simple.yml"
+            DOCKER_COMPOSE_FILE="docker-compose.yml"
             ;;
         "--help"|"-h")
             echo "Usage: $0 [dev|prod|simple]"

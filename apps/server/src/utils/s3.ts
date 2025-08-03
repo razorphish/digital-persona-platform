@@ -2,16 +2,39 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
 
-// AWS S3 Configuration
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
-});
+// Lazy initialization to ensure env vars are loaded
+let s3Client: S3Client;
+let S3_BUCKET: string;
 
-const S3_BUCKET = process.env.S3_BUCKET || "digital-persona-uploads";
+function initializeS3Config() {
+  if (!s3Client) {
+    // Debug logging for S3 configuration
+    console.log("🔧 S3 Configuration:", {
+      bucket: process.env.S3_BUCKET || "dev-dev01-dpp-uploads",
+      region: process.env.AWS_REGION || "us-east-1",
+      hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+      endpointUrl: process.env.AWS_ENDPOINT_URL || "default AWS",
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE,
+    });
+
+    s3Client = new S3Client({
+      region: process.env.AWS_REGION || "us-east-1",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+      },
+      // Support for local MinIO development
+      ...(process.env.AWS_ENDPOINT_URL && {
+        endpoint: process.env.AWS_ENDPOINT_URL,
+        forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+      }),
+    });
+
+    S3_BUCKET = process.env.S3_BUCKET || "dev-dev01-dpp-uploads";
+  }
+  return { s3Client, S3_BUCKET };
+}
 
 export interface FileUploadParams {
   fileName: string;
@@ -33,6 +56,8 @@ export interface PresignedUrlResponse {
 export async function generatePresignedUrl(
   params: FileUploadParams
 ): Promise<PresignedUrlResponse> {
+  const { s3Client, S3_BUCKET } = initializeS3Config();
+
   const fileId = uuidv4();
   const sanitizedFileName = params.fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
   const s3Key = `uploads/${params.userId}/${fileId}/${sanitizedFileName}`;
@@ -54,9 +79,12 @@ export async function generatePresignedUrl(
   const expiresIn = 300; // 5 minutes
   const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn });
 
-  const s3Url = `https://${S3_BUCKET}.s3.${
-    process.env.AWS_REGION || "us-east-1"
-  }.amazonaws.com/${s3Key}`;
+  // Build S3 URL - handle MinIO vs AWS differently
+  const s3Url = process.env.AWS_ENDPOINT_URL
+    ? `${process.env.AWS_ENDPOINT_URL}/${S3_BUCKET}/${s3Key}`
+    : `https://${S3_BUCKET}.s3.${
+        process.env.AWS_REGION || "us-east-1"
+      }.amazonaws.com/${s3Key}`;
 
   return {
     fileId,
@@ -106,6 +134,17 @@ export function validateFileUpload(file: {
     "video/wmv",
     "video/webm",
     "video/quicktime",
+    // Audio files
+    "audio/webm",
+    "audio/mp3",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/ogg",
+    "audio/aac",
+    "audio/mp4",
+    "audio/flac",
+    "audio/x-m4a",
+    "audio/vnd.wave",
     // Documents
     "application/pdf",
     "application/msword",

@@ -167,6 +167,7 @@ The project includes comprehensive VS Code debugging configurations:
 3. **Debug Python ML Service**: Local Python debugging
 4. **Debug Python ML Service (Docker)**: Debug Python in Docker container
 5. **Debug Full Stack**: Debug both services simultaneously
+6. **Debug Full Stack (Docker)**: Full containerized environment with debugging
 
 **Debugging Ports:**
 
