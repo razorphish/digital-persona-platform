@@ -1000,6 +1000,247 @@ export const personaMonetization = pgTable("persona_monetization", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Content Moderation & Safety Tables
+
+// Content moderation logs for all platform content
+export const contentModerations = pgTable("content_moderations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  contentType: text("content_type", {
+    enum: ["message", "persona_description", "user_profile", "media", "conversation"],
+  }).notNull(),
+  contentId: text("content_id").notNull(), // References the actual content
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  personaId: uuid("persona_id").references(() => personas.id, { onDelete: "cascade" }),
+  
+  // Moderation results
+  status: text("status", {
+    enum: ["pending", "approved", "flagged", "blocked", "under_review"],
+  }).default("pending").notNull(),
+  
+  // AI Analysis Results
+  aiModerationScore: decimal("ai_moderation_score", { precision: 3, scale: 2 }), // 0.00 to 1.00
+  flaggedCategories: jsonb("flagged_categories").default([]), // ["harassment", "nsfw", "violence", etc.]
+  severity: text("severity", {
+    enum: ["low", "medium", "high", "critical"],
+  }),
+  
+  // Content analysis
+  originalContent: text("original_content"),
+  contentSummary: text("content_summary"),
+  detectedLanguage: text("detected_language"),
+  
+  // Age and compliance
+  ageRating: text("age_rating", {
+    enum: ["all_ages", "teen", "mature", "adults_only"],
+  }),
+  complianceFlags: jsonb("compliance_flags").default([]), // ["coppa", "gdpr", "state_law", etc.]
+  
+  // Moderation actions
+  moderatedBy: uuid("moderated_by").references(() => users.id),
+  moderatorNotes: text("moderator_notes"),
+  actionTaken: text("action_taken", {
+    enum: ["none", "warning", "content_hidden", "user_suspended", "account_banned"],
+  }),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// User behavior tracking and safety scores
+export const userSafetyProfiles = pgTable("user_safety_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").unique().notNull().references(() => users.id, { onDelete: "cascade" }),
+  
+  // Safety metrics
+  overallSafetyScore: decimal("overall_safety_score", { precision: 3, scale: 2 }).default("1.00"), // 0.00 to 1.00
+  trustLevel: text("trust_level", {
+    enum: ["new", "trusted", "verified", "flagged", "restricted"],
+  }).default("new"),
+  
+  // Behavior tracking
+  totalInteractions: integer("total_interactions").default(0),
+  flaggedInteractions: integer("flagged_interactions").default(0),
+  positiveRatings: integer("positive_ratings").default(0),
+  negativeRatings: integer("negative_ratings").default(0),
+  
+  // Content violations
+  contentViolations: integer("content_violations").default(0),
+  severityScore: decimal("severity_score", { precision: 3, scale: 2 }).default("0.00"),
+  lastViolationDate: timestamp("last_violation_date"),
+  
+  // Age verification
+  ageVerified: boolean("age_verified").default(false),
+  ageVerificationDate: timestamp("age_verification_date"),
+  dateOfBirth: timestamp("date_of_birth"),
+  
+  // Account restrictions
+  isRestricted: boolean("is_restricted").default(false),
+  restrictionReason: text("restriction_reason"),
+  restrictionExpiresAt: timestamp("restriction_expires_at"),
+  
+  // Family-friendly mode
+  familyFriendlyMode: boolean("family_friendly_mode").default(false),
+  parentalControls: jsonb("parental_controls").default({}),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Interaction safety ratings between users and personas
+export const interactionRatings = pgTable("interaction_ratings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  raterId: uuid("rater_id").notNull().references(() => users.id, { onDelete: "cascade" }), // Creator rating the user
+  ratedUserId: uuid("rated_user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User being rated
+  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
+  conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }),
+  
+  // Rating details
+  safetyRating: integer("safety_rating").notNull(), // 1-5 scale (1=unsafe, 5=very safe)
+  behaviorTags: jsonb("behavior_tags").default([]), // ["respectful", "inappropriate", "threatening", etc.]
+  
+  // Specific concerns
+  isInappropriate: boolean("is_inappropriate").default(false),
+  isThreatening: boolean("is_threatening").default(false),
+  isHarassing: boolean("is_harassing").default(false),
+  isSpam: boolean("is_spam").default(false),
+  
+  // Rating context
+  ratingReason: text("rating_reason"),
+  ratingNotes: text("rating_notes"),
+  isBlocked: boolean("is_blocked").default(false), // Creator blocked this user
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Automated safety incidents and alerts
+export const safetyIncidents = pgTable("safety_incidents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  personaId: uuid("persona_id").references(() => personas.id, { onDelete: "cascade" }),
+  contentModerationId: uuid("content_moderation_id").references(() => contentModerations.id),
+  
+  // Incident details
+  incidentType: text("incident_type", {
+    enum: ["content_violation", "behavior_violation", "spam", "harassment", "threats", "inappropriate_content", "age_violation"],
+  }).notNull(),
+  severity: text("severity", {
+    enum: ["low", "medium", "high", "critical"],
+  }).notNull(),
+  
+  // Detection method
+  detectionMethod: text("detection_method", {
+    enum: ["ai_detection", "user_report", "manual_review", "pattern_analysis"],
+  }).notNull(),
+  confidence: decimal("confidence", { precision: 3, scale: 2 }), // 0.00 to 1.00
+  
+  // Incident data
+  description: text("description").notNull(),
+  evidence: jsonb("evidence").default({}), // Screenshots, message content, etc.
+  
+  // Resolution
+  status: text("status", {
+    enum: ["open", "under_review", "resolved", "escalated", "dismissed"],
+  }).default("open"),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  resolution: text("resolution"),
+  actionTaken: text("action_taken"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Platform-wide content policies and rules
+export const contentPolicies = pgTable("content_policies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  policyName: text("policy_name").notNull(),
+  policyType: text("policy_type", {
+    enum: ["content_guidelines", "behavior_rules", "age_restrictions", "legal_compliance"],
+  }).notNull(),
+  
+  // Policy details
+  description: text("description").notNull(),
+  rules: jsonb("rules").notNull(), // Detailed policy rules
+  severity: text("severity", {
+    enum: ["warning", "content_removal", "account_suspension", "permanent_ban"],
+  }).notNull(),
+  
+  // Applicability
+  isActive: boolean("is_active").default(true),
+  appliesTo: jsonb("applies_to").default([]), // ["creators", "users", "content", "conversations"]
+  
+  // Geographic and legal
+  jurisdiction: text("jurisdiction").default("US"),
+  legalBasis: text("legal_basis"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Relations for Content Moderation & Safety
+export const contentModerationRelations = relations(contentModerations, ({ one }) => ({
+  user: one(users, {
+    fields: [contentModerations.userId],
+    references: [users.id],
+  }),
+  persona: one(personas, {
+    fields: [contentModerations.personaId],
+    references: [personas.id],
+  }),
+  moderator: one(users, {
+    fields: [contentModerations.moderatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const userSafetyProfileRelations = relations(userSafetyProfiles, ({ one, many }) => ({
+  user: one(users, {
+    fields: [userSafetyProfiles.userId],
+    references: [users.id],
+  }),
+  ratings: many(interactionRatings, {
+    relationName: "userSafetyRatings",
+  }),
+}));
+
+export const interactionRatingRelations = relations(interactionRatings, ({ one }) => ({
+  rater: one(users, {
+    fields: [interactionRatings.raterId],
+    references: [users.id],
+  }),
+  ratedUser: one(users, {
+    fields: [interactionRatings.ratedUserId],
+    references: [users.id],
+  }),
+  persona: one(personas, {
+    fields: [interactionRatings.personaId],
+    references: [personas.id],
+  }),
+  conversation: one(conversations, {
+    fields: [interactionRatings.conversationId],
+    references: [conversations.id],
+  }),
+}));
+
+export const safetyIncidentRelations = relations(safetyIncidents, ({ one }) => ({
+  user: one(users, {
+    fields: [safetyIncidents.userId],
+    references: [users.id],
+  }),
+  persona: one(personas, {
+    fields: [safetyIncidents.personaId],
+    references: [personas.id],
+  }),
+  contentModeration: one(contentModerations, {
+    fields: [safetyIncidents.contentModerationId],
+    references: [contentModerations.id],
+  }),
+  resolver: one(users, {
+    fields: [safetyIncidents.resolvedBy],
+    references: [users.id],
+  }),
+}));
+
 // Relations for Creator Economy tables
 export const creatorVerificationsRelations = relations(creatorVerifications, ({ one, many }) => ({
   user: one(users, {

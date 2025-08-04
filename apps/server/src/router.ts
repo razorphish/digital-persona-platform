@@ -31,6 +31,10 @@ import { ConversationIntelligenceService } from "./services/conversationIntellig
 import { CreatorVerificationService } from "./services/creatorVerificationService.js";
 import { StripeService } from "./services/stripeService.js";
 
+// Import content moderation services
+import { ContentModerationService } from "./services/contentModerationService.js";
+import { BehaviorAnalysisService } from "./services/behaviorAnalysisService.js";
+
 // Import enhanced types
 import {
   createUserSchema,
@@ -1112,6 +1116,10 @@ const socialRouter = router({
 const creatorVerificationService = new CreatorVerificationService();
 const stripeService = new StripeService();
 
+// Initialize content moderation services
+const contentModerationService = new ContentModerationService();
+const behaviorAnalysisService = new BehaviorAnalysisService();
+
 // Creator Verification Router
 const creatorVerificationRouter = router({
   // Start verification process
@@ -1501,6 +1509,300 @@ const personaMonetizationRouter = router({
     }),
 });
 
+// Content Moderation Router
+const contentModerationRouter = router({
+  // Moderate content (called internally or by admins)
+  moderateContent: protectedProcedure
+    .input(z.object({
+      contentType: z.enum(['message', 'persona_description', 'user_profile', 'media', 'conversation']),
+      contentId: z.string(),
+      content: z.string(),
+      userId: z.string().uuid().optional(),
+      personaId: z.string().uuid().optional(),
+      metadata: z.any().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        const result = await contentModerationService.moderateContent({
+          contentType: input.contentType,
+          contentId: input.contentId,
+          content: input.content,
+          userId: input.userId,
+          personaId: input.personaId,
+          metadata: input.metadata,
+        });
+
+        return result;
+      } catch (error) {
+        logger.error('Error moderating content:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to moderate content'
+        });
+      }
+    }),
+
+  // Get user safety profile
+  getUserSafetyProfile: protectedProcedure
+    .input(z.object({
+      userId: z.string().uuid()
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        // Only allow users to view their own profile or creators to view subscriber profiles
+        if (input.userId !== ctx.user.id) {
+          // TODO: Add creator permission check
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Not authorized to view this safety profile'
+          });
+        }
+
+        const profile = await contentModerationService.getUserSafetyProfile(input.userId);
+        return profile;
+      } catch (error) {
+        logger.error('Error getting user safety profile:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get safety profile'
+        });
+      }
+    }),
+
+  // Rate user interaction (for creators)
+  rateUserInteraction: protectedProcedure
+    .input(z.object({
+      ratedUserId: z.string().uuid(),
+      personaId: z.string().uuid(),
+      conversationId: z.string().uuid(),
+      safetyRating: z.number().min(1).max(5),
+      behaviorTags: z.array(z.string()),
+      isInappropriate: z.boolean().optional(),
+      isThreatening: z.boolean().optional(),
+      isHarassing: z.boolean().optional(),
+      isSpam: z.boolean().optional(),
+      ratingReason: z.string().optional(),
+      ratingNotes: z.string().optional(),
+      isBlocked: z.boolean().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        // Verify the creator owns the persona
+        const persona = await db
+          .select()
+          .from(personas)
+          .where(and(
+            eq(personas.id, input.personaId),
+            eq(personas.userId, ctx.user.id)
+          ))
+          .limit(1);
+
+        if (persona.length === 0) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Not authorized to rate interactions for this persona'
+          });
+        }
+
+        const result = await contentModerationService.rateUserInteraction(
+          ctx.user.id,
+          input.ratedUserId,
+          input.personaId,
+          input.conversationId,
+          {
+            safetyRating: input.safetyRating,
+            behaviorTags: input.behaviorTags,
+            isInappropriate: input.isInappropriate,
+            isThreatening: input.isThreatening,
+            isHarassing: input.isHarassing,
+            isSpam: input.isSpam,
+            ratingReason: input.ratingReason,
+            ratingNotes: input.ratingNotes,
+            isBlocked: input.isBlocked,
+          }
+        );
+
+        return result;
+      } catch (error) {
+        logger.error('Error rating user interaction:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to rate interaction'
+        });
+      }
+    }),
+
+  // Get user interaction ratings (for creators)
+  getUserInteractionRatings: protectedProcedure
+    .input(z.object({
+      userId: z.string().uuid(),
+      personaId: z.string().uuid().optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        // Verify the creator owns the persona if specified
+        if (input.personaId) {
+          const persona = await db
+            .select()
+            .from(personas)
+            .where(and(
+              eq(personas.id, input.personaId),
+              eq(personas.userId, ctx.user.id)
+            ))
+            .limit(1);
+
+          if (persona.length === 0) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Not authorized to view ratings for this persona'
+            });
+          }
+        }
+
+        const ratings = await contentModerationService.getUserInteractionRatings(
+          input.userId,
+          input.personaId
+        );
+
+        return ratings;
+      } catch (error) {
+        logger.error('Error getting user interaction ratings:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get interaction ratings'
+        });
+      }
+    }),
+
+  // Block/unblock user
+  blockUser: protectedProcedure
+    .input(z.object({
+      userId: z.string().uuid(),
+      personaId: z.string().uuid(),
+      isBlocked: z.boolean(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        // Verify the creator owns the persona
+        const persona = await db
+          .select()
+          .from(personas)
+          .where(and(
+            eq(personas.id, input.personaId),
+            eq(personas.userId, ctx.user.id)
+          ))
+          .limit(1);
+
+        if (persona.length === 0) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Not authorized to block users for this persona'
+          });
+        }
+
+        const result = await contentModerationService.blockUser(
+          ctx.user.id,
+          input.userId,
+          input.personaId,
+          input.isBlocked
+        );
+
+        return result;
+      } catch (error) {
+        logger.error('Error blocking/unblocking user:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update user block status'
+        });
+      }
+    }),
+
+  // Get moderation history
+  getModerationHistory: protectedProcedure
+    .input(z.object({
+      contentId: z.string(),
+      contentType: z.enum(['message', 'persona_description', 'user_profile', 'media', 'conversation']),
+    }))
+    .query(async ({ input }) => {
+      try {
+        const history = await contentModerationService.getModerationHistory(
+          input.contentId,
+          input.contentType
+        );
+
+        return history;
+      } catch (error) {
+        logger.error('Error getting moderation history:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get moderation history'
+        });
+      }
+    }),
+});
+
+// Behavior Analysis Router
+const behaviorAnalysisRouter = router({
+  // Analyze user behavior
+  analyzeUserBehavior: protectedProcedure
+    .input(z.object({
+      userId: z.string().uuid(),
+      timeframeHours: z.number().optional().default(24),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        // Only allow analysis of own behavior or by authorized users
+        if (input.userId !== ctx.user.id) {
+          // TODO: Add admin/creator permission check
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Not authorized to analyze this user'
+          });
+        }
+
+        const analysis = await behaviorAnalysisService.analyzeUserBehavior(
+          input.userId,
+          input.timeframeHours
+        );
+
+        return analysis;
+      } catch (error) {
+        logger.error('Error analyzing user behavior:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to analyze behavior'
+        });
+      }
+    }),
+
+  // Get behavior summary
+  getBehaviorSummary: protectedProcedure
+    .input(z.object({
+      userId: z.string().uuid(),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        // Only allow viewing own summary or by authorized users
+        if (input.userId !== ctx.user.id) {
+          // TODO: Add admin/creator permission check
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Not authorized to view this behavior summary'
+          });
+        }
+
+        const summary = await behaviorAnalysisService.getBehaviorSummary(input.userId);
+        return summary;
+      } catch (error) {
+        logger.error('Error getting behavior summary:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get behavior summary'
+        });
+      }
+    }),
+});
+
 // Main app router
 export const appRouter = router({
   auth: authRouter,
@@ -1512,6 +1814,8 @@ export const appRouter = router({
   creatorVerification: creatorVerificationRouter,
   creatorMonetization: creatorMonetizationRouter,
   personaMonetization: personaMonetizationRouter,
+  contentModeration: contentModerationRouter,
+  behaviorAnalysis: behaviorAnalysisRouter,
 });
 
 export type AppRouter = typeof appRouter;

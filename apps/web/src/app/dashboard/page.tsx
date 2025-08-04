@@ -1820,12 +1820,48 @@ function DashboardPageContent() {
                   View Dashboard →
                 </button>
                 <button
+                  onClick={() => router.push("/creator/safety")}
+                  className="w-full text-sm text-gray-500 hover:text-gray-700 text-left"
+                >
+                  Safety Controls
+                </button>
+                <button
                   onClick={() => router.push("/creator/verification")}
                   className="w-full text-sm text-gray-500 hover:text-gray-700 text-left"
                 >
                   Creator Verification
                 </button>
               </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
+              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mb-4">
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0121 12a11.955 11.955 0 01-1.382 5.618m-.618-.618A10.05 10.05 0 0019 12a10.05 10.05 0 00-1-4.618m-.618-.618A8.15 8.15 0 0018 12a8.15 8.15 0 00-.382-2.382m-.618-.618A6.25 6.25 0 0017 12a6.25 6.25 0 00-1-3.382"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Safety Dashboard
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Monitor your account safety, interaction history, and privacy settings
+              </p>
+              <button
+                onClick={() => router.push("/safety")}
+                className="text-blue-600 hover:text-blue-500 font-medium"
+              >
+                View Safety Dashboard →
+              </button>
             </div>
           </div>
 

@@ -66,6 +66,18 @@ export default function QuickActions() {
       textColor: 'text-gray-700'
     },
     {
+      title: 'Safety Controls',
+      description: 'Manage user interactions',
+      icon: (
+        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0121 12a11.955 11.955 0 01-1.382 5.618m-.618-.618A10.05 10.05 0 0019 12a10.05 10.05 0 00-1-4.618m-.618-.618A8.15 8.15 0 0018 12a8.15 8.15 0 00-.382-2.382m-.618-.618A6.25 6.25 0 0017 12a6.25 6.25 0 00-1-3.382" />
+        </svg>
+      ),
+      action: () => router.push('/creator/safety'),
+      color: 'bg-blue-50 hover:bg-blue-100',
+      textColor: 'text-blue-700'
+    },
+    {
       title: 'Update Profile',
       description: 'Edit verification info',
       icon: (
