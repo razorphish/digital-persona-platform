@@ -649,7 +649,7 @@ export const creatorVerifications = pgTable("creator_verifications", {
   }),
   governmentIdNumber: text("government_id_number"), // Encrypted
   governmentIdExpiryDate: timestamp("government_id_expiry_date"),
-  
+
   // Address verification
   addressLine1: text("address_line1"),
   addressLine2: text("address_line2"),
@@ -657,9 +657,12 @@ export const creatorVerifications = pgTable("creator_verifications", {
   state: text("state"),
   postalCode: text("postal_code"),
   country: text("country").default("US"),
-  
+
   // Facial recognition verification
-  faceVerificationScore: decimal("face_verification_score", { precision: 4, scale: 3 }),
+  faceVerificationScore: decimal("face_verification_score", {
+    precision: 4,
+    scale: 3,
+  }),
   faceVerificationProvider: text("face_verification_provider", {
     enum: ["aws_rekognition", "azure_face", "google_vision"],
   }),
@@ -674,7 +677,7 @@ export const creatorVerifications = pgTable("creator_verifications", {
   }),
   bankAccountLast4: text("bank_account_last4"), // Only last 4 digits stored
   routingNumber: text("routing_number"), // Encrypted
-  
+
   // Tax information
   taxIdType: text("tax_id_type", {
     enum: ["ssn", "ein", "itin"],
@@ -685,7 +688,7 @@ export const creatorVerifications = pgTable("creator_verifications", {
     w8: boolean;
     additionalForms: string[];
   }>(),
-  
+
   // Verification metadata
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
@@ -693,12 +696,12 @@ export const creatorVerifications = pgTable("creator_verifications", {
   verificationNotes: text("verification_notes"),
   reviewedBy: uuid("reviewed_by"), // Admin user ID
   reviewedAt: timestamp("reviewed_at"),
-  
+
   // Rejection/suspension details
   rejectionReason: text("rejection_reason"),
   suspensionReason: text("suspension_reason"),
   appealSubmittedAt: timestamp("appeal_submitted_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   approvedAt: timestamp("approved_at"),
@@ -720,37 +723,37 @@ export const verificationDocuments = pgTable("verification_documents", {
   documentType: text("document_type", {
     enum: [
       "government_id_front",
-      "government_id_back", 
+      "government_id_back",
       "selfie_with_id",
       "utility_bill",
       "bank_statement",
       "tax_document",
       "business_license",
-      "proof_of_address"
+      "proof_of_address",
     ],
   }).notNull(),
   documentName: text("document_name").notNull(),
-  
+
   // File storage
   s3Bucket: text("s3_bucket").notNull(),
   s3Key: text("s3_key").notNull(),
   fileSize: integer("file_size"),
   mimeType: text("mime_type"),
-  
+
   // Processing status
   status: text("status", {
     enum: ["uploaded", "processing", "verified", "rejected"],
   }).default("uploaded"),
-  
+
   // AI verification results
   ocrText: text("ocr_text"), // Extracted text from document
   confidenceScore: decimal("confidence_score", { precision: 4, scale: 3 }),
   processingResults: jsonb("processing_results").$type<Record<string, any>>(),
-  
+
   // Security
   encryptionKey: text("encryption_key"), // For sensitive documents
   retentionExpiryDate: timestamp("retention_expiry_date"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   verifiedAt: timestamp("verified_at"),
@@ -762,35 +765,37 @@ export const stripeAccounts = pgTable("stripe_accounts", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  verificationId: uuid("verification_id")
-    .references(() => creatorVerifications.id, { onDelete: "set null" }),
+  verificationId: uuid("verification_id").references(
+    () => creatorVerifications.id,
+    { onDelete: "set null" }
+  ),
 
   // Stripe account details
   stripeAccountId: text("stripe_account_id").unique().notNull(),
   stripeAccountType: text("stripe_account_type", {
     enum: ["standard", "express", "custom"],
   }).default("express"),
-  
+
   // Account status
   chargesEnabled: boolean("charges_enabled").default(false),
   payoutsEnabled: boolean("payouts_enabled").default(false),
   detailsSubmitted: boolean("details_submitted").default(false),
-  
+
   // Onboarding
   onboardingUrl: text("onboarding_url"),
   onboardingExpiresAt: timestamp("onboarding_expires_at"),
   onboardingCompletedAt: timestamp("onboarding_completed_at"),
-  
+
   // Requirements tracking
   currentlyDue: jsonb("currently_due").$type<string[]>(),
   eventuallyDue: jsonb("eventually_due").$type<string[]>(),
   pastDue: jsonb("past_due").$type<string[]>(),
   pendingVerification: jsonb("pending_verification").$type<string[]>(),
-  
+
   // Account capabilities
   capabilities: jsonb("capabilities").$type<Record<string, string>>(),
   requirements: jsonb("requirements").$type<Record<string, any>>(),
-  
+
   // Payout settings
   payoutSchedule: jsonb("payout_schedule").$type<{
     interval: "daily" | "weekly" | "monthly";
@@ -799,11 +804,11 @@ export const stripeAccounts = pgTable("stripe_accounts", {
     delayDays?: number;
   }>(),
   defaultCurrency: text("default_currency").default("usd"),
-  
+
   // Status tracking
   isActive: boolean("is_active").default(true),
   lastWebhookAt: timestamp("last_webhook_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -824,27 +829,38 @@ export const creatorEarnings = pgTable("creator_earnings", {
   }).notNull(),
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
-  
+
   // Revenue breakdown
-  grossRevenue: decimal("gross_revenue", { precision: 12, scale: 2 }).default("0.00"),
-  platformFee: decimal("platform_fee", { precision: 12, scale: 2 }).default("0.00"), // 3%
-  processingFee: decimal("processing_fee", { precision: 12, scale: 2 }).default("0.00"), // Stripe fees
-  netEarnings: decimal("net_earnings", { precision: 12, scale: 2 }).default("0.00"), // 97% to creator
-  
+  grossRevenue: decimal("gross_revenue", { precision: 12, scale: 2 }).default(
+    "0.00"
+  ),
+  platformFee: decimal("platform_fee", { precision: 12, scale: 2 }).default(
+    "0.00"
+  ), // 3%
+  processingFee: decimal("processing_fee", { precision: 12, scale: 2 }).default(
+    "0.00"
+  ), // Stripe fees
+  netEarnings: decimal("net_earnings", { precision: 12, scale: 2 }).default(
+    "0.00"
+  ), // 97% to creator
+
   // Subscription metrics
   totalSubscribers: integer("total_subscribers").default(0),
   newSubscribers: integer("new_subscribers").default(0),
   cancelledSubscribers: integer("cancelled_subscribers").default(0),
-  
+
   // Interaction metrics
   totalInteractions: integer("total_interactions").default(0),
   paidInteractions: integer("paid_interactions").default(0),
   freeInteractions: integer("free_interactions").default(0),
-  
+
   // Time-based billing
   totalBillableMinutes: integer("total_billable_minutes").default(0),
-  averageSessionLength: decimal("average_session_length", { precision: 6, scale: 2 }),
-  
+  averageSessionLength: decimal("average_session_length", {
+    precision: 6,
+    scale: 2,
+  }),
+
   // Payout status
   payoutStatus: text("payout_status", {
     enum: ["pending", "processing", "paid", "failed", "cancelled"],
@@ -852,7 +868,7 @@ export const creatorEarnings = pgTable("creator_earnings", {
   payoutId: text("payout_id"), // Stripe payout ID
   payoutDate: timestamp("payout_date"),
   payoutAmount: decimal("payout_amount", { precision: 12, scale: 2 }),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -860,7 +876,7 @@ export const creatorEarnings = pgTable("creator_earnings", {
 // Subscription Payments and Transaction History
 export const subscriptionPayments = pgTable("subscription_payments", {
   id: uuid("id").primaryKey().defaultRandom(),
-  
+
   // Payment participants
   payerId: uuid("payer_id")
     .notNull()
@@ -871,54 +887,71 @@ export const subscriptionPayments = pgTable("subscription_payments", {
   personaId: uuid("persona_id")
     .notNull()
     .references(() => personas.id, { onDelete: "cascade" }),
-  subscriptionPlanId: uuid("subscription_plan_id")
-    .references(() => subscriptionPlans.id, { onDelete: "set null" }),
-  
+  subscriptionPlanId: uuid("subscription_plan_id").references(
+    () => subscriptionPlans.id,
+    { onDelete: "set null" }
+  ),
+
   // Stripe payment details
   stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeInvoiceId: text("stripe_invoice_id"),
   stripeCustomerId: text("stripe_customer_id"),
-  
+
   // Payment details
   paymentType: text("payment_type", {
     enum: ["subscription", "time_based", "tip", "one_time"],
   }).notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: text("currency").default("USD"),
-  
+
   // Revenue split
-  creatorAmount: decimal("creator_amount", { precision: 10, scale: 2 }).notNull(), // 97%
-  platformAmount: decimal("platform_amount", { precision: 10, scale: 2 }).notNull(), // 3%
-  processingFee: decimal("processing_fee", { precision: 10, scale: 2 }).default("0.00"),
-  
+  creatorAmount: decimal("creator_amount", {
+    precision: 10,
+    scale: 2,
+  }).notNull(), // 97%
+  platformAmount: decimal("platform_amount", {
+    precision: 10,
+    scale: 2,
+  }).notNull(), // 3%
+  processingFee: decimal("processing_fee", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+
   // Payment status
   status: text("status", {
-    enum: ["pending", "processing", "succeeded", "failed", "cancelled", "refunded"],
+    enum: [
+      "pending",
+      "processing",
+      "succeeded",
+      "failed",
+      "cancelled",
+      "refunded",
+    ],
   }).default("pending"),
-  
+
   // Billing period (for subscriptions)
   billingPeriodStart: timestamp("billing_period_start"),
   billingPeriodEnd: timestamp("billing_period_end"),
-  
+
   // Time-based billing details
   sessionMinutes: integer("session_minutes"), // For time-based payments
   hourlyRate: decimal("hourly_rate", { precision: 8, scale: 2 }),
-  
+
   // Payment metadata
   description: text("description"),
   metadata: jsonb("metadata").$type<Record<string, any>>(),
-  
+
   // Refund information
   refundAmount: decimal("refund_amount", { precision: 10, scale: 2 }),
   refundReason: text("refund_reason"),
   refundedAt: timestamp("refunded_at"),
-  
+
   // Failure details
   failureCode: text("failure_code"),
   failureMessage: text("failure_message"),
   failedAt: timestamp("failed_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   paidAt: timestamp("paid_at"),
@@ -937,12 +970,17 @@ export const personaMonetization = pgTable("persona_monetization", {
   // Monetization status
   isMonetized: boolean("is_monetized").default(false),
   requiresVerification: boolean("requires_verification").default(true),
-  
+
   // Pricing strategy
   pricingModel: text("pricing_model", {
-    enum: ["subscription_only", "time_based_only", "hybrid", "free_with_limits"],
+    enum: [
+      "subscription_only",
+      "time_based_only",
+      "hybrid",
+      "free_with_limits",
+    ],
   }).default("hybrid"),
-  
+
   // Subscription tiers
   basicTierPrice: decimal("basic_tier_price", { precision: 8, scale: 2 }),
   basicTierFeatures: jsonb("basic_tier_features").$type<{
@@ -952,7 +990,7 @@ export const personaMonetization = pgTable("persona_monetization", {
     responseTime: "instant" | "fast" | "standard";
     customFeatures: string[];
   }>(),
-  
+
   averageTierPrice: decimal("average_tier_price", { precision: 8, scale: 2 }),
   averageTierFeatures: jsonb("average_tier_features").$type<{
     messagesPerDay: number;
@@ -963,7 +1001,7 @@ export const personaMonetization = pgTable("persona_monetization", {
     prioritySupport: boolean;
     customFeatures: string[];
   }>(),
-  
+
   advancedTierPrice: decimal("advanced_tier_price", { precision: 8, scale: 2 }),
   advancedTierFeatures: jsonb("advanced_tier_features").$type<{
     messagesPerDay: number;
@@ -976,26 +1014,31 @@ export const personaMonetization = pgTable("persona_monetization", {
     exclusiveContent: boolean;
     customFeatures: string[];
   }>(),
-  
+
   // Time-based pricing
   timeBasedEnabled: boolean("time_based_enabled").default(false),
   hourlyRate: decimal("hourly_rate", { precision: 8, scale: 2 }),
   minimumSessionMinutes: integer("minimum_session_minutes").default(15),
-  
+
   // Free interaction limits
   freeMessagesPerDay: integer("free_messages_per_day").default(3),
   freeMinutesPerDay: integer("free_minutes_per_day").default(10),
-  
+
   // Creator controls
   autoAcceptSubscriptions: boolean("auto_accept_subscriptions").default(true),
   requireManualApproval: boolean("require_manual_approval").default(false),
   allowTips: boolean("allow_tips").default(true),
-  
+
   // Performance metrics
-  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0.00"),
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default(
+    "0.00"
+  ),
   totalSubscribers: integer("total_subscribers").default(0),
-  averageSessionRevenue: decimal("average_session_revenue", { precision: 8, scale: 2 }),
-  
+  averageSessionRevenue: decimal("average_session_revenue", {
+    precision: 8,
+    scale: 2,
+  }),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1006,42 +1049,58 @@ export const personaMonetization = pgTable("persona_monetization", {
 export const contentModerations = pgTable("content_moderations", {
   id: uuid("id").primaryKey().defaultRandom(),
   contentType: text("content_type", {
-    enum: ["message", "persona_description", "user_profile", "media", "conversation"],
+    enum: [
+      "message",
+      "persona_description",
+      "user_profile",
+      "media",
+      "conversation",
+    ],
   }).notNull(),
   contentId: text("content_id").notNull(), // References the actual content
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
-  personaId: uuid("persona_id").references(() => personas.id, { onDelete: "cascade" }),
-  
+  personaId: uuid("persona_id").references(() => personas.id, {
+    onDelete: "cascade",
+  }),
+
   // Moderation results
   status: text("status", {
     enum: ["pending", "approved", "flagged", "blocked", "under_review"],
-  }).default("pending").notNull(),
-  
+  })
+    .default("pending")
+    .notNull(),
+
   // AI Analysis Results
   aiModerationScore: decimal("ai_moderation_score", { precision: 3, scale: 2 }), // 0.00 to 1.00
   flaggedCategories: jsonb("flagged_categories").default([]), // ["harassment", "nsfw", "violence", etc.]
   severity: text("severity", {
     enum: ["low", "medium", "high", "critical"],
   }),
-  
+
   // Content analysis
   originalContent: text("original_content"),
   contentSummary: text("content_summary"),
   detectedLanguage: text("detected_language"),
-  
+
   // Age and compliance
   ageRating: text("age_rating", {
     enum: ["all_ages", "teen", "mature", "adults_only"],
   }),
   complianceFlags: jsonb("compliance_flags").default([]), // ["coppa", "gdpr", "state_law", etc.]
-  
+
   // Moderation actions
   moderatedBy: uuid("moderated_by").references(() => users.id),
   moderatorNotes: text("moderator_notes"),
   actionTaken: text("action_taken", {
-    enum: ["none", "warning", "content_hidden", "user_suspended", "account_banned"],
+    enum: [
+      "none",
+      "warning",
+      "content_hidden",
+      "user_suspended",
+      "account_banned",
+    ],
   }),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1049,39 +1108,47 @@ export const contentModerations = pgTable("content_moderations", {
 // User behavior tracking and safety scores
 export const userSafetyProfiles = pgTable("user_safety_profiles", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").unique().notNull().references(() => users.id, { onDelete: "cascade" }),
-  
+  userId: uuid("user_id")
+    .unique()
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
   // Safety metrics
-  overallSafetyScore: decimal("overall_safety_score", { precision: 3, scale: 2 }).default("1.00"), // 0.00 to 1.00
+  overallSafetyScore: decimal("overall_safety_score", {
+    precision: 3,
+    scale: 2,
+  }).default("1.00"), // 0.00 to 1.00
   trustLevel: text("trust_level", {
     enum: ["new", "trusted", "verified", "flagged", "restricted"],
   }).default("new"),
-  
+
   // Behavior tracking
   totalInteractions: integer("total_interactions").default(0),
   flaggedInteractions: integer("flagged_interactions").default(0),
   positiveRatings: integer("positive_ratings").default(0),
   negativeRatings: integer("negative_ratings").default(0),
-  
+
   // Content violations
   contentViolations: integer("content_violations").default(0),
-  severityScore: decimal("severity_score", { precision: 3, scale: 2 }).default("0.00"),
+  severityScore: decimal("severity_score", { precision: 3, scale: 2 }).default(
+    "0.00"
+  ),
   lastViolationDate: timestamp("last_violation_date"),
-  
+
   // Age verification
   ageVerified: boolean("age_verified").default(false),
   ageVerificationDate: timestamp("age_verification_date"),
   dateOfBirth: timestamp("date_of_birth"),
-  
+
   // Account restrictions
   isRestricted: boolean("is_restricted").default(false),
   restrictionReason: text("restriction_reason"),
   restrictionExpiresAt: timestamp("restriction_expires_at"),
-  
+
   // Family-friendly mode
   familyFriendlyMode: boolean("family_friendly_mode").default(false),
   parentalControls: jsonb("parental_controls").default({}),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1089,26 +1156,34 @@ export const userSafetyProfiles = pgTable("user_safety_profiles", {
 // Interaction safety ratings between users and personas
 export const interactionRatings = pgTable("interaction_ratings", {
   id: uuid("id").primaryKey().defaultRandom(),
-  raterId: uuid("rater_id").notNull().references(() => users.id, { onDelete: "cascade" }), // Creator rating the user
-  ratedUserId: uuid("rated_user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User being rated
-  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
-  conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }),
-  
+  raterId: uuid("rater_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }), // Creator rating the user
+  ratedUserId: uuid("rated_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }), // User being rated
+  personaId: uuid("persona_id")
+    .notNull()
+    .references(() => personas.id, { onDelete: "cascade" }),
+  conversationId: uuid("conversation_id").references(() => conversations.id, {
+    onDelete: "cascade",
+  }),
+
   // Rating details
   safetyRating: integer("safety_rating").notNull(), // 1-5 scale (1=unsafe, 5=very safe)
   behaviorTags: jsonb("behavior_tags").default([]), // ["respectful", "inappropriate", "threatening", etc.]
-  
+
   // Specific concerns
   isInappropriate: boolean("is_inappropriate").default(false),
   isThreatening: boolean("is_threatening").default(false),
   isHarassing: boolean("is_harassing").default(false),
   isSpam: boolean("is_spam").default(false),
-  
+
   // Rating context
   ratingReason: text("rating_reason"),
   ratingNotes: text("rating_notes"),
   isBlocked: boolean("is_blocked").default(false), // Creator blocked this user
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1117,27 +1192,39 @@ export const interactionRatings = pgTable("interaction_ratings", {
 export const safetyIncidents = pgTable("safety_incidents", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
-  personaId: uuid("persona_id").references(() => personas.id, { onDelete: "cascade" }),
-  contentModerationId: uuid("content_moderation_id").references(() => contentModerations.id),
-  
+  personaId: uuid("persona_id").references(() => personas.id, {
+    onDelete: "cascade",
+  }),
+  contentModerationId: uuid("content_moderation_id").references(
+    () => contentModerations.id
+  ),
+
   // Incident details
   incidentType: text("incident_type", {
-    enum: ["content_violation", "behavior_violation", "spam", "harassment", "threats", "inappropriate_content", "age_violation"],
+    enum: [
+      "content_violation",
+      "behavior_violation",
+      "spam",
+      "harassment",
+      "threats",
+      "inappropriate_content",
+      "age_violation",
+    ],
   }).notNull(),
   severity: text("severity", {
     enum: ["low", "medium", "high", "critical"],
   }).notNull(),
-  
+
   // Detection method
   detectionMethod: text("detection_method", {
     enum: ["ai_detection", "user_report", "manual_review", "pattern_analysis"],
   }).notNull(),
   confidence: decimal("confidence", { precision: 3, scale: 2 }), // 0.00 to 1.00
-  
+
   // Incident data
   description: text("description").notNull(),
   evidence: jsonb("evidence").default({}), // Screenshots, message content, etc.
-  
+
   // Resolution
   status: text("status", {
     enum: ["open", "under_review", "resolved", "escalated", "dismissed"],
@@ -1145,7 +1232,7 @@ export const safetyIncidents = pgTable("safety_incidents", {
   resolvedBy: uuid("resolved_by").references(() => users.id),
   resolution: text("resolution"),
   actionTaken: text("action_taken"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1155,109 +1242,135 @@ export const contentPolicies = pgTable("content_policies", {
   id: uuid("id").primaryKey().defaultRandom(),
   policyName: text("policy_name").notNull(),
   policyType: text("policy_type", {
-    enum: ["content_guidelines", "behavior_rules", "age_restrictions", "legal_compliance"],
+    enum: [
+      "content_guidelines",
+      "behavior_rules",
+      "age_restrictions",
+      "legal_compliance",
+    ],
   }).notNull(),
-  
+
   // Policy details
   description: text("description").notNull(),
   rules: jsonb("rules").notNull(), // Detailed policy rules
   severity: text("severity", {
     enum: ["warning", "content_removal", "account_suspension", "permanent_ban"],
   }).notNull(),
-  
+
   // Applicability
   isActive: boolean("is_active").default(true),
   appliesTo: jsonb("applies_to").default([]), // ["creators", "users", "content", "conversations"]
-  
+
   // Geographic and legal
   jurisdiction: text("jurisdiction").default("US"),
   legalBasis: text("legal_basis"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Relations for Content Moderation & Safety
-export const contentModerationRelations = relations(contentModerations, ({ one }) => ({
-  user: one(users, {
-    fields: [contentModerations.userId],
-    references: [users.id],
-  }),
-  persona: one(personas, {
-    fields: [contentModerations.personaId],
-    references: [personas.id],
-  }),
-  moderator: one(users, {
-    fields: [contentModerations.moderatedBy],
-    references: [users.id],
-  }),
-}));
+export const contentModerationRelations = relations(
+  contentModerations,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [contentModerations.userId],
+      references: [users.id],
+    }),
+    persona: one(personas, {
+      fields: [contentModerations.personaId],
+      references: [personas.id],
+    }),
+    moderator: one(users, {
+      fields: [contentModerations.moderatedBy],
+      references: [users.id],
+    }),
+  })
+);
 
-export const userSafetyProfileRelations = relations(userSafetyProfiles, ({ one, many }) => ({
-  user: one(users, {
-    fields: [userSafetyProfiles.userId],
-    references: [users.id],
-  }),
-  ratings: many(interactionRatings, {
-    relationName: "userSafetyRatings",
-  }),
-}));
+export const userSafetyProfileRelations = relations(
+  userSafetyProfiles,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [userSafetyProfiles.userId],
+      references: [users.id],
+    }),
+    ratings: many(interactionRatings, {
+      relationName: "userSafetyRatings",
+    }),
+  })
+);
 
-export const interactionRatingRelations = relations(interactionRatings, ({ one }) => ({
-  rater: one(users, {
-    fields: [interactionRatings.raterId],
-    references: [users.id],
-  }),
-  ratedUser: one(users, {
-    fields: [interactionRatings.ratedUserId],
-    references: [users.id],
-  }),
-  persona: one(personas, {
-    fields: [interactionRatings.personaId],
-    references: [personas.id],
-  }),
-  conversation: one(conversations, {
-    fields: [interactionRatings.conversationId],
-    references: [conversations.id],
-  }),
-}));
+export const interactionRatingRelations = relations(
+  interactionRatings,
+  ({ one }) => ({
+    rater: one(users, {
+      fields: [interactionRatings.raterId],
+      references: [users.id],
+    }),
+    ratedUser: one(users, {
+      fields: [interactionRatings.ratedUserId],
+      references: [users.id],
+    }),
+    persona: one(personas, {
+      fields: [interactionRatings.personaId],
+      references: [personas.id],
+    }),
+    conversation: one(conversations, {
+      fields: [interactionRatings.conversationId],
+      references: [conversations.id],
+    }),
+  })
+);
 
-export const safetyIncidentRelations = relations(safetyIncidents, ({ one }) => ({
-  user: one(users, {
-    fields: [safetyIncidents.userId],
-    references: [users.id],
-  }),
-  persona: one(personas, {
-    fields: [safetyIncidents.personaId],
-    references: [personas.id],
-  }),
-  contentModeration: one(contentModerations, {
-    fields: [safetyIncidents.contentModerationId],
-    references: [contentModerations.id],
-  }),
-  resolver: one(users, {
-    fields: [safetyIncidents.resolvedBy],
-    references: [users.id],
-  }),
-}));
+export const safetyIncidentRelations = relations(
+  safetyIncidents,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [safetyIncidents.userId],
+      references: [users.id],
+    }),
+    persona: one(personas, {
+      fields: [safetyIncidents.personaId],
+      references: [personas.id],
+    }),
+    contentModeration: one(contentModerations, {
+      fields: [safetyIncidents.contentModerationId],
+      references: [contentModerations.id],
+    }),
+    resolver: one(users, {
+      fields: [safetyIncidents.resolvedBy],
+      references: [users.id],
+    }),
+  })
+);
 
 // Social Features & Discovery Tables
 
 // User follows - users following other users (creators)
 export const userFollows = pgTable("user_follows", {
   id: uuid("id").primaryKey().defaultRandom(),
-  followerId: uuid("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User who follows
-  followingId: uuid("following_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User being followed
-  
+  followerId: uuid("follower_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }), // User who follows
+  followingId: uuid("following_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }), // User being followed
+
   // Follow context
   followReason: text("follow_reason", {
-    enum: ["creator_interest", "persona_discovery", "friend_connection", "recommendation"],
+    enum: [
+      "creator_interest",
+      "persona_discovery",
+      "friend_connection",
+      "recommendation",
+    ],
   }),
-  
+
   // Notification settings
   notifyOnNewPersona: boolean("notify_on_new_persona").default(true),
   notifyOnUpdates: boolean("notify_on_updates").default(false),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1265,19 +1378,30 @@ export const userFollows = pgTable("user_follows", {
 // Persona likes/favorites - users liking specific personas
 export const personaLikes = pgTable("persona_likes", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
-  
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  personaId: uuid("persona_id")
+    .notNull()
+    .references(() => personas.id, { onDelete: "cascade" }),
+
   // Like context
   likeType: text("like_type", {
     enum: ["like", "favorite", "bookmark", "interested"],
   }).default("like"),
-  
+
   // Interaction context
   discoveredVia: text("discovered_via", {
-    enum: ["feed", "search", "trending", "recommendation", "creator_profile", "direct_link"],
+    enum: [
+      "feed",
+      "search",
+      "trending",
+      "recommendation",
+      "creator_profile",
+      "direct_link",
+    ],
   }),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1285,29 +1409,33 @@ export const personaLikes = pgTable("persona_likes", {
 // Persona reviews and ratings from users
 export const personaReviews = pgTable("persona_reviews", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
-  
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  personaId: uuid("persona_id")
+    .notNull()
+    .references(() => personas.id, { onDelete: "cascade" }),
+
   // Review content
   rating: integer("rating").notNull(), // 1-5 stars
   title: text("title"),
   reviewText: text("review_text"),
-  
+
   // Review categories
   categories: jsonb("categories").default([]), // ["personality", "responsiveness", "entertainment", "value"]
   pros: jsonb("pros").default([]), // Array of positive aspects
   cons: jsonb("cons").default([]), // Array of negative aspects
-  
+
   // Interaction context
   interactionDuration: integer("interaction_duration"), // Minutes interacted before review
   subscriptionTier: text("subscription_tier"), // Which tier they subscribed to
-  
+
   // Review status
   isVerifiedPurchase: boolean("is_verified_purchase").default(false),
   isPublic: boolean("is_public").default(true),
   isHelpful: integer("is_helpful").default(0), // Helpful votes from other users
   isReported: boolean("is_reported").default(false),
-  
+
   // Moderation
   moderationStatus: text("moderation_status", {
     enum: ["pending", "approved", "hidden", "removed"],
@@ -1315,7 +1443,7 @@ export const personaReviews = pgTable("persona_reviews", {
   moderatedBy: uuid("moderated_by").references(() => users.id),
   moderatedAt: timestamp("moderated_at"),
   moderationReason: text("moderation_reason"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1323,34 +1451,46 @@ export const personaReviews = pgTable("persona_reviews", {
 // Feed algorithm and discovery metrics
 export const discoveryMetrics = pgTable("discovery_metrics", {
   id: uuid("id").primaryKey().defaultRandom(),
-  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
-  
+  personaId: uuid("persona_id")
+    .notNull()
+    .references(() => personas.id, { onDelete: "cascade" }),
+
   // Engagement metrics (last 24h, 7d, 30d)
   viewsLast24h: integer("views_last_24h").default(0),
   viewsLast7d: integer("views_last_7d").default(0),
   viewsLast30d: integer("views_last_30d").default(0),
-  
+
   likesLast24h: integer("likes_last_24h").default(0),
   likesLast7d: integer("likes_last_7d").default(0),
   likesLast30d: integer("likes_last_30d").default(0),
-  
+
   subscriptionsLast24h: integer("subscriptions_last_24h").default(0),
   subscriptionsLast7d: integer("subscriptions_last_7d").default(0),
   subscriptionsLast30d: integer("subscriptions_last_30d").default(0),
-  
+
   // Discovery scores
-  trendingScore: decimal("trending_score", { precision: 10, scale: 4 }).default("0.0000"),
-  popularityScore: decimal("popularity_score", { precision: 10, scale: 4 }).default("0.0000"),
-  qualityScore: decimal("quality_score", { precision: 10, scale: 4 }).default("0.0000"), // Based on reviews
-  engagementScore: decimal("engagement_score", { precision: 10, scale: 4 }).default("0.0000"),
-  
+  trendingScore: decimal("trending_score", { precision: 10, scale: 4 }).default(
+    "0.0000"
+  ),
+  popularityScore: decimal("popularity_score", {
+    precision: 10,
+    scale: 4,
+  }).default("0.0000"),
+  qualityScore: decimal("quality_score", { precision: 10, scale: 4 }).default(
+    "0.0000"
+  ), // Based on reviews
+  engagementScore: decimal("engagement_score", {
+    precision: 10,
+    scale: 4,
+  }).default("0.0000"),
+
   // Overall discovery rank
   discoveryRank: integer("discovery_rank").default(999999),
   categoryRank: integer("category_rank").default(999999),
-  
+
   // Metadata
   lastCalculated: timestamp("last_calculated").defaultNow(),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1358,38 +1498,61 @@ export const discoveryMetrics = pgTable("discovery_metrics", {
 // Social feed items for personalized feeds
 export const feedItems = pgTable("feed_items", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User seeing this in their feed
-  
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }), // User seeing this in their feed
+
   // Content reference
   itemType: text("item_type", {
-    enum: ["persona_recommendation", "trending_persona", "creator_update", "followed_creator_persona", "similar_personas", "review_highlight"],
+    enum: [
+      "persona_recommendation",
+      "trending_persona",
+      "creator_update",
+      "followed_creator_persona",
+      "similar_personas",
+      "review_highlight",
+    ],
   }).notNull(),
-  personaId: uuid("persona_id").references(() => personas.id, { onDelete: "cascade" }),
-  creatorId: uuid("creator_id").references(() => users.id, { onDelete: "cascade" }),
-  
+  personaId: uuid("persona_id").references(() => personas.id, {
+    onDelete: "cascade",
+  }),
+  creatorId: uuid("creator_id").references(() => users.id, {
+    onDelete: "cascade",
+  }),
+
   // Recommendation context
   algorithmSource: text("algorithm_source", {
-    enum: ["trending", "personalized", "collaborative_filtering", "content_based", "social_graph", "new_creator"],
+    enum: [
+      "trending",
+      "personalized",
+      "collaborative_filtering",
+      "content_based",
+      "social_graph",
+      "new_creator",
+    ],
   }).notNull(),
-  relevanceScore: decimal("relevance_score", { precision: 3, scale: 2 }).default("0.50"), // 0.00 to 1.00
-  
+  relevanceScore: decimal("relevance_score", {
+    precision: 3,
+    scale: 2,
+  }).default("0.50"), // 0.00 to 1.00
+
   // Ranking and display
   feedPosition: integer("feed_position"), // Position in user's feed
   isPromoted: boolean("is_promoted").default(false), // Paid promotion
   isTrending: boolean("is_trending").default(false),
-  
+
   // User interaction tracking
   wasViewed: boolean("was_viewed").default(false),
   wasClicked: boolean("was_clicked").default(false),
   wasLiked: boolean("was_liked").default(false),
   wasShared: boolean("was_shared").default(false),
   wasDismissed: boolean("was_dismissed").default(false),
-  
+
   // Timing
   viewedAt: timestamp("viewed_at"),
   clickedAt: timestamp("clicked_at"),
   dismissedAt: timestamp("dismissed_at"),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1397,34 +1560,48 @@ export const feedItems = pgTable("feed_items", {
 // User preferences for feed algorithm
 export const userFeedPreferences = pgTable("user_feed_preferences", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").unique().notNull().references(() => users.id, { onDelete: "cascade" }),
-  
+  userId: uuid("user_id")
+    .unique()
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
   // Content preferences
   preferredCategories: jsonb("preferred_categories").default([]), // ["entertainment", "education", "lifestyle", etc.]
   blockedCategories: jsonb("blocked_categories").default([]),
-  
+
   // Discovery preferences
   showTrending: boolean("show_trending").default(true),
   showRecommendations: boolean("show_recommendations").default(true),
   showFollowedCreators: boolean("show_followed_creators").default(true),
   showSimilarPersonas: boolean("show_similar_personas").default(true),
-  
+
   // Algorithm weights (0.0 to 1.0)
-  trendingWeight: decimal("trending_weight", { precision: 3, scale: 2 }).default("0.30"),
-  personalizedWeight: decimal("personalized_weight", { precision: 3, scale: 2 }).default("0.40"),
-  socialWeight: decimal("social_weight", { precision: 3, scale: 2 }).default("0.20"),
-  newCreatorWeight: decimal("new_creator_weight", { precision: 3, scale: 2 }).default("0.10"),
-  
+  trendingWeight: decimal("trending_weight", {
+    precision: 3,
+    scale: 2,
+  }).default("0.30"),
+  personalizedWeight: decimal("personalized_weight", {
+    precision: 3,
+    scale: 2,
+  }).default("0.40"),
+  socialWeight: decimal("social_weight", { precision: 3, scale: 2 }).default(
+    "0.20"
+  ),
+  newCreatorWeight: decimal("new_creator_weight", {
+    precision: 3,
+    scale: 2,
+  }).default("0.10"),
+
   // Content filtering
   minRating: decimal("min_rating", { precision: 2, scale: 1 }).default("3.0"), // Minimum persona rating to show
   hideNSFW: boolean("hide_nsfw").default(true),
   onlyVerifiedCreators: boolean("only_verified_creators").default(false),
-  
+
   // Feed behavior
   autoRefreshFeed: boolean("auto_refresh_feed").default(true),
   feedRefreshInterval: integer("feed_refresh_interval").default(300), // Seconds
   maxFeedItems: integer("max_feed_items").default(50),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1432,31 +1609,35 @@ export const userFeedPreferences = pgTable("user_feed_preferences", {
 // Trending topics and hashtags
 export const trendingTopics = pgTable("trending_topics", {
   id: uuid("id").primaryKey().defaultRandom(),
-  
+
   // Topic details
   topicName: text("topic_name").notNull(),
   topicType: text("topic_type", {
     enum: ["hashtag", "category", "personality_trait", "interest", "event"],
   }).notNull(),
-  
+
   // Trending metrics
   mentionCount: integer("mention_count").default(0),
   personaCount: integer("persona_count").default(0), // How many personas relate to this topic
   engagementCount: integer("engagement_count").default(0),
-  
+
   // Trending scores
-  trendingScore: decimal("trending_score", { precision: 10, scale: 4 }).default("0.0000"),
-  velocityScore: decimal("velocity_score", { precision: 10, scale: 4 }).default("0.0000"), // Rate of growth
-  
+  trendingScore: decimal("trending_score", { precision: 10, scale: 4 }).default(
+    "0.0000"
+  ),
+  velocityScore: decimal("velocity_score", { precision: 10, scale: 4 }).default(
+    "0.0000"
+  ), // Rate of growth
+
   // Geographic and demographic data
   topRegions: jsonb("top_regions").default([]), // ["US", "CA", "UK"]
   topAgeGroups: jsonb("top_age_groups").default([]), // ["18-24", "25-34"]
-  
+
   // Topic lifecycle
   firstSeen: timestamp("first_seen").defaultNow(),
   peakDate: timestamp("peak_date"),
   isCurrentlyTrending: boolean("is_currently_trending").default(false),
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1501,12 +1682,15 @@ export const personaReviewRelations = relations(personaReviews, ({ one }) => ({
   }),
 }));
 
-export const discoveryMetricRelations = relations(discoveryMetrics, ({ one }) => ({
-  persona: one(personas, {
-    fields: [discoveryMetrics.personaId],
-    references: [personas.id],
-  }),
-}));
+export const discoveryMetricRelations = relations(
+  discoveryMetrics,
+  ({ one }) => ({
+    persona: one(personas, {
+      fields: [discoveryMetrics.personaId],
+      references: [personas.id],
+    }),
+  })
+);
 
 export const feedItemRelations = relations(feedItems, ({ one }) => ({
   user: one(users, {
@@ -1523,89 +1707,644 @@ export const feedItemRelations = relations(feedItems, ({ one }) => ({
   }),
 }));
 
-export const userFeedPreferenceRelations = relations(userFeedPreferences, ({ one }) => ({
+export const userFeedPreferenceRelations = relations(
+  userFeedPreferences,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userFeedPreferences.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+// Advanced Analytics & Business Intelligence Tables
+
+// User analytics and behavior tracking
+export const userAnalytics = pgTable("user_analytics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Demographic data
+  ageRange: text("age_range", {
+    enum: ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
+  }),
+  gender: text("gender", {
+    enum: ["male", "female", "non_binary", "prefer_not_to_say", "other"],
+  }),
+  location: jsonb("location").default({}), // { country, state, city, timezone }
+  language: text("language").default("en"),
+  deviceType: text("device_type", {
+    enum: ["mobile", "tablet", "desktop", "tv", "other"],
+  }),
+
+  // Platform usage patterns
+  totalSessions: integer("total_sessions").default(0),
+  totalSessionDuration: integer("total_session_duration").default(0), // seconds
+  averageSessionDuration: integer("average_session_duration").default(0), // seconds
+  lastActiveDate: timestamp("last_active_date"),
+
+  // Engagement metrics
+  totalPersonasViewed: integer("total_personas_viewed").default(0),
+  totalPersonasInteracted: integer("total_personas_interacted").default(0),
+  totalConversations: integer("total_conversations").default(0),
+  totalMessages: integer("total_messages").default(0),
+  totalSubscriptions: integer("total_subscriptions").default(0),
+  totalSpent: decimal("total_spent", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+
+  // Behavioral patterns
+  preferredInteractionTime: jsonb("preferred_interaction_time").default({}), // hours of day
+  preferredCategories: jsonb("preferred_categories").default([]),
+  mostUsedFeatures: jsonb("most_used_features").default([]),
+  conversionRate: decimal("conversion_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // view to subscription
+
+  // Retention metrics
+  daysSinceFirstVisit: integer("days_since_first_visit").default(0),
+  daysSinceLastVisit: integer("days_since_last_visit").default(0),
+  visitStreak: integer("visit_streak").default(0), // consecutive days
+  longestStreak: integer("longest_streak").default(0),
+
+  // Calculated at intervals
+  lastCalculated: timestamp("last_calculated").defaultNow(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Creator analytics and performance tracking
+export const creatorAnalytics = pgTable("creator_analytics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Content metrics
+  totalPersonas: integer("total_personas").default(0),
+  activePersonas: integer("active_personas").default(0),
+  totalViews: integer("total_views").default(0),
+  totalLikes: integer("total_likes").default(0),
+  totalFollowers: integer("total_followers").default(0),
+  totalSubscribers: integer("total_subscribers").default(0),
+
+  // Engagement rates (percentage)
+  viewToLikeRate: decimal("view_to_like_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+  viewToFollowRate: decimal("view_to_follow_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+  viewToSubscribeRate: decimal("view_to_subscribe_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+  followerToSubscriberRate: decimal("follower_to_subscriber_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+
+  // Revenue metrics
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default(
+    "0.00"
+  ),
+  monthlyRecurringRevenue: decimal("monthly_recurring_revenue", {
+    precision: 10,
+    scale: 2,
+  }).default("0.00"),
+  averageRevenuePerUser: decimal("average_revenue_per_user", {
+    precision: 8,
+    scale: 2,
+  }).default("0.00"),
+
+  // Subscriber analytics
+  subscriberGrowthRate: decimal("subscriber_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // weekly %
+  subscriberChurnRate: decimal("subscriber_churn_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // monthly %
+  averageSubscriptionDuration: integer("average_subscription_duration").default(
+    0
+  ), // days
+
+  // Content performance
+  averageRating: decimal("average_rating", { precision: 3, scale: 2 }).default(
+    "0.00"
+  ),
+  totalReviews: integer("total_reviews").default(0),
+  responseRate: decimal("response_rate", { precision: 5, scale: 4 }).default(
+    "0.0000"
+  ), // messages responded to
+  averageResponseTime: integer("average_response_time").default(0), // minutes
+
+  // Growth metrics
+  viewGrowthRate: decimal("view_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // weekly %
+  followerGrowthRate: decimal("follower_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // weekly %
+  revenueGrowthRate: decimal("revenue_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // monthly %
+
+  // Ranking and benchmarks
+  categoryRank: integer("category_rank").default(999999),
+  overallRank: integer("overall_rank").default(999999),
+  percentileScore: decimal("percentile_score", {
+    precision: 5,
+    scale: 2,
+  }).default("50.00"), // 0-100
+
+  // Time-based data calculation
+  calculationPeriod: text("calculation_period", {
+    enum: ["daily", "weekly", "monthly"],
+  }).default("weekly"),
+  lastCalculated: timestamp("last_calculated").defaultNow(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Detailed revenue tracking and forecasting
+export const revenueAnalytics = pgTable("revenue_analytics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Time period
+  period: text("period", {
+    enum: ["daily", "weekly", "monthly", "quarterly", "yearly"],
+  }).notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+
+  // Revenue breakdown
+  subscriptionRevenue: decimal("subscription_revenue", {
+    precision: 10,
+    scale: 2,
+  }).default("0.00"),
+  timeBasedRevenue: decimal("time_based_revenue", {
+    precision: 10,
+    scale: 2,
+  }).default("0.00"),
+  tipRevenue: decimal("tip_revenue", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+  totalRevenue: decimal("total_revenue", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+
+  // Platform fees
+  platformFee: decimal("platform_fee", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+  processingFee: decimal("processing_fee", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+  netRevenue: decimal("net_revenue", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+
+  // Subscriber metrics for period
+  newSubscribers: integer("new_subscribers").default(0),
+  churned_subscribers: integer("churned_subscribers").default(0),
+  totalActiveSubscribers: integer("total_active_subscribers").default(0),
+
+  // Forecasting data
+  forecastedRevenue: decimal("forecasted_revenue", { precision: 10, scale: 2 }),
+  forecastConfidence: decimal("forecast_confidence", {
+    precision: 3,
+    scale: 2,
+  }), // 0-100%
+  forecastMethod: text("forecast_method", {
+    enum: [
+      "linear_regression",
+      "seasonal_decomposition",
+      "arima",
+      "machine_learning",
+    ],
+  }),
+
+  // Growth metrics
+  periodOverPeriodGrowth: decimal("period_over_period_growth", {
+    precision: 5,
+    scale: 4,
+  }),
+  yearOverYearGrowth: decimal("year_over_year_growth", {
+    precision: 5,
+    scale: 4,
+  }),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Subscriber demographics and behavior analysis
+export const subscriberAnalytics = pgTable("subscriber_analytics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creatorId: uuid("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Time period for analysis
+  analysisDate: timestamp("analysis_date").notNull(),
+
+  // Demographic breakdown
+  ageDistribution: jsonb("age_distribution").default({}), // {"18-24": 30, "25-34": 45, ...}
+  genderDistribution: jsonb("gender_distribution").default({}), // {"male": 60, "female": 35, ...}
+  locationDistribution: jsonb("location_distribution").default({}), // {"US": 50, "CA": 20, ...}
+
+  // Subscription tier analysis
+  tierDistribution: jsonb("tier_distribution").default({}), // {"basic": 40, "premium": 35, ...}
+  averageSubscriptionValue: decimal("average_subscription_value", {
+    precision: 8,
+    scale: 2,
+  }).default("0.00"),
+
+  // Behavioral patterns
+  averageSessionLength: integer("average_session_length").default(0), // minutes
+  averageMessagesPerSession: decimal("average_messages_per_session", {
+    precision: 5,
+    scale: 2,
+  }).default("0.00"),
+  peakActivityHours: jsonb("peak_activity_hours").default({}), // {"0": 5, "1": 3, ...}
+  mostPopularFeatures: jsonb("most_popular_features").default([]),
+
+  // Retention and churn analysis
+  retentionRate30Day: decimal("retention_rate_30_day", {
+    precision: 5,
+    scale: 2,
+  }).default("0.00"),
+  retentionRate90Day: decimal("retention_rate_90_day", {
+    precision: 5,
+    scale: 2,
+  }).default("0.00"),
+  churnRiskSegments: jsonb("churn_risk_segments").default({}), // {"high": 15, "medium": 25, ...}
+
+  // Engagement analysis
+  highEngagementPercentage: decimal("high_engagement_percentage", {
+    precision: 5,
+    scale: 2,
+  }).default("0.00"),
+  averageRating: decimal("average_rating", { precision: 3, scale: 2 }).default(
+    "0.00"
+  ),
+  npsScore: decimal("nps_score", { precision: 5, scale: 2 }), // Net Promoter Score
+
+  // Growth insights
+  acquisitionChannels: jsonb("acquisition_channels").default({}), // {"organic": 60, "social": 25, ...}
+  conversionFunnelData: jsonb("conversion_funnel_data").default({}),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Performance benchmarking against category peers
+export const performanceBenchmarks = pgTable("performance_benchmarks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  // Benchmark scope
+  category: text("category").notNull(),
+  tier: text("tier", {
+    enum: ["new", "emerging", "established", "top_performer"],
+  }).notNull(),
+
+  // Time period
+  benchmarkDate: timestamp("benchmark_date").notNull(),
+  sampleSize: integer("sample_size").notNull(), // number of creators in benchmark
+
+  // Engagement benchmarks
+  averageViews: integer("average_views").default(0),
+  averageLikes: integer("average_likes").default(0),
+  averageFollowers: integer("average_followers").default(0),
+  averageSubscribers: integer("average_subscribers").default(0),
+
+  // Conversion rate benchmarks
+  medianViewToLikeRate: decimal("median_view_to_like_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+  medianViewToFollowRate: decimal("median_view_to_follow_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+  medianViewToSubscribeRate: decimal("median_view_to_subscribe_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+
+  // Revenue benchmarks
+  medianMonthlyRevenue: decimal("median_monthly_revenue", {
+    precision: 10,
+    scale: 2,
+  }).default("0.00"),
+  medianAverageRevenuePerUser: decimal("median_average_revenue_per_user", {
+    precision: 8,
+    scale: 2,
+  }).default("0.00"),
+
+  // Growth benchmarks
+  medianSubscriberGrowthRate: decimal("median_subscriber_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+  medianRevenueGrowthRate: decimal("median_revenue_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+
+  // Quality benchmarks
+  medianRating: decimal("median_rating", { precision: 3, scale: 2 }).default(
+    "0.00"
+  ),
+  medianResponseRate: decimal("median_response_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"),
+  medianResponseTime: integer("median_response_time").default(0), // minutes
+
+  // Percentile breakdowns (25th, 50th, 75th, 90th)
+  percentileData: jsonb("percentile_data").default({}),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// User session tracking for detailed behavior analysis
+export const userSessions = pgTable("user_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Session details
+  sessionStart: timestamp("session_start").notNull(),
+  sessionEnd: timestamp("session_end"),
+  duration: integer("duration"), // seconds
+
+  // Device and location
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"), // Hashed for privacy
+  country: text("country"),
+  city: text("city"),
+  deviceType: text("device_type"),
+
+  // Activity tracking
+  pagesVisited: jsonb("pages_visited").default([]), // ["/feed", "/personas/123", ...]
+  personasViewed: jsonb("personas_viewed").default([]), // [uuid1, uuid2, ...]
+  personasInteracted: jsonb("personas_interacted").default([]), // [uuid1, uuid2, ...]
+  messagesExchanged: integer("messages_exchanged").default(0),
+
+  // Conversion events
+  subscriptionsCreated: jsonb("subscriptions_created").default([]), // [persona_id, persona_id, ...]
+  paymentsCompleted: jsonb("payments_completed").default([]), // [{amount, persona_id}, ...]
+
+  // Engagement quality
+  bounceRate: boolean("bounce_rate").default(false), // Single page visit
+  exitPage: text("exit_page"),
+  referrerSource: text("referrer_source"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Persona performance analytics
+export const personaAnalytics = pgTable("persona_analytics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  personaId: uuid("persona_id")
+    .notNull()
+    .references(() => personas.id, { onDelete: "cascade" }),
+
+  // Time period
+  analysisDate: timestamp("analysis_date").notNull(),
+
+  // View and engagement metrics
+  totalViews: integer("total_views").default(0),
+  uniqueViews: integer("unique_views").default(0),
+  totalLikes: integer("total_likes").default(0),
+  totalShares: integer("total_shares").default(0),
+  totalSubscribers: integer("total_subscribers").default(0),
+
+  // Interaction metrics
+  totalConversations: integer("total_conversations").default(0),
+  totalMessages: integer("total_messages").default(0),
+  averageConversationLength: decimal("average_conversation_length", {
+    precision: 5,
+    scale: 2,
+  }).default("0.00"),
+  averageResponseTime: integer("average_response_time").default(0), // minutes
+
+  // Revenue metrics
+  subscriptionRevenue: decimal("subscription_revenue", {
+    precision: 10,
+    scale: 2,
+  }).default("0.00"),
+  timeBasedRevenue: decimal("time_based_revenue", {
+    precision: 10,
+    scale: 2,
+  }).default("0.00"),
+  totalRevenue: decimal("total_revenue", { precision: 10, scale: 2 }).default(
+    "0.00"
+  ),
+
+  // Quality metrics
+  averageRating: decimal("average_rating", { precision: 3, scale: 2 }).default(
+    "0.00"
+  ),
+  totalReviews: integer("total_reviews").default(0),
+  satisfactionScore: decimal("satisfaction_score", {
+    precision: 3,
+    scale: 2,
+  }).default("0.00"),
+
+  // Discovery metrics
+  discoveryViews: integer("discovery_views").default(0), // views from feed/trending
+  searchViews: integer("search_views").default(0), // views from search
+  directViews: integer("direct_views").default(0), // direct URL visits
+
+  // Growth metrics
+  viewGrowthRate: decimal("view_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // weekly %
+  subscriberGrowthRate: decimal("subscriber_growth_rate", {
+    precision: 5,
+    scale: 4,
+  }).default("0.0000"), // weekly %
+
+  // Audience insights
+  topAgeGroups: jsonb("top_age_groups").default([]), // ["25-34", "18-24", ...]
+  topLocations: jsonb("top_locations").default([]), // ["US", "CA", "UK", ...]
+  averageSessionDuration: integer("average_session_duration").default(0), // minutes
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Relations for Advanced Analytics
+
+export const userAnalyticsRelations = relations(userAnalytics, ({ one }) => ({
   user: one(users, {
-    fields: [userFeedPreferences.userId],
+    fields: [userAnalytics.userId],
     references: [users.id],
   }),
 }));
+
+export const creatorAnalyticsRelations = relations(
+  creatorAnalytics,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [creatorAnalytics.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const revenueAnalyticsRelations = relations(
+  revenueAnalytics,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [revenueAnalytics.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const subscriberAnalyticsRelations = relations(
+  subscriberAnalytics,
+  ({ one }) => ({
+    creator: one(users, {
+      fields: [subscriberAnalytics.creatorId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const userSessionRelations = relations(userSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [userSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const personaAnalyticsRelations = relations(
+  personaAnalytics,
+  ({ one }) => ({
+    persona: one(personas, {
+      fields: [personaAnalytics.personaId],
+      references: [personas.id],
+    }),
+  })
+);
 
 // Relations for Creator Economy tables
-export const creatorVerificationsRelations = relations(creatorVerifications, ({ one, many }) => ({
-  user: one(users, {
-    fields: [creatorVerifications.userId],
-    references: [users.id],
-  }),
-  documents: many(verificationDocuments),
-  stripeAccount: one(stripeAccounts, {
-    fields: [creatorVerifications.userId],
-    references: [stripeAccounts.userId],
-  }),
-}));
+export const creatorVerificationsRelations = relations(
+  creatorVerifications,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [creatorVerifications.userId],
+      references: [users.id],
+    }),
+    documents: many(verificationDocuments),
+    stripeAccount: one(stripeAccounts, {
+      fields: [creatorVerifications.userId],
+      references: [stripeAccounts.userId],
+    }),
+  })
+);
 
-export const verificationDocumentsRelations = relations(verificationDocuments, ({ one }) => ({
-  verification: one(creatorVerifications, {
-    fields: [verificationDocuments.verificationId],
-    references: [creatorVerifications.id],
-  }),
-  user: one(users, {
-    fields: [verificationDocuments.userId],
-    references: [users.id],
-  }),
-}));
+export const verificationDocumentsRelations = relations(
+  verificationDocuments,
+  ({ one }) => ({
+    verification: one(creatorVerifications, {
+      fields: [verificationDocuments.verificationId],
+      references: [creatorVerifications.id],
+    }),
+    user: one(users, {
+      fields: [verificationDocuments.userId],
+      references: [users.id],
+    }),
+  })
+);
 
-export const stripeAccountsRelations = relations(stripeAccounts, ({ one, many }) => ({
-  user: one(users, {
-    fields: [stripeAccounts.userId],
-    references: [users.id],
-  }),
-  verification: one(creatorVerifications, {
-    fields: [stripeAccounts.verificationId],
-    references: [creatorVerifications.id],
-  }),
-  earnings: many(creatorEarnings),
-}));
+export const stripeAccountsRelations = relations(
+  stripeAccounts,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [stripeAccounts.userId],
+      references: [users.id],
+    }),
+    verification: one(creatorVerifications, {
+      fields: [stripeAccounts.verificationId],
+      references: [creatorVerifications.id],
+    }),
+    earnings: many(creatorEarnings),
+  })
+);
 
-export const creatorEarningsRelations = relations(creatorEarnings, ({ one }) => ({
-  user: one(users, {
-    fields: [creatorEarnings.userId],
-    references: [users.id],
-  }),
-  stripeAccount: one(stripeAccounts, {
-    fields: [creatorEarnings.stripeAccountId],
-    references: [stripeAccounts.id],
-  }),
-}));
+export const creatorEarningsRelations = relations(
+  creatorEarnings,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [creatorEarnings.userId],
+      references: [users.id],
+    }),
+    stripeAccount: one(stripeAccounts, {
+      fields: [creatorEarnings.stripeAccountId],
+      references: [stripeAccounts.id],
+    }),
+  })
+);
 
-export const subscriptionPaymentsRelations = relations(subscriptionPayments, ({ one }) => ({
-  payer: one(users, {
-    fields: [subscriptionPayments.payerId],
-    references: [users.id],
-  }),
-  creator: one(users, {
-    fields: [subscriptionPayments.creatorId],
-    references: [users.id],
-  }),
-  persona: one(personas, {
-    fields: [subscriptionPayments.personaId],
-    references: [personas.id],
-  }),
-  plan: one(subscriptionPlans, {
-    fields: [subscriptionPayments.subscriptionPlanId],
-    references: [subscriptionPlans.id],
-  }),
-}));
+export const subscriptionPaymentsRelations = relations(
+  subscriptionPayments,
+  ({ one }) => ({
+    payer: one(users, {
+      fields: [subscriptionPayments.payerId],
+      references: [users.id],
+    }),
+    creator: one(users, {
+      fields: [subscriptionPayments.creatorId],
+      references: [users.id],
+    }),
+    persona: one(personas, {
+      fields: [subscriptionPayments.personaId],
+      references: [personas.id],
+    }),
+    plan: one(subscriptionPlans, {
+      fields: [subscriptionPayments.subscriptionPlanId],
+      references: [subscriptionPlans.id],
+    }),
+  })
+);
 
-export const personaMonetizationRelations = relations(personaMonetization, ({ one }) => ({
-  persona: one(personas, {
-    fields: [personaMonetization.personaId],
-    references: [personas.id],
-  }),
-  user: one(users, {
-    fields: [personaMonetization.userId],
-    references: [users.id],
-  }),
-}));
+export const personaMonetizationRelations = relations(
+  personaMonetization,
+  ({ one }) => ({
+    persona: one(personas, {
+      fields: [personaMonetization.personaId],
+      references: [personas.id],
+    }),
+    user: one(users, {
+      fields: [personaMonetization.userId],
+      references: [users.id],
+    }),
+  })
+);
 
 // Export the database connection
 export { drizzle } from "drizzle-orm/postgres-js";
