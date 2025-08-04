@@ -37,6 +37,7 @@ function AccountPageContent() {
   const navigationItems = [
     { name: "Dashboard", href: "/dashboard", icon: "🏠" },
     { name: "Personas", href: "/personas", icon: "👤" },
+    { name: "Creator Dashboard", href: "/creator/dashboard", icon: "💰" },
     { name: "Subscriptions", href: "/account/subscriptions", icon: "💳" },
     { name: "Account", href: "/account", icon: "⚙️" },
     { name: "Analytics", href: "/analytics", icon: "📊" },

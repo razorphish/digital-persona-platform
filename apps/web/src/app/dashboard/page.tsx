@@ -1802,22 +1802,30 @@ function DashboardPageContent() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
                   />
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Creator Verification
+                Creator Dashboard
               </h3>
               <p className="text-gray-600 mb-4">
-                Get verified to monetize your personas and start earning revenue
+                Track your earnings, manage subscribers, and grow your creator business
               </p>
-              <button
-                onClick={() => router.push("/creator/verification")}
-                className="text-green-600 hover:text-green-500 font-medium"
-              >
-                Start Verification →
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => router.push("/creator/dashboard")}
+                  className="w-full text-green-600 hover:text-green-500 font-medium text-left"
+                >
+                  View Dashboard →
+                </button>
+                <button
+                  onClick={() => router.push("/creator/verification")}
+                  className="w-full text-sm text-gray-500 hover:text-gray-700 text-left"
+                >
+                  Creator Verification
+                </button>
+              </div>
             </div>
           </div>
 

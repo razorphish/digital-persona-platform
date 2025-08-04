@@ -588,14 +588,20 @@ function PersonasPageContent() {
             </p>
             <div className="space-y-2">
               <button
-                onClick={() => router.push("/account/subscriptions")}
+                onClick={() => router.push("/creator/dashboard")}
                 className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Creator Dashboard
+              </button>
+              <button
+                onClick={() => router.push("/account/subscriptions")}
+                className="w-full px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm"
               >
                 My Subscriptions
               </button>
               <button
                 onClick={() => router.push("/creator/verification")}
-                className="w-full px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm"
+                className="w-full px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors text-sm"
               >
                 Creator Verification
               </button>
