@@ -502,14 +502,23 @@ function PersonasPageContent() {
                     >
                       Chat
                     </button>
-                    <button
-                      onClick={() =>
-                        router.push(`/personas/${persona.id}/analytics`)
-                      }
-                      className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      Analytics
-                    </button>
+                    {persona.requiresSubscription ? (
+                      <button
+                        onClick={() => router.push(`/personas/${persona.id}/subscribe`)}
+                        className="px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        Subscribe
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() =>
+                          router.push(`/personas/${persona.id}/analytics`)
+                        }
+                        className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Analytics
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -571,18 +580,26 @@ function PersonasPageContent() {
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-gray-900 ml-3">
-                Monetization
+                Subscriptions
               </h3>
             </div>
             <p className="text-gray-600 mb-4">
-              Set up subscription tiers and pricing for your personas
+              Manage your persona subscriptions and monetization settings
             </p>
-            <button
-              onClick={() => router.push("/monetization")}
-              className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Setup Pricing
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => router.push("/account/subscriptions")}
+                className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                My Subscriptions
+              </button>
+              <button
+                onClick={() => router.push("/creator/verification")}
+                className="w-full px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm"
+              >
+                Creator Verification
+              </button>
+            </div>
           </div>
         </div>
       </main>
