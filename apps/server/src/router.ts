@@ -35,6 +35,11 @@ import { StripeService } from "./services/stripeService.js";
 import { ContentModerationService } from "./services/contentModerationService.js";
 import { BehaviorAnalysisService } from "./services/behaviorAnalysisService.js";
 
+// Import social features services
+import { DiscoveryService } from "./services/discoveryService.js";
+import { SocialEngagementService } from "./services/socialEngagementService.js";
+import { FeedAlgorithmService } from "./services/feedAlgorithmService.js";
+
 // Import enhanced types
 import {
   createUserSchema,
@@ -1120,6 +1125,11 @@ const stripeService = new StripeService();
 const contentModerationService = new ContentModerationService();
 const behaviorAnalysisService = new BehaviorAnalysisService();
 
+// Initialize social features services
+const discoveryService = new DiscoveryService();
+const socialEngagementService = new SocialEngagementService();
+const feedAlgorithmService = new FeedAlgorithmService();
+
 // Creator Verification Router
 const creatorVerificationRouter = router({
   // Start verification process
@@ -1803,6 +1813,434 @@ const behaviorAnalysisRouter = router({
     }),
 });
 
+// Social Features Routers
+
+// Discovery Router
+const discoveryRouter = router({
+  // Get personalized recommendations
+  getPersonalizedRecommendations: protectedProcedure
+    .input(z.object({
+      limit: z.number().optional().default(20),
+      categories: z.array(z.string()).optional(),
+      excludePersonaIds: z.array(z.string()).optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const recommendations = await discoveryService.getPersonalizedRecommendations(
+          ctx.user.id,
+          input.limit,
+          {
+            categories: input.categories,
+            excludePersonaIds: input.excludePersonaIds,
+          }
+        );
+
+        return recommendations;
+      } catch (error) {
+        logger.error('Error getting personalized recommendations:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get recommendations'
+        });
+      }
+    }),
+
+  // Get trending personas
+  getTrendingPersonas: publicProcedure
+    .input(z.object({
+      timeframe: z.enum(['24h', '7d', '30d']).optional().default('24h'),
+      limit: z.number().optional().default(50),
+      categories: z.array(z.string()).optional(),
+    }))
+    .query(async ({ input }) => {
+      try {
+        const trending = await discoveryService.getTrendingPersonas(
+          input.timeframe,
+          input.limit,
+          input.categories
+        );
+
+        return trending;
+      } catch (error) {
+        logger.error('Error getting trending personas:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get trending personas'
+        });
+      }
+    }),
+
+  // Search personas
+  searchPersonas: publicProcedure
+    .input(z.object({
+      query: z.string(),
+      limit: z.number().optional().default(20),
+      categories: z.array(z.string()).optional(),
+      minRating: z.number().optional(),
+      hideNSFW: z.boolean().optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const results = await discoveryService.searchPersonas(
+          input.query,
+          ctx.user?.id,
+          input.limit,
+          {
+            categories: input.categories,
+            minRating: input.minRating,
+            hideNSFW: input.hideNSFW,
+          }
+        );
+
+        return results;
+      } catch (error) {
+        logger.error('Error searching personas:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to search personas'
+        });
+      }
+    }),
+
+  // Get similar personas
+  getSimilarPersonas: protectedProcedure
+    .input(z.object({
+      personaId: z.string().uuid(),
+      limit: z.number().optional().default(10),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const similar = await discoveryService.getSimilarPersonas(
+          input.personaId,
+          ctx.user.id,
+          input.limit
+        );
+
+        return similar;
+      } catch (error) {
+        logger.error('Error getting similar personas:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get similar personas'
+        });
+      }
+    }),
+});
+
+// Social Engagement Router
+const socialEngagementRouter = router({
+  // Follow/unfollow creator
+  toggleFollow: protectedProcedure
+    .input(z.object({
+      creatorId: z.string().uuid(),
+      followReason: z.enum(['creator_interest', 'persona_discovery', 'friend_connection', 'recommendation']).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await socialEngagementService.toggleFollow(
+          ctx.user.id,
+          input.creatorId,
+          input.followReason
+        );
+
+        return result;
+      } catch (error) {
+        logger.error('Error toggling follow:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update follow status'
+        });
+      }
+    }),
+
+  // Like/unlike persona
+  toggleLike: protectedProcedure
+    .input(z.object({
+      personaId: z.string().uuid(),
+      likeType: z.enum(['like', 'favorite', 'bookmark', 'interested']).optional().default('like'),
+      discoveredVia: z.enum(['feed', 'search', 'trending', 'recommendation', 'creator_profile', 'direct_link']).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await socialEngagementService.toggleLike(
+          ctx.user.id,
+          input.personaId,
+          input.likeType,
+          input.discoveredVia
+        );
+
+        return result;
+      } catch (error) {
+        logger.error('Error toggling like:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update like status'
+        });
+      }
+    }),
+
+  // Submit review
+  submitReview: protectedProcedure
+    .input(z.object({
+      personaId: z.string().uuid(),
+      rating: z.number().min(1).max(5),
+      title: z.string().optional(),
+      reviewText: z.string().optional(),
+      categories: z.array(z.string()).optional(),
+      pros: z.array(z.string()).optional(),
+      cons: z.array(z.string()).optional(),
+      subscriptionTier: z.string().optional(),
+      interactionDuration: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await socialEngagementService.submitReview(ctx.user.id, input);
+        return result;
+      } catch (error) {
+        logger.error('Error submitting review:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to submit review'
+        });
+      }
+    }),
+
+  // Get user social stats
+  getUserSocialStats: protectedProcedure
+    .input(z.object({
+      userId: z.string().uuid().optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const userId = input.userId || ctx.user.id;
+        
+        // Only allow viewing own stats or public stats
+        if (userId !== ctx.user.id) {
+          // Add permission check here for public stats
+        }
+
+        const stats = await socialEngagementService.getUserSocialStats(userId);
+        return stats;
+      } catch (error) {
+        logger.error('Error getting user social stats:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get social stats'
+        });
+      }
+    }),
+
+  // Get persona engagement
+  getPersonaEngagement: publicProcedure
+    .input(z.object({
+      personaId: z.string().uuid(),
+    }))
+    .query(async ({ input }) => {
+      try {
+        const engagement = await socialEngagementService.getPersonaEngagement(input.personaId);
+        return engagement;
+      } catch (error) {
+        logger.error('Error getting persona engagement:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get persona engagement'
+        });
+      }
+    }),
+
+  // Get persona reviews
+  getPersonaReviews: publicProcedure
+    .input(z.object({
+      personaId: z.string().uuid(),
+      limit: z.number().optional().default(10),
+      offset: z.number().optional().default(0),
+      sortBy: z.enum(['newest', 'oldest', 'rating_high', 'rating_low', 'helpful']).optional().default('newest'),
+    }))
+    .query(async ({ input }) => {
+      try {
+        const reviews = await socialEngagementService.getPersonaReviews(
+          input.personaId,
+          input.limit,
+          input.offset,
+          input.sortBy
+        );
+
+        return reviews;
+      } catch (error) {
+        logger.error('Error getting persona reviews:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get reviews'
+        });
+      }
+    }),
+
+  // Get user's following
+  getUserFollowing: protectedProcedure
+    .input(z.object({
+      limit: z.number().optional().default(50),
+      offset: z.number().optional().default(0),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const following = await socialEngagementService.getUserFollowing(
+          ctx.user.id,
+          input.limit,
+          input.offset
+        );
+
+        return following;
+      } catch (error) {
+        logger.error('Error getting user following:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get following list'
+        });
+      }
+    }),
+
+  // Get user's liked personas
+  getUserLikedPersonas: protectedProcedure
+    .input(z.object({
+      limit: z.number().optional().default(50),
+      offset: z.number().optional().default(0),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const liked = await socialEngagementService.getUserLikedPersonas(
+          ctx.user.id,
+          input.limit,
+          input.offset
+        );
+
+        return liked;
+      } catch (error) {
+        logger.error('Error getting user liked personas:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get liked personas'
+        });
+      }
+    }),
+
+  // Check if following creator
+  isFollowing: protectedProcedure
+    .input(z.object({
+      creatorId: z.string().uuid(),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const isFollowing = await socialEngagementService.isFollowing(ctx.user.id, input.creatorId);
+        return { isFollowing };
+      } catch (error) {
+        logger.error('Error checking follow status:', error);
+        return { isFollowing: false };
+      }
+    }),
+
+  // Check if persona is liked
+  isLiked: protectedProcedure
+    .input(z.object({
+      personaId: z.string().uuid(),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const isLiked = await socialEngagementService.isLiked(ctx.user.id, input.personaId);
+        return { isLiked };
+      } catch (error) {
+        logger.error('Error checking like status:', error);
+        return { isLiked: false };
+      }
+    }),
+});
+
+// Feed Router
+const feedRouter = router({
+  // Generate personalized feed
+  generateFeed: protectedProcedure
+    .input(z.object({
+      limit: z.number().optional().default(50),
+      includePromoted: z.boolean().optional().default(true),
+      refreshExisting: z.boolean().optional().default(false),
+      categories: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const feed = await feedAlgorithmService.generatePersonalizedFeed(ctx.user.id, input);
+        return feed;
+      } catch (error) {
+        logger.error('Error generating feed:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate feed'
+        });
+      }
+    }),
+
+  // Get user's feed
+  getFeed: protectedProcedure
+    .input(z.object({
+      limit: z.number().optional().default(50),
+      offset: z.number().optional().default(0),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const feed = await feedAlgorithmService.getUserFeed(
+          ctx.user.id,
+          input.limit,
+          input.offset
+        );
+
+        return feed;
+      } catch (error) {
+        logger.error('Error getting feed:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get feed'
+        });
+      }
+    }),
+
+  // Track feed interaction
+  trackInteraction: protectedProcedure
+    .input(z.object({
+      feedItemId: z.string().uuid(),
+      interactionType: z.enum(['viewed', 'clicked', 'liked', 'shared', 'dismissed']),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const success = await feedAlgorithmService.trackFeedInteraction(
+          ctx.user.id,
+          input.feedItemId,
+          input.interactionType
+        );
+
+        return { success };
+      } catch (error) {
+        logger.error('Error tracking feed interaction:', error);
+        return { success: false };
+      }
+    }),
+
+  // Get feed metrics
+  getFeedMetrics: protectedProcedure
+    .input(z.object({
+      timeframe: z.enum(['24h', '7d', '30d']).optional().default('7d'),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const metrics = await feedAlgorithmService.getFeedMetrics(ctx.user.id, input.timeframe);
+        return metrics;
+      } catch (error) {
+        logger.error('Error getting feed metrics:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get feed metrics'
+        });
+      }
+    }),
+});
+
 // Main app router
 export const appRouter = router({
   auth: authRouter,
@@ -1816,6 +2254,9 @@ export const appRouter = router({
   personaMonetization: personaMonetizationRouter,
   contentModeration: contentModerationRouter,
   behaviorAnalysis: behaviorAnalysisRouter,
+  discovery: discoveryRouter,
+  socialEngagement: socialEngagementRouter,
+  feed: feedRouter,
 });
 
 export type AppRouter = typeof appRouter;

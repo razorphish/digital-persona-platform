@@ -35,13 +35,14 @@ function AccountPageContent() {
 
   // Navigation items (same as dashboard for consistency)
   const navigationItems = [
-    { name: "Dashboard", href: "/dashboard", icon: "🏠" },
+    { name: "Feed", href: "/feed", icon: "🏠" },
+    { name: "Dashboard", href: "/dashboard", icon: "📊" },
     { name: "Personas", href: "/personas", icon: "👤" },
     { name: "Creator Dashboard", href: "/creator/dashboard", icon: "💰" },
     { name: "Safety", href: "/safety", icon: "🛡️" },
     { name: "Subscriptions", href: "/account/subscriptions", icon: "💳" },
     { name: "Account", href: "/account", icon: "⚙️" },
-    { name: "Analytics", href: "/analytics", icon: "📊" },
+    { name: "Analytics", href: "/analytics", icon: "📈" },
   ];
 
   // Initialize form with user data

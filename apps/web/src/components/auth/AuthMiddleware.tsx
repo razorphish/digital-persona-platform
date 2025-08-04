@@ -30,15 +30,18 @@ export function AuthMiddleware() {
   // Define protected routes that require authentication (memoized for performance)
   const protectedRoutes = useMemo(
     () => [
+      "/feed",
       "/dashboard",
       "/files",
       "/chat",
       "/social",
       "/analytics",
       "/personas",
-  
+      "/creator",
+      "/safety",
       "/monetization",
       "/privacy",
+      "/account",
     ],
     []
   );
@@ -113,8 +116,8 @@ export function AuthMiddleware() {
 
     // Redirect authenticated users away from auth pages
     if (isAuthRoute && isAuthenticated) {
-      console.info("Authenticated user redirected from auth page to dashboard");
-      router.replace("/dashboard");
+      console.info("Authenticated user redirected from auth page to feed");
+      router.replace("/feed");
       return;
     }
 

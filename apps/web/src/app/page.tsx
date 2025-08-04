@@ -22,8 +22,8 @@ export default function LandingPage() {
             Welcome back to Hibiji!
           </h1>
           <p className="text-gray-600 mb-6">You are already signed in.</p>
-          <Link href="/dashboard">
-            <Button size="lg">Go to Dashboard</Button>
+          <Link href="/feed">
+            <Button size="lg">Go to Feed</Button>
           </Link>
         </div>
       </div>
@@ -41,7 +41,7 @@ export default function LandingPage() {
       setIsSubmitting(true);
       clearError();
       await login(email, password);
-      // AuthMiddleware will automatically redirect to dashboard after successful login
+      // AuthMiddleware will automatically redirect to feed after successful login
     } catch (error) {
       // Error is handled by AuthContext
     } finally {

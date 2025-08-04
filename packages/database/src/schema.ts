@@ -1241,6 +1241,295 @@ export const safetyIncidentRelations = relations(safetyIncidents, ({ one }) => (
   }),
 }));
 
+// Social Features & Discovery Tables
+
+// User follows - users following other users (creators)
+export const userFollows = pgTable("user_follows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  followerId: uuid("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User who follows
+  followingId: uuid("following_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User being followed
+  
+  // Follow context
+  followReason: text("follow_reason", {
+    enum: ["creator_interest", "persona_discovery", "friend_connection", "recommendation"],
+  }),
+  
+  // Notification settings
+  notifyOnNewPersona: boolean("notify_on_new_persona").default(true),
+  notifyOnUpdates: boolean("notify_on_updates").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Persona likes/favorites - users liking specific personas
+export const personaLikes = pgTable("persona_likes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
+  
+  // Like context
+  likeType: text("like_type", {
+    enum: ["like", "favorite", "bookmark", "interested"],
+  }).default("like"),
+  
+  // Interaction context
+  discoveredVia: text("discovered_via", {
+    enum: ["feed", "search", "trending", "recommendation", "creator_profile", "direct_link"],
+  }),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Persona reviews and ratings from users
+export const personaReviews = pgTable("persona_reviews", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
+  
+  // Review content
+  rating: integer("rating").notNull(), // 1-5 stars
+  title: text("title"),
+  reviewText: text("review_text"),
+  
+  // Review categories
+  categories: jsonb("categories").default([]), // ["personality", "responsiveness", "entertainment", "value"]
+  pros: jsonb("pros").default([]), // Array of positive aspects
+  cons: jsonb("cons").default([]), // Array of negative aspects
+  
+  // Interaction context
+  interactionDuration: integer("interaction_duration"), // Minutes interacted before review
+  subscriptionTier: text("subscription_tier"), // Which tier they subscribed to
+  
+  // Review status
+  isVerifiedPurchase: boolean("is_verified_purchase").default(false),
+  isPublic: boolean("is_public").default(true),
+  isHelpful: integer("is_helpful").default(0), // Helpful votes from other users
+  isReported: boolean("is_reported").default(false),
+  
+  // Moderation
+  moderationStatus: text("moderation_status", {
+    enum: ["pending", "approved", "hidden", "removed"],
+  }).default("pending"),
+  moderatedBy: uuid("moderated_by").references(() => users.id),
+  moderatedAt: timestamp("moderated_at"),
+  moderationReason: text("moderation_reason"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Feed algorithm and discovery metrics
+export const discoveryMetrics = pgTable("discovery_metrics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  personaId: uuid("persona_id").notNull().references(() => personas.id, { onDelete: "cascade" }),
+  
+  // Engagement metrics (last 24h, 7d, 30d)
+  viewsLast24h: integer("views_last_24h").default(0),
+  viewsLast7d: integer("views_last_7d").default(0),
+  viewsLast30d: integer("views_last_30d").default(0),
+  
+  likesLast24h: integer("likes_last_24h").default(0),
+  likesLast7d: integer("likes_last_7d").default(0),
+  likesLast30d: integer("likes_last_30d").default(0),
+  
+  subscriptionsLast24h: integer("subscriptions_last_24h").default(0),
+  subscriptionsLast7d: integer("subscriptions_last_7d").default(0),
+  subscriptionsLast30d: integer("subscriptions_last_30d").default(0),
+  
+  // Discovery scores
+  trendingScore: decimal("trending_score", { precision: 10, scale: 4 }).default("0.0000"),
+  popularityScore: decimal("popularity_score", { precision: 10, scale: 4 }).default("0.0000"),
+  qualityScore: decimal("quality_score", { precision: 10, scale: 4 }).default("0.0000"), // Based on reviews
+  engagementScore: decimal("engagement_score", { precision: 10, scale: 4 }).default("0.0000"),
+  
+  // Overall discovery rank
+  discoveryRank: integer("discovery_rank").default(999999),
+  categoryRank: integer("category_rank").default(999999),
+  
+  // Metadata
+  lastCalculated: timestamp("last_calculated").defaultNow(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Social feed items for personalized feeds
+export const feedItems = pgTable("feed_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // User seeing this in their feed
+  
+  // Content reference
+  itemType: text("item_type", {
+    enum: ["persona_recommendation", "trending_persona", "creator_update", "followed_creator_persona", "similar_personas", "review_highlight"],
+  }).notNull(),
+  personaId: uuid("persona_id").references(() => personas.id, { onDelete: "cascade" }),
+  creatorId: uuid("creator_id").references(() => users.id, { onDelete: "cascade" }),
+  
+  // Recommendation context
+  algorithmSource: text("algorithm_source", {
+    enum: ["trending", "personalized", "collaborative_filtering", "content_based", "social_graph", "new_creator"],
+  }).notNull(),
+  relevanceScore: decimal("relevance_score", { precision: 3, scale: 2 }).default("0.50"), // 0.00 to 1.00
+  
+  // Ranking and display
+  feedPosition: integer("feed_position"), // Position in user's feed
+  isPromoted: boolean("is_promoted").default(false), // Paid promotion
+  isTrending: boolean("is_trending").default(false),
+  
+  // User interaction tracking
+  wasViewed: boolean("was_viewed").default(false),
+  wasClicked: boolean("was_clicked").default(false),
+  wasLiked: boolean("was_liked").default(false),
+  wasShared: boolean("was_shared").default(false),
+  wasDismissed: boolean("was_dismissed").default(false),
+  
+  // Timing
+  viewedAt: timestamp("viewed_at"),
+  clickedAt: timestamp("clicked_at"),
+  dismissedAt: timestamp("dismissed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// User preferences for feed algorithm
+export const userFeedPreferences = pgTable("user_feed_preferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").unique().notNull().references(() => users.id, { onDelete: "cascade" }),
+  
+  // Content preferences
+  preferredCategories: jsonb("preferred_categories").default([]), // ["entertainment", "education", "lifestyle", etc.]
+  blockedCategories: jsonb("blocked_categories").default([]),
+  
+  // Discovery preferences
+  showTrending: boolean("show_trending").default(true),
+  showRecommendations: boolean("show_recommendations").default(true),
+  showFollowedCreators: boolean("show_followed_creators").default(true),
+  showSimilarPersonas: boolean("show_similar_personas").default(true),
+  
+  // Algorithm weights (0.0 to 1.0)
+  trendingWeight: decimal("trending_weight", { precision: 3, scale: 2 }).default("0.30"),
+  personalizedWeight: decimal("personalized_weight", { precision: 3, scale: 2 }).default("0.40"),
+  socialWeight: decimal("social_weight", { precision: 3, scale: 2 }).default("0.20"),
+  newCreatorWeight: decimal("new_creator_weight", { precision: 3, scale: 2 }).default("0.10"),
+  
+  // Content filtering
+  minRating: decimal("min_rating", { precision: 2, scale: 1 }).default("3.0"), // Minimum persona rating to show
+  hideNSFW: boolean("hide_nsfw").default(true),
+  onlyVerifiedCreators: boolean("only_verified_creators").default(false),
+  
+  // Feed behavior
+  autoRefreshFeed: boolean("auto_refresh_feed").default(true),
+  feedRefreshInterval: integer("feed_refresh_interval").default(300), // Seconds
+  maxFeedItems: integer("max_feed_items").default(50),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Trending topics and hashtags
+export const trendingTopics = pgTable("trending_topics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  
+  // Topic details
+  topicName: text("topic_name").notNull(),
+  topicType: text("topic_type", {
+    enum: ["hashtag", "category", "personality_trait", "interest", "event"],
+  }).notNull(),
+  
+  // Trending metrics
+  mentionCount: integer("mention_count").default(0),
+  personaCount: integer("persona_count").default(0), // How many personas relate to this topic
+  engagementCount: integer("engagement_count").default(0),
+  
+  // Trending scores
+  trendingScore: decimal("trending_score", { precision: 10, scale: 4 }).default("0.0000"),
+  velocityScore: decimal("velocity_score", { precision: 10, scale: 4 }).default("0.0000"), // Rate of growth
+  
+  // Geographic and demographic data
+  topRegions: jsonb("top_regions").default([]), // ["US", "CA", "UK"]
+  topAgeGroups: jsonb("top_age_groups").default([]), // ["18-24", "25-34"]
+  
+  // Topic lifecycle
+  firstSeen: timestamp("first_seen").defaultNow(),
+  peakDate: timestamp("peak_date"),
+  isCurrentlyTrending: boolean("is_currently_trending").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Relations for Social Features
+export const userFollowRelations = relations(userFollows, ({ one }) => ({
+  follower: one(users, {
+    fields: [userFollows.followerId],
+    references: [users.id],
+    relationName: "follower",
+  }),
+  following: one(users, {
+    fields: [userFollows.followingId],
+    references: [users.id],
+    relationName: "following",
+  }),
+}));
+
+export const personaLikeRelations = relations(personaLikes, ({ one }) => ({
+  user: one(users, {
+    fields: [personaLikes.userId],
+    references: [users.id],
+  }),
+  persona: one(personas, {
+    fields: [personaLikes.personaId],
+    references: [personas.id],
+  }),
+}));
+
+export const personaReviewRelations = relations(personaReviews, ({ one }) => ({
+  user: one(users, {
+    fields: [personaReviews.userId],
+    references: [users.id],
+  }),
+  persona: one(personas, {
+    fields: [personaReviews.personaId],
+    references: [personas.id],
+  }),
+  moderator: one(users, {
+    fields: [personaReviews.moderatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const discoveryMetricRelations = relations(discoveryMetrics, ({ one }) => ({
+  persona: one(personas, {
+    fields: [discoveryMetrics.personaId],
+    references: [personas.id],
+  }),
+}));
+
+export const feedItemRelations = relations(feedItems, ({ one }) => ({
+  user: one(users, {
+    fields: [feedItems.userId],
+    references: [users.id],
+  }),
+  persona: one(personas, {
+    fields: [feedItems.personaId],
+    references: [personas.id],
+  }),
+  creator: one(users, {
+    fields: [feedItems.creatorId],
+    references: [users.id],
+  }),
+}));
+
+export const userFeedPreferenceRelations = relations(userFeedPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [userFeedPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
 // Relations for Creator Economy tables
 export const creatorVerificationsRelations = relations(creatorVerifications, ({ one, many }) => ({
   user: one(users, {

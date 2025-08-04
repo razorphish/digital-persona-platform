@@ -95,10 +95,11 @@ function DashboardPageContent() {
 
   // Navigation items
   const navigationItems = [
-    { name: "Dashboard", href: "/dashboard", icon: "🏠" },
+    { name: "Feed", href: "/feed", icon: "🏠" },
+    { name: "Dashboard", href: "/dashboard", icon: "📊" },
     { name: "Personas", href: "/personas", icon: "👤" },
     { name: "Account", href: "/account", icon: "⚙️" },
-    { name: "Analytics", href: "/analytics", icon: "📊" },
+    { name: "Analytics", href: "/analytics", icon: "📈" },
   ];
 
   const handleNavigation = (href: string) => {
@@ -1697,7 +1698,37 @@ function DashboardPageContent() {
           </div>
 
           {/* Feature Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
+              <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mb-4">
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Social Feed
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Discover trending personas and connect with creators
+              </p>
+              <button
+                onClick={() => router.push("/feed")}
+                className="text-purple-600 hover:text-purple-500 font-medium"
+              >
+                Explore Feed →
+              </button>
+            </div>
+
             <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
               <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
                 <svg

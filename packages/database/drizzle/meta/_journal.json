@@ -15,6 +15,13 @@
       "when": 1754307456582,
       "tag": "0001_curvy_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1754322250828,
+      "tag": "0002_equal_moonstone",
+      "breakpoints": true
     }
   ]
 }
