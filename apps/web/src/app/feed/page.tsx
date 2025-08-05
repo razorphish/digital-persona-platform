@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import PersonaFeedCard from "@/components/feed/PersonaFeedCard";
 import TrendingSection from "@/components/feed/TrendingSection";
@@ -130,7 +130,7 @@ function FeedPageContent() {
     },
   ];
 
-  const mockTrendingPersonas = [
+  const mockTrendingPersonas = useMemo(() => [
     {
       personaId: "persona-1",
       name: "Emma Chen",
@@ -267,7 +267,7 @@ function FeedPageContent() {
     // If backend not available, we already have mock data loaded
   }, [backendAvailable, feed, feedLoading, handleRefreshFeed]);
 
-  const handleRefreshFeed = async () => {
+  const handleRefreshFeed = useCallback(async () => {
     setIsRefreshing(true);
 
     if (backendAvailable) {
@@ -282,7 +282,7 @@ function FeedPageContent() {
         setIsRefreshing(false);
       }, 500);
     }
-  };
+  }, [backendAvailable, generateFeedMutation, selectedCategory, mockFeedItems]);
 
   const handleFeedInteraction = async (
     feedItemId: string,

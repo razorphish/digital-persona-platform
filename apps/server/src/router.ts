@@ -38,6 +38,7 @@ import {
   CreatorVerificationService,
   IdentityVerificationData,
   AddressVerificationData,
+  BankingVerificationData,
 } from "./services/creatorVerificationService.js";
 import { StripeService } from "./services/stripeService.js";
 
@@ -1338,10 +1339,17 @@ const creatorVerificationRouter = router({
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...bankingData } = input;
+        // Ensure the bankingData matches the required type
+        const verificationData: BankingVerificationData = {
+          bankName: bankingData.bankName,
+          bankAccountType: bankingData.bankAccountType,
+          routingNumber: bankingData.routingNumber,
+          accountNumber: bankingData.accountNumber,
+        };
         return await creatorVerificationService.submitBankingVerification(
           ctx.user.id,
           verificationId,
-          bankingData
+          verificationData
         );
       } catch (error) {
         logger.error("Error submitting banking verification:", error);
