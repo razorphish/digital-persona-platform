@@ -266,7 +266,10 @@ function AnalyticsPageContent() {
         )}
 
         {activeTab === "insights" && (
-          <BusinessIntelligence data={analyticsDataFinal} timeRange={timeRange} />
+          <BusinessIntelligence
+            data={analyticsDataFinal}
+            timeRange={timeRange}
+          />
         )}
       </div>
 

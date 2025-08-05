@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       router.push("/");
     }
-  }, [router]);
+  }, [router, logoutMutation]);
 
   // Enhanced authentication checking with better error handling
   const checkAuthState = useCallback(() => {

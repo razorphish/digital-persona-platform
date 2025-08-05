@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/contexts/AuthContext";
@@ -102,11 +102,19 @@ export default function PersonaFeedCard({
         )
       : null;
 
-  // Extract data with fallbacks
+  // Extract data with fallbacks using useMemo to prevent unnecessary re-renders
   const personaEngagement =
     personaEngagementQuery?.data || metadata?.engagementData;
-  const likedStatus = likedStatusQuery?.data || { isLiked: false };
-  const followStatus = followStatusQuery?.data || { isFollowing: false };
+  
+  const likedStatus = useMemo(() => 
+    likedStatusQuery?.data || { isLiked: false },
+    [likedStatusQuery?.data]
+  );
+  
+  const followStatus = useMemo(() => 
+    followStatusQuery?.data || { isFollowing: false },
+    [followStatusQuery?.data]
+  );
 
   // tRPC mutations with fallbacks for when endpoints are disabled
   const toggleLikeMutation = backendAvailable

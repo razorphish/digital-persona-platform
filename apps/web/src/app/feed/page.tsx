@@ -251,7 +251,7 @@ function FeedPageContent() {
       mockDataLoaded,
       trendingLength: (trending || mockTrendingPersonas).length,
     });
-  }, [backendAvailable, feedItems.length, isLoading, mockDataLoaded, trending]);
+  }, [backendAvailable, feedItems.length, isLoading, mockDataLoaded, trending, mockTrendingPersonas]);
 
   // Only try to load real data if backend is available
   useEffect(() => {
@@ -265,7 +265,7 @@ function FeedPageContent() {
       handleRefreshFeed();
     }
     // If backend not available, we already have mock data loaded
-  }, [backendAvailable, feed, feedLoading]);
+  }, [backendAvailable, feed, feedLoading, handleRefreshFeed]);
 
   const handleRefreshFeed = async () => {
     setIsRefreshing(true);
