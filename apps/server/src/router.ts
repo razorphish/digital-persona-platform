@@ -34,7 +34,11 @@ import { PersonaService } from "./services/personaService.js";
 import { ConversationIntelligenceService } from "./services/conversationIntelligence.js";
 
 // Import creator economy services
-import { CreatorVerificationService, IdentityVerificationData } from "./services/creatorVerificationService.js";
+import {
+  CreatorVerificationService,
+  IdentityVerificationData,
+  AddressVerificationData,
+} from "./services/creatorVerificationService.js";
 import { StripeService } from "./services/stripeService.js";
 
 // Import content moderation services
@@ -1297,10 +1301,19 @@ const creatorVerificationRouter = router({
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...addressData } = input;
+        // Ensure the addressData matches the required type
+        const verificationData: AddressVerificationData = {
+          addressLine1: addressData.addressLine1,
+          addressLine2: addressData.addressLine2,
+          city: addressData.city,
+          state: addressData.state,
+          postalCode: addressData.postalCode,
+          country: addressData.country,
+        };
         return await creatorVerificationService.submitAddressVerification(
           ctx.user.id,
           verificationId,
-          addressData
+          verificationData
         );
       } catch (error) {
         logger.error("Error submitting address verification:", error);
