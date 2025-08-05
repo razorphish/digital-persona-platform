@@ -17,6 +17,8 @@ import {
   messages,
   socialConnections,
   personaMonetization,
+  userConnections,
+  subscriptionPayments,
 } from "@digital-persona/database";
 import { eq, and, desc, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -1430,6 +1432,28 @@ const creatorVerificationRouter = router({
       });
     }
   }),
+
+  // Finalize verification process
+  finalizeVerification: protectedProcedure
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await creatorVerificationService.submitForReview(
+          ctx.user.id,
+          input.verificationId
+        );
+      } catch (error) {
+        logger.error("Error finalizing verification:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to finalize verification",
+        });
+      }
+    }),
 });
 
 // Creator Monetization Router
@@ -1535,6 +1559,238 @@ const creatorMonetizationRouter = router({
       });
     }
   }),
+
+  // Create payment intent for subscription or time-based payment
+  createPaymentIntent: protectedProcedure
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+        paymentType: z.enum(["subscription", "time_based"]),
+        subscriptionTier: z.enum(["basic", "average", "advanced"]).optional(),
+        timeBasedMinutes: z.number().min(1).max(1440).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        // Get the persona to find the creator
+        const persona = await db
+          .select()
+          .from(personas)
+          .where(eq(personas.id, input.personaId))
+          .limit(1);
+
+        if (persona.length === 0) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Persona not found",
+          });
+        }
+
+        const creatorId = persona[0].userId;
+
+        if (input.paymentType === "subscription") {
+          if (!input.subscriptionTier) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Subscription tier is required for subscription payments",
+            });
+          }
+
+          // Get persona monetization settings to determine pricing
+          const monetizationSettings = await db
+            .select()
+            .from(personaMonetization)
+            .where(eq(personaMonetization.personaId, input.personaId))
+            .limit(1);
+
+          if (monetizationSettings.length === 0) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Monetization settings not found for this persona",
+            });
+          }
+
+          const settings = monetizationSettings[0];
+          let priceId = "";
+
+          // Map tier to price - this would normally come from Stripe price IDs
+          // For now, we'll use placeholder logic
+          switch (input.subscriptionTier) {
+            case "basic":
+              priceId = `price_basic_${input.personaId}`;
+              break;
+            case "average":
+              priceId = `price_average_${input.personaId}`;
+              break;
+            case "advanced":
+              priceId = `price_advanced_${input.personaId}`;
+              break;
+          }
+
+          return await stripeService.createSubscription(
+            ctx.user.id,
+            creatorId,
+            input.personaId,
+            priceId,
+            input.subscriptionTier
+          );
+        } else {
+          // Time-based payment
+          if (!input.timeBasedMinutes) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Time-based minutes is required for time-based payments",
+            });
+          }
+
+          // Get persona monetization settings for hourly rate
+          const monetizationSettings = await db
+            .select()
+            .from(personaMonetization)
+            .where(eq(personaMonetization.personaId, input.personaId))
+            .limit(1);
+
+          if (monetizationSettings.length === 0) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Monetization settings not found for this persona",
+            });
+          }
+
+          const settings = monetizationSettings[0];
+          const hourlyRate = settings.hourlyRate
+            ? parseFloat(settings.hourlyRate)
+            : 50; // Default rate
+
+          return await stripeService.createTimeBasedPayment(
+            ctx.user.id,
+            creatorId,
+            input.personaId,
+            input.timeBasedMinutes,
+            hourlyRate
+          );
+        }
+      } catch (error) {
+        logger.error("Error creating payment intent:", error);
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create payment intent",
+        });
+      }
+    }),
+
+  // Get user's subscription to a persona
+  getUserSubscription: protectedProcedure
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        // Check for active subscription in userConnections
+        const connection = await db
+          .select()
+          .from(userConnections)
+          .where(
+            and(
+              eq(userConnections.requesterId, ctx.user.id),
+              eq(userConnections.targetPersonaId, input.personaId),
+              eq(userConnections.connectionType, "subscriber"),
+              eq(userConnections.isSubscriptionActive, true)
+            )
+          )
+          .limit(1);
+
+        if (connection.length === 0) {
+          return null; // No active subscription
+        }
+
+        const subscription = connection[0];
+
+        // Get the latest payment for this subscription
+        const latestPayment = await db
+          .select()
+          .from(subscriptionPayments)
+          .where(
+            and(
+              eq(subscriptionPayments.payerId, ctx.user.id),
+              eq(subscriptionPayments.personaId, input.personaId),
+              eq(subscriptionPayments.paymentType, "subscription"),
+              eq(subscriptionPayments.status, "succeeded")
+            )
+          )
+          .orderBy(desc(subscriptionPayments.createdAt))
+          .limit(1);
+
+        return {
+          id: subscription.id,
+          subscriptionTier: subscription.subscriptionTier,
+          subscriptionPrice: subscription.subscriptionPrice
+            ? parseFloat(subscription.subscriptionPrice)
+            : null,
+          subscriptionStartDate:
+            subscription.subscriptionStartDate?.toISOString(),
+          subscriptionEndDate: subscription.subscriptionEndDate?.toISOString(),
+          isActive: subscription.isSubscriptionActive,
+          accessLevel: subscription.accessLevel,
+          latestPayment:
+            latestPayment.length > 0
+              ? {
+                  id: latestPayment[0].id,
+                  amount: parseFloat(latestPayment[0].amount),
+                  currency: latestPayment[0].currency,
+                  paidAt: latestPayment[0].paidAt?.toISOString(),
+                  billingPeriodStart:
+                    latestPayment[0].billingPeriodStart?.toISOString(),
+                  billingPeriodEnd:
+                    latestPayment[0].billingPeriodEnd?.toISOString(),
+                }
+              : null,
+          createdAt: subscription.createdAt.toISOString(),
+          updatedAt: subscription.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        logger.error("Error getting user subscription:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get subscription",
+        });
+      }
+    }),
+
+  // Confirm payment after client-side processing
+  confirmPayment: protectedProcedure
+    .input(
+      z.object({
+        paymentIntentId: z.string(),
+        personaId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        // In a real implementation, this would confirm the payment with Stripe
+        // and update the subscription/payment records in the database
+
+        // For now, we'll return a success response
+        return {
+          success: true,
+          paymentIntentId: input.paymentIntentId,
+          subscriptionId: `sub_${Date.now()}`, // Mock subscription ID
+          status: "succeeded",
+        };
+      } catch (error) {
+        logger.error("Error confirming payment:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to confirm payment",
+        });
+      }
+    }),
 
   // Stripe webhook endpoint (handled via raw HTTP)
   processWebhook: protectedProcedure
@@ -1651,10 +1907,59 @@ const personaMonetizationRouter = router({
             pricingModel: "free_with_limits",
             freeMessagesPerDay: 3,
             freeMinutesPerDay: 10,
+            subscriptionTiers: [],
+            timeBasedPricing: {
+              enabled: false,
+              pricePerHour: 50,
+              minimumMinutes: 15,
+            },
           };
         }
 
         const setting = settings[0];
+
+        // Build subscription tiers array from individual price fields
+        const subscriptionTiers = [];
+
+        if (setting.basicTierPrice) {
+          subscriptionTiers.push({
+            id: `basic_${input.personaId}`,
+            name: "basic" as const,
+            displayName: "Basic",
+            price: parseFloat(setting.basicTierPrice),
+            features: ["Basic messaging", "Limited interactions"],
+          });
+        }
+
+        if (setting.averageTierPrice) {
+          subscriptionTiers.push({
+            id: `average_${input.personaId}`,
+            name: "average" as const,
+            displayName: "Average",
+            price: parseFloat(setting.averageTierPrice),
+            features: [
+              "Enhanced messaging",
+              "More interactions",
+              "Priority responses",
+            ],
+          });
+        }
+
+        if (setting.advancedTierPrice) {
+          subscriptionTiers.push({
+            id: `advanced_${input.personaId}`,
+            name: "advanced" as const,
+            displayName: "Advanced",
+            price: parseFloat(setting.advancedTierPrice),
+            features: [
+              "Unlimited messaging",
+              "Exclusive content",
+              "Personal sessions",
+              "Priority support",
+            ],
+          });
+        }
+
         return {
           ...setting,
           basicTierPrice: setting.basicTierPrice
@@ -1669,6 +1974,14 @@ const personaMonetizationRouter = router({
           hourlyRate: setting.hourlyRate
             ? parseFloat(setting.hourlyRate)
             : undefined,
+          subscriptionTiers,
+          timeBasedPricing: {
+            enabled: setting.timeBasedEnabled || false,
+            pricePerHour: setting.hourlyRate
+              ? parseFloat(setting.hourlyRate)
+              : 50,
+            minimumMinutes: 15, // Default minimum session time
+          },
           createdAt: setting.createdAt.toISOString(),
           updatedAt: setting.updatedAt.toISOString(),
         };

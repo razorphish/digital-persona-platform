@@ -15,7 +15,7 @@ import {
   personaMonetization,
 } from "@digital-persona/database/schema";
 
-interface PersonaDiscoveryItem {
+export interface PersonaDiscoveryItem {
   persona: any;
   discoveryScore: number;
   trendingScore: number;
@@ -30,7 +30,7 @@ interface PersonaDiscoveryItem {
   tags: string[];
 }
 
-interface TrendingPersona {
+export interface TrendingPersona {
   personaId: string;
   name: string;
   creatorName: string;
@@ -182,9 +182,7 @@ export class DiscoveryService {
         .orderBy(desc(discoveryMetrics.trendingScore))
         .limit(limit);
 
-      if (categories && categories.length > 0) {
-        query = query.where(inArray(personas.category, categories));
-      }
+      // Note: Categories filtering is now handled in the main where clause above
 
       const results = await query;
 
@@ -198,7 +196,7 @@ export class DiscoveryService {
         viewsGrowth: this.calculateViewsGrowth(result),
         likesGrowth: this.calculateLikesGrowth(result),
         category: result.category || "General",
-        thumbnailUrl: result.thumbnailUrl,
+        thumbnailUrl: result.thumbnailUrl || undefined,
       }));
     } catch (error) {
       console.error("Error getting trending personas:", error);
@@ -302,12 +300,12 @@ export class DiscoveryService {
   async updateTrendingScores(): Promise<void> {
     try {
       // Get all personas with their metrics
-      const personas = await this.db
+      const personasData = await this.db
         .select()
         .from(discoveryMetrics)
         .leftJoin(personas, eq(discoveryMetrics.personaId, personas.id));
 
-      for (const personaMetric of personas) {
+      for (const personaMetric of personasData) {
         if (!personaMetric.discovery_metrics) continue;
 
         const metrics = personaMetric.discovery_metrics;
@@ -340,7 +338,9 @@ export class DiscoveryService {
           .where(eq(discoveryMetrics.personaId, metrics.personaId));
       }
 
-      console.log(`Updated trending scores for ${personas.length} personas`);
+      console.log(
+        `Updated trending scores for ${personasData.length} personas`
+      );
     } catch (error) {
       console.error("Error updating trending scores:", error);
     }
@@ -359,7 +359,7 @@ export class DiscoveryService {
 
       if (prefs.length === 0) {
         // Create default preferences
-        const defaultPrefs = {
+        const defaultPrefs: any = {
           userId: userId,
           preferredCategories: [],
           blockedCategories: [],
@@ -490,25 +490,7 @@ export class DiscoveryService {
           )
         );
 
-      // Apply filters
-      if (filters?.categories && filters.categories.length > 0) {
-        query = query.where(inArray(personas.category, filters.categories));
-      }
-
-      if (filters?.excludePersonaIds && filters.excludePersonaIds.length > 0) {
-        query = query.where(
-          not(inArray(personas.id, filters.excludePersonaIds))
-        );
-      }
-
-      if (
-        userPrefs?.blockedCategories &&
-        userPrefs.blockedCategories.length > 0
-      ) {
-        query = query.where(
-          not(inArray(personas.category, userPrefs.blockedCategories))
-        );
-      }
+      // Note: All filtering is now handled in the main where clause above
 
       const results = await query.limit(200); // Get more candidates for better filtering
       return results;

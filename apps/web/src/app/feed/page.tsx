@@ -130,44 +130,47 @@ function FeedPageContent() {
     },
   ];
 
-  const mockTrendingPersonas = useMemo(() => [
-    {
-      personaId: "persona-1",
-      name: "Emma Chen",
-      creatorName: "Emma Chen",
-      category: "business",
-      trendingScore: 95,
-      velocityScore: 88,
-      engagementGrowth: 45,
-      viewsGrowth: 67,
-      likesGrowth: 52,
-      thumbnailUrl: null,
-    },
-    {
-      personaId: "persona-4",
-      name: "Chef Alberto",
-      creatorName: "Alberto Santos",
-      category: "cooking",
-      trendingScore: 89,
-      velocityScore: 92,
-      engagementGrowth: 38,
-      viewsGrowth: 55,
-      likesGrowth: 41,
-      thumbnailUrl: null,
-    },
-    {
-      personaId: "persona-5",
-      name: "Dr. Sarah Kim",
-      creatorName: "Dr. Sarah Kim",
-      category: "education",
-      trendingScore: 84,
-      velocityScore: 76,
-      engagementGrowth: 29,
-      viewsGrowth: 43,
-      likesGrowth: 35,
-      thumbnailUrl: null,
-    },
-  ], []);
+  const mockTrendingPersonas = useMemo(
+    () => [
+      {
+        personaId: "persona-1",
+        name: "Emma Chen",
+        creatorName: "Emma Chen",
+        category: "business",
+        trendingScore: 95,
+        velocityScore: 88,
+        engagementGrowth: 45,
+        viewsGrowth: 67,
+        likesGrowth: 52,
+        thumbnailUrl: null,
+      },
+      {
+        personaId: "persona-4",
+        name: "Chef Alberto",
+        creatorName: "Alberto Santos",
+        category: "cooking",
+        trendingScore: 89,
+        velocityScore: 92,
+        engagementGrowth: 38,
+        viewsGrowth: 55,
+        likesGrowth: 41,
+        thumbnailUrl: null,
+      },
+      {
+        personaId: "persona-5",
+        name: "Dr. Sarah Kim",
+        creatorName: "Dr. Sarah Kim",
+        category: "education",
+        trendingScore: 84,
+        velocityScore: 76,
+        engagementGrowth: 29,
+        viewsGrowth: 43,
+        likesGrowth: 35,
+        thumbnailUrl: null,
+      },
+    ],
+    []
+  );
 
   // Always start with mock data to ensure immediate rendering
   const [feedItems, setFeedItems] = useState<FeedItem[]>(mockFeedItems);
@@ -251,7 +254,14 @@ function FeedPageContent() {
       mockDataLoaded,
       trendingLength: (trending || mockTrendingPersonas).length,
     });
-  }, [backendAvailable, feedItems.length, isLoading, mockDataLoaded, trending, mockTrendingPersonas]);
+  }, [
+    backendAvailable,
+    feedItems.length,
+    isLoading,
+    mockDataLoaded,
+    trending,
+    mockTrendingPersonas,
+  ]);
 
   // Only try to load real data if backend is available
   useEffect(() => {
@@ -265,7 +275,7 @@ function FeedPageContent() {
       handleRefreshFeed();
     }
     // If backend not available, we already have mock data loaded
-  }, [backendAvailable, feed, feedLoading, handleRefreshFeed]);
+  }, [backendAvailable, feed, feedLoading]);
 
   const handleRefreshFeed = useCallback(async () => {
     setIsRefreshing(true);

@@ -406,8 +406,8 @@ export class AdvancedAnalyticsService {
       // Calculate user percentiles
       const metrics = {
         views: {
-          userValue: userMetrics.totalViews,
-          benchmarkMedian: benchmark.averageViews,
+          userValue: userMetrics.totalViews || 0,
+          benchmarkMedian: benchmark.averageViews || 0,
           percentile: this.calculatePercentile(
             userMetrics.totalViews || 0,
             benchmark.percentileData as any,
@@ -415,8 +415,8 @@ export class AdvancedAnalyticsService {
           ),
         },
         subscribers: {
-          userValue: userMetrics.totalSubscribers,
-          benchmarkMedian: benchmark.averageSubscribers,
+          userValue: userMetrics.totalSubscribers || 0,
+          benchmarkMedian: benchmark.averageSubscribers || 0,
           percentile: this.calculatePercentile(
             userMetrics.totalSubscribers || 0,
             benchmark.percentileData as any,
@@ -494,7 +494,7 @@ export class AdvancedAnalyticsService {
             (analytics.locationDistribution as Record<string, number>) || {},
         },
         behavior: {
-          averageSessionLength: analytics.averageSessionLength,
+          averageSessionLength: analytics.averageSessionLength || 0,
           peakActivityHours:
             (analytics.peakActivityHours as Record<string, number>) || {},
           engagementPatterns: {
@@ -900,11 +900,16 @@ export class AdvancedAnalyticsService {
           : 0,
       totalSubscriptions: subscriptions.length,
       totalPersonasViewed: sessions.reduce(
-        (sum, s) => sum + (Array.isArray(s.personasViewed) ? s.personasViewed.length : 0),
+        (sum, s) =>
+          sum + (Array.isArray(s.personasViewed) ? s.personasViewed.length : 0),
         0
       ),
       totalPersonasInteracted: sessions.reduce(
-        (sum, s) => sum + (Array.isArray(s.personasInteracted) ? s.personasInteracted.length : 0),
+        (sum, s) =>
+          sum +
+          (Array.isArray(s.personasInteracted)
+            ? s.personasInteracted.length
+            : 0),
         0
       ),
       lastActiveDate:

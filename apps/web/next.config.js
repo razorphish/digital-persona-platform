@@ -13,7 +13,7 @@ const nextConfig = {
 
   // Development optimizations to reduce warnings
   experimental: {
-    optimizeCss: true,
+    // optimizeCss: true, // Disabled to avoid critters dependency issue
   },
 
   // Better source map handling for development

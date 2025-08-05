@@ -1,6 +1,6 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import { eq, and, desc, count, sql, gte } from 'drizzle-orm';
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { eq, and, desc, count, sql, gte } from "drizzle-orm";
 import {
   userFollows,
   personaLikes,
@@ -8,17 +8,18 @@ import {
   users,
   personas,
   discoveryMetrics,
-  contentModerations
-} from '@digital-persona/database/schema';
+  contentModerations,
+  trendingTopics,
+} from "@digital-persona/database/schema";
 
-interface FollowResult {
+export interface FollowResult {
   success: boolean;
   isFollowing: boolean;
   followerCount: number;
   message: string;
 }
 
-interface LikeResult {
+export interface LikeResult {
   success: boolean;
   isLiked: boolean;
   likeCount: number;
@@ -37,14 +38,14 @@ interface ReviewSubmission {
   interactionDuration?: number;
 }
 
-interface ReviewResult {
+export interface ReviewResult {
   success: boolean;
   reviewId?: string;
   message: string;
   requiresModeration: boolean;
 }
 
-interface SocialStats {
+export interface SocialStats {
   followers: number;
   following: number;
   totalLikes: number;
@@ -52,7 +53,7 @@ interface SocialStats {
   averageRating: number;
 }
 
-interface PersonaEngagement {
+export interface PersonaEngagement {
   personaId: string;
   likes: number;
   reviews: number;
@@ -67,7 +68,7 @@ export class SocialEngagementService {
   constructor() {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
-      throw new Error('DATABASE_URL environment variable is required');
+      throw new Error("DATABASE_URL environment variable is required");
     }
 
     const client = postgres(connectionString);
@@ -77,26 +78,34 @@ export class SocialEngagementService {
   /**
    * Follow or unfollow a creator
    */
-  async toggleFollow(followerId: string, followingId: string, followReason?: string): Promise<FollowResult> {
+  async toggleFollow(
+    followerId: string,
+    followingId: string,
+    followReason?: string
+  ): Promise<FollowResult> {
     try {
       // Check if already following
       const existingFollow = await this.db
         .select()
         .from(userFollows)
-        .where(and(
-          eq(userFollows.followerId, followerId),
-          eq(userFollows.followingId, followingId)
-        ))
+        .where(
+          and(
+            eq(userFollows.followerId, followerId),
+            eq(userFollows.followingId, followingId)
+          )
+        )
         .limit(1);
 
       if (existingFollow.length > 0) {
         // Unfollow
         await this.db
           .delete(userFollows)
-          .where(and(
-            eq(userFollows.followerId, followerId),
-            eq(userFollows.followingId, followingId)
-          ));
+          .where(
+            and(
+              eq(userFollows.followerId, followerId),
+              eq(userFollows.followingId, followingId)
+            )
+          );
 
         const followerCount = await this.getFollowerCount(followingId);
 
@@ -104,7 +113,7 @@ export class SocialEngagementService {
           success: true,
           isFollowing: false,
           followerCount,
-          message: 'Successfully unfollowed creator',
+          message: "Successfully unfollowed creator",
         };
       } else {
         // Follow
@@ -122,17 +131,16 @@ export class SocialEngagementService {
           success: true,
           isFollowing: true,
           followerCount,
-          message: 'Successfully followed creator',
+          message: "Successfully followed creator",
         };
       }
-
     } catch (error) {
-      console.error('Error toggling follow:', error);
+      console.error("Error toggling follow:", error);
       return {
         success: false,
         isFollowing: false,
         followerCount: 0,
-        message: 'Failed to update follow status',
+        message: "Failed to update follow status",
       };
     }
   }
@@ -141,9 +149,9 @@ export class SocialEngagementService {
    * Like or unlike a persona
    */
   async toggleLike(
-    userId: string, 
-    personaId: string, 
-    likeType: 'like' | 'favorite' | 'bookmark' | 'interested' = 'like',
+    userId: string,
+    personaId: string,
+    likeType: "like" | "favorite" | "bookmark" | "interested" = "like",
     discoveredVia?: string
   ): Promise<LikeResult> {
     try {
@@ -151,23 +159,27 @@ export class SocialEngagementService {
       const existingLike = await this.db
         .select()
         .from(personaLikes)
-        .where(and(
-          eq(personaLikes.userId, userId),
-          eq(personaLikes.personaId, personaId)
-        ))
+        .where(
+          and(
+            eq(personaLikes.userId, userId),
+            eq(personaLikes.personaId, personaId)
+          )
+        )
         .limit(1);
 
       if (existingLike.length > 0) {
         // Unlike
         await this.db
           .delete(personaLikes)
-          .where(and(
-            eq(personaLikes.userId, userId),
-            eq(personaLikes.personaId, personaId)
-          ));
+          .where(
+            and(
+              eq(personaLikes.userId, userId),
+              eq(personaLikes.personaId, personaId)
+            )
+          );
 
         // Update discovery metrics
-        await this.updatePersonaEngagementMetrics(personaId, 'like_removed');
+        await this.updatePersonaEngagementMetrics(personaId, "like_removed");
 
         const likeCount = await this.getLikeCount(personaId);
 
@@ -175,7 +187,7 @@ export class SocialEngagementService {
           success: true,
           isLiked: false,
           likeCount,
-          message: 'Successfully removed like',
+          message: "Successfully removed like",
         };
       } else {
         // Like
@@ -187,7 +199,7 @@ export class SocialEngagementService {
         });
 
         // Update discovery metrics
-        await this.updatePersonaEngagementMetrics(personaId, 'like_added');
+        await this.updatePersonaEngagementMetrics(personaId, "like_added");
 
         const likeCount = await this.getLikeCount(personaId);
 
@@ -195,17 +207,16 @@ export class SocialEngagementService {
           success: true,
           isLiked: true,
           likeCount,
-          message: 'Successfully liked persona',
+          message: "Successfully liked persona",
         };
       }
-
     } catch (error) {
-      console.error('Error toggling like:', error);
+      console.error("Error toggling like:", error);
       return {
         success: false,
         isLiked: false,
         likeCount: 0,
-        message: 'Failed to update like status',
+        message: "Failed to update like status",
       };
     }
   }
@@ -213,63 +224,75 @@ export class SocialEngagementService {
   /**
    * Submit a review for a persona
    */
-  async submitReview(userId: string, reviewData: ReviewSubmission): Promise<ReviewResult> {
+  async submitReview(
+    userId: string,
+    reviewData: ReviewSubmission
+  ): Promise<ReviewResult> {
     try {
       // Check if user already reviewed this persona
       const existingReview = await this.db
         .select()
         .from(personaReviews)
-        .where(and(
-          eq(personaReviews.userId, userId),
-          eq(personaReviews.personaId, reviewData.personaId)
-        ))
+        .where(
+          and(
+            eq(personaReviews.userId, userId),
+            eq(personaReviews.personaId, reviewData.personaId)
+          )
+        )
         .limit(1);
 
       if (existingReview.length > 0) {
         return {
           success: false,
-          message: 'You have already reviewed this persona',
+          message: "You have already reviewed this persona",
           requiresModeration: false,
         };
       }
 
       // Check if review requires moderation (content filtering)
-      const requiresModeration = await this.requiresContentModeration(reviewData);
+      const requiresModeration = await this.requiresContentModeration(
+        reviewData
+      );
 
       // Insert review
-      const review = await this.db.insert(personaReviews).values({
-        userId,
-        personaId: reviewData.personaId,
-        rating: reviewData.rating,
-        title: reviewData.title,
-        reviewText: reviewData.reviewText,
-        categories: reviewData.categories || [],
-        pros: reviewData.pros || [],
-        cons: reviewData.cons || [],
-        interactionDuration: reviewData.interactionDuration,
-        subscriptionTier: reviewData.subscriptionTier,
-        isVerifiedPurchase: await this.isVerifiedPurchase(userId, reviewData.personaId),
-        isPublic: true,
-        moderationStatus: requiresModeration ? 'pending' : 'approved',
-      }).returning({ id: sql`${personaReviews.id}` });
+      const review = await this.db
+        .insert(personaReviews)
+        .values({
+          userId,
+          personaId: reviewData.personaId,
+          rating: reviewData.rating,
+          title: reviewData.title,
+          reviewText: reviewData.reviewText,
+          categories: reviewData.categories || [],
+          pros: reviewData.pros || [],
+          cons: reviewData.cons || [],
+          interactionDuration: reviewData.interactionDuration,
+          subscriptionTier: reviewData.subscriptionTier,
+          isVerifiedPurchase: await this.isVerifiedPurchase(
+            userId,
+            reviewData.personaId
+          ),
+          isPublic: true,
+          moderationStatus: requiresModeration ? "pending" : "approved",
+        })
+        .returning({ id: sql`${personaReviews.id}` });
 
       // Update persona quality metrics
       await this.updatePersonaQualityMetrics(reviewData.personaId);
 
       return {
         success: true,
-        reviewId: review[0].id,
-        message: requiresModeration 
-          ? 'Review submitted successfully and is pending moderation' 
-          : 'Review submitted successfully',
+        reviewId: review[0].id as string,
+        message: requiresModeration
+          ? "Review submitted successfully and is pending moderation"
+          : "Review submitted successfully",
         requiresModeration,
       };
-
     } catch (error) {
-      console.error('Error submitting review:', error);
+      console.error("Error submitting review:", error);
       return {
         success: false,
-        message: 'Failed to submit review',
+        message: "Failed to submit review",
         requiresModeration: false,
       };
     }
@@ -285,7 +308,7 @@ export class SocialEngagementService {
         followingCount,
         likesGiven,
         reviewsCount,
-        avgRatingGiven
+        avgRatingGiven,
       ] = await Promise.all([
         // Count followers
         this.db
@@ -323,11 +346,12 @@ export class SocialEngagementService {
         following: followingCount[0]?.count || 0,
         totalLikes: likesGiven[0]?.count || 0,
         totalReviews: reviewsCount[0]?.count || 0,
-        averageRating: parseFloat(avgRatingGiven[0]?.avgRating as string || '0'),
+        averageRating: parseFloat(
+          (avgRatingGiven[0]?.avgRating as string) || "0"
+        ),
       };
-
     } catch (error) {
-      console.error('Error getting user social stats:', error);
+      console.error("Error getting user social stats:", error);
       return {
         followers: 0,
         following: 0,
@@ -343,12 +367,7 @@ export class SocialEngagementService {
    */
   async getPersonaEngagement(personaId: string): Promise<PersonaEngagement> {
     try {
-      const [
-        likes,
-        reviews,
-        avgRating,
-        metrics
-      ] = await Promise.all([
+      const [likes, reviews, avgRating, metrics] = await Promise.all([
         // Count likes
         this.db
           .select({ count: count() })
@@ -359,19 +378,23 @@ export class SocialEngagementService {
         this.db
           .select({ count: count() })
           .from(personaReviews)
-          .where(and(
-            eq(personaReviews.personaId, personaId),
-            eq(personaReviews.moderationStatus, 'approved')
-          )),
+          .where(
+            and(
+              eq(personaReviews.personaId, personaId),
+              eq(personaReviews.moderationStatus, "approved")
+            )
+          ),
 
         // Average rating
         this.db
           .select({ avgRating: sql`AVG(${personaReviews.rating})` })
           .from(personaReviews)
-          .where(and(
-            eq(personaReviews.personaId, personaId),
-            eq(personaReviews.moderationStatus, 'approved')
-          )),
+          .where(
+            and(
+              eq(personaReviews.personaId, personaId),
+              eq(personaReviews.moderationStatus, "approved")
+            )
+          ),
 
         // Discovery metrics
         this.db
@@ -383,11 +406,14 @@ export class SocialEngagementService {
 
       const likesCount = likes[0]?.count || 0;
       const reviewsCount = reviews[0]?.count || 0;
-      const averageRating = parseFloat(avgRating[0]?.avgRating as string || '0');
+      const averageRating = parseFloat(
+        (avgRating[0]?.avgRating as string) || "0"
+      );
       const views = metrics[0]?.viewsLast7d || 0;
-      
+
       // Calculate engagement rate
-      const engagementRate = views > 0 ? (likesCount + reviewsCount) / views : 0;
+      const engagementRate =
+        views > 0 ? (likesCount + reviewsCount) / views : 0;
 
       return {
         personaId,
@@ -397,9 +423,8 @@ export class SocialEngagementService {
         followers: 0, // This would be creator followers, not persona-specific
         engagementRate,
       };
-
     } catch (error) {
-      console.error('Error getting persona engagement:', error);
+      console.error("Error getting persona engagement:", error);
       return {
         personaId,
         likes: 0,
@@ -418,21 +443,26 @@ export class SocialEngagementService {
     personaId: string,
     limit: number = 10,
     offset: number = 0,
-    sortBy: 'newest' | 'oldest' | 'rating_high' | 'rating_low' | 'helpful' = 'newest'
+    sortBy:
+      | "newest"
+      | "oldest"
+      | "rating_high"
+      | "rating_low"
+      | "helpful" = "newest"
   ) {
     try {
       let orderBy;
       switch (sortBy) {
-        case 'oldest':
+        case "oldest":
           orderBy = personaReviews.createdAt;
           break;
-        case 'rating_high':
+        case "rating_high":
           orderBy = desc(personaReviews.rating);
           break;
-        case 'rating_low':
+        case "rating_low":
           orderBy = personaReviews.rating;
           break;
-        case 'helpful':
+        case "helpful":
           orderBy = desc(personaReviews.isHelpful);
           break;
         default:
@@ -450,24 +480,25 @@ export class SocialEngagementService {
         })
         .from(personaReviews)
         .leftJoin(users, eq(personaReviews.userId, users.id))
-        .where(and(
-          eq(personaReviews.personaId, personaId),
-          eq(personaReviews.moderationStatus, 'approved'),
-          eq(personaReviews.isPublic, true)
-        ))
+        .where(
+          and(
+            eq(personaReviews.personaId, personaId),
+            eq(personaReviews.moderationStatus, "approved"),
+            eq(personaReviews.isPublic, true)
+          )
+        )
         .orderBy(orderBy)
         .limit(limit)
         .offset(offset);
 
-      return reviews.map(r => ({
+      return reviews.map((r) => ({
         ...r.review,
         reviewer: r.reviewer,
         createdAt: r.review.createdAt.toISOString(),
         updatedAt: r.review.updatedAt.toISOString(),
       }));
-
     } catch (error) {
-      console.error('Error getting persona reviews:', error);
+      console.error("Error getting persona reviews:", error);
       return [];
     }
   }
@@ -475,7 +506,11 @@ export class SocialEngagementService {
   /**
    * Get user's following list
    */
-  async getUserFollowing(userId: string, limit: number = 50, offset: number = 0) {
+  async getUserFollowing(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0
+  ) {
     try {
       const following = await this.db
         .select({
@@ -493,14 +528,13 @@ export class SocialEngagementService {
         .limit(limit)
         .offset(offset);
 
-      return following.map(f => ({
+      return following.map((f) => ({
         ...f.follow,
         creator: f.creator,
         createdAt: f.follow.createdAt.toISOString(),
       }));
-
     } catch (error) {
-      console.error('Error getting user following:', error);
+      console.error("Error getting user following:", error);
       return [];
     }
   }
@@ -508,7 +542,11 @@ export class SocialEngagementService {
   /**
    * Get user's liked personas
    */
-  async getUserLikedPersonas(userId: string, limit: number = 50, offset: number = 0) {
+  async getUserLikedPersonas(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0
+  ) {
     try {
       const liked = await this.db
         .select({
@@ -528,15 +566,14 @@ export class SocialEngagementService {
         .limit(limit)
         .offset(offset);
 
-      return liked.map(l => ({
+      return liked.map((l) => ({
         ...l.like,
         persona: l.persona,
         creator: l.creator,
         createdAt: l.like.createdAt.toISOString(),
       }));
-
     } catch (error) {
-      console.error('Error getting user liked personas:', error);
+      console.error("Error getting user liked personas:", error);
       return [];
     }
   }
@@ -557,9 +594,8 @@ export class SocialEngagementService {
         .where(eq(personaReviews.id, reviewId));
 
       return true;
-
     } catch (error) {
-      console.error('Error marking review helpful:', error);
+      console.error("Error marking review helpful:", error);
       return false;
     }
   }
@@ -567,13 +603,17 @@ export class SocialEngagementService {
   /**
    * Report a review
    */
-  async reportReview(reviewId: string, reporterId: string, reason: string): Promise<boolean> {
+  async reportReview(
+    reviewId: string,
+    reporterId: string,
+    reason: string
+  ): Promise<boolean> {
     try {
       await this.db
         .update(personaReviews)
         .set({
           isReported: true,
-          moderationStatus: 'under_review',
+          moderationStatus: "pending",
           updatedAt: new Date(),
         })
         .where(eq(personaReviews.id, reviewId));
@@ -582,9 +622,8 @@ export class SocialEngagementService {
       // and potentially trigger content moderation
 
       return true;
-
     } catch (error) {
-      console.error('Error reporting review:', error);
+      console.error("Error reporting review:", error);
       return false;
     }
   }
@@ -604,7 +643,7 @@ export class SocialEngagementService {
         return [];
       }
 
-      const creatorIds = followedCreators.map(f => f.creatorId);
+      const creatorIds = followedCreators.map((f) => f.creatorId);
 
       // Get recent personas from followed creators
       const recentActivity = await this.db
@@ -620,20 +659,21 @@ export class SocialEngagementService {
         })
         .from(personas)
         .leftJoin(users, eq(personas.userId, users.id))
-        .where(and(
-          eq(personas.isPublic, true),
-          sql`${personas.userId} = ANY(${creatorIds})`
-        ))
+        .where(
+          and(
+            eq(personas.isPublic, true),
+            sql`${personas.userId} = ANY(${creatorIds})`
+          )
+        )
         .orderBy(desc(personas.createdAt))
         .limit(limit);
 
-      return recentActivity.map(activity => ({
+      return recentActivity.map((activity) => ({
         ...activity,
         createdAt: activity.createdAt.toISOString(),
       }));
-
     } catch (error) {
-      console.error('Error getting user social activity:', error);
+      console.error("Error getting user social activity:", error);
       return [];
     }
   }
@@ -665,14 +705,17 @@ export class SocialEngagementService {
     }
   }
 
-  private async updatePersonaEngagementMetrics(personaId: string, action: 'like_added' | 'like_removed'): Promise<void> {
+  private async updatePersonaEngagementMetrics(
+    personaId: string,
+    action: "like_added" | "like_removed"
+  ): Promise<void> {
     try {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       // Update discovery metrics
-      const increment = action === 'like_added' ? 1 : -1;
+      const increment = action === "like_added" ? 1 : -1;
 
       await this.db
         .update(discoveryMetrics)
@@ -683,9 +726,8 @@ export class SocialEngagementService {
           updatedAt: new Date(),
         })
         .where(eq(discoveryMetrics.personaId, personaId));
-
     } catch (error) {
-      console.error('Error updating persona engagement metrics:', error);
+      console.error("Error updating persona engagement metrics:", error);
     }
   }
 
@@ -695,12 +737,15 @@ export class SocialEngagementService {
       const avgRating = await this.db
         .select({ avgRating: sql`AVG(${personaReviews.rating})` })
         .from(personaReviews)
-        .where(and(
-          eq(personaReviews.personaId, personaId),
-          eq(personaReviews.moderationStatus, 'approved')
-        ));
+        .where(
+          and(
+            eq(personaReviews.personaId, personaId),
+            eq(personaReviews.moderationStatus, "approved")
+          )
+        );
 
-      const qualityScore = parseFloat(avgRating[0]?.avgRating as string || '0') / 5;
+      const qualityScore =
+        parseFloat((avgRating[0]?.avgRating as string) || "0") / 5;
 
       await this.db
         .update(discoveryMetrics)
@@ -709,24 +754,28 @@ export class SocialEngagementService {
           updatedAt: new Date(),
         })
         .where(eq(discoveryMetrics.personaId, personaId));
-
     } catch (error) {
-      console.error('Error updating persona quality metrics:', error);
+      console.error("Error updating persona quality metrics:", error);
     }
   }
 
-  private async requiresContentModeration(reviewData: ReviewSubmission): Promise<boolean> {
+  private async requiresContentModeration(
+    reviewData: ReviewSubmission
+  ): Promise<boolean> {
     // Check if review content contains potentially problematic content
     if (!reviewData.reviewText) return false;
 
     // Simple content checks (in production, use the content moderation service)
-    const problematicWords = ['spam', 'scam', 'fake', 'terrible', 'awful'];
+    const problematicWords = ["spam", "scam", "fake", "terrible", "awful"];
     const text = reviewData.reviewText.toLowerCase();
-    
-    return problematicWords.some(word => text.includes(word));
+
+    return problematicWords.some((word) => text.includes(word));
   }
 
-  private async isVerifiedPurchase(userId: string, personaId: string): Promise<boolean> {
+  private async isVerifiedPurchase(
+    userId: string,
+    personaId: string
+  ): Promise<boolean> {
     // Check if user has an active subscription to this persona
     // This would integrate with the subscription system
     return false; // Placeholder
@@ -744,16 +793,15 @@ export class SocialEngagementService {
         .orderBy(desc(trendingTopics.trendingScore))
         .limit(limit);
 
-      return trending.map(topic => ({
+      return trending.map((topic) => ({
         ...topic,
-        trendingScore: parseFloat(topic.trendingScore || '0'),
-        velocityScore: parseFloat(topic.velocityScore || '0'),
+        trendingScore: parseFloat(topic.trendingScore || "0"),
+        velocityScore: parseFloat(topic.velocityScore || "0"),
         createdAt: topic.createdAt.toISOString(),
         updatedAt: topic.updatedAt.toISOString(),
       }));
-
     } catch (error) {
-      console.error('Error getting trending topics:', error);
+      console.error("Error getting trending topics:", error);
       return [];
     }
   }
@@ -766,10 +814,12 @@ export class SocialEngagementService {
       const follows = await this.db
         .select()
         .from(userFollows)
-        .where(and(
-          eq(userFollows.followerId, followerId),
-          eq(userFollows.followingId, followingId)
-        ))
+        .where(
+          and(
+            eq(userFollows.followerId, followerId),
+            eq(userFollows.followingId, followingId)
+          )
+        )
         .limit(1);
 
       return follows.length > 0;
@@ -786,10 +836,12 @@ export class SocialEngagementService {
       const likes = await this.db
         .select()
         .from(personaLikes)
-        .where(and(
-          eq(personaLikes.userId, userId),
-          eq(personaLikes.personaId, personaId)
-        ))
+        .where(
+          and(
+            eq(personaLikes.userId, userId),
+            eq(personaLikes.personaId, personaId)
+          )
+        )
         .limit(1);
 
       return likes.length > 0;

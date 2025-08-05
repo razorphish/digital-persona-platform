@@ -28,7 +28,7 @@ interface ContentModerationRequest {
   metadata?: any;
 }
 
-interface ModerationResult {
+export interface ModerationResult {
   id: string;
   status: "pending" | "approved" | "flagged" | "blocked" | "under_review";
   aiModerationScore: number;
@@ -40,7 +40,7 @@ interface ModerationResult {
   recommendations: string[];
 }
 
-interface SafetyProfile {
+export interface SafetyProfile {
   userId: string;
   overallSafetyScore: number;
   trustLevel: "new" | "trusted" | "verified" | "flagged" | "restricted";
@@ -115,7 +115,7 @@ export class ContentModerationService {
           userId: request.userId,
           personaId: request.personaId,
           status: moderationStatus.status,
-          aiModerationScore: aiResults.score,
+          aiModerationScore: aiResults.score.toString(),
           flaggedCategories: aiResults.categories,
           severity: moderationStatus.severity,
           originalContent: request.content,
@@ -138,13 +138,13 @@ export class ContentModerationService {
       ) {
         await this.createSafetyIncident(
           request,
-          moderationRecord[0].id,
+          moderationRecord[0].id as string,
           moderationStatus
         );
       }
 
       return {
-        id: moderationRecord[0].id,
+        id: moderationRecord[0].id as string,
         status: moderationStatus.status,
         aiModerationScore: aiResults.score,
         flaggedCategories: aiResults.categories,
@@ -172,7 +172,7 @@ export class ContentModerationService {
         .returning({ id: sql`${contentModerations.id}` });
 
       return {
-        id: fallbackRecord[0].id,
+        id: fallbackRecord[0].id as string,
         status: "under_review",
         aiModerationScore: 0.5,
         flaggedCategories: ["technical_error"],
@@ -336,7 +336,7 @@ Respond in JSON format:
           .insert(userSafetyProfiles)
           .values({
             userId: userId,
-            overallSafetyScore: 1.0,
+            overallSafetyScore: "1.0",
             trustLevel: "new",
             totalInteractions: 0,
             flaggedInteractions: 0,
@@ -511,10 +511,17 @@ Respond in JSON format:
         userId: request.userId,
         personaId: request.personaId,
         contentModerationId: moderationId,
-        incidentType: incidentType,
+        incidentType: incidentType as
+          | "content_violation"
+          | "behavior_violation"
+          | "spam"
+          | "harassment"
+          | "threats"
+          | "inappropriate_content"
+          | "age_violation",
         severity: status.severity,
         detectionMethod: "ai_detection",
-        confidence: status.aiModerationScore || 0.5,
+        confidence: (status.aiModerationScore || 0.5).toString(),
         description: `Content ${status.status} due to ${
           status.flaggedCategories?.join(", ") || "policy violation"
         }`,
@@ -578,7 +585,15 @@ Respond in JSON format:
       .where(
         and(
           eq(contentModerations.contentId, contentId),
-          eq(contentModerations.contentType, contentType)
+          eq(
+            contentModerations.contentType,
+            contentType as
+              | "media"
+              | "message"
+              | "persona_description"
+              | "user_profile"
+              | "conversation"
+          )
         )
       )
       .orderBy(desc(contentModerations.createdAt));
@@ -661,7 +676,7 @@ Respond in JSON format:
             : "behavior_violation",
           severity: rating.safetyRating <= 1 ? "critical" : "high",
           detectionMethod: "user_report",
-          confidence: 0.9,
+          confidence: "0.9",
           description: `User reported by creator: ${
             rating.ratingReason || "Inappropriate behavior"
           }`,
@@ -729,7 +744,7 @@ Respond in JSON format:
           incidentType: "behavior_violation",
           severity: "medium",
           detectionMethod: "manual_review",
-          confidence: 1.0,
+          confidence: "1.0",
           description: `User blocked by creator`,
           evidence: {
             action: "creator_block",

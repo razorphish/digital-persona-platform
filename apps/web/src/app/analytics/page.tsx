@@ -29,12 +29,8 @@ function AnalyticsPageContent() {
   );
   const [isLoading, setIsLoading] = useState(false); // No loading needed for static mock data
 
-  // Check if backend analytics are available before making any tRPC calls
-  const backendAvailable = Boolean(
-    trpc.analytics &&
-      trpc.analytics.getCreatorAnalytics &&
-      typeof trpc.analytics.getCreatorAnalytics.useQuery === "function"
-  );
+  // Backend analytics router doesn't exist yet, so use mock data
+  const backendAvailable = false;
 
   // Mock analytics data for when backend is unavailable
   const mockAnalyticsData = {

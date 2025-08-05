@@ -582,7 +582,7 @@ export default function SubscriberDemographics({
                     : "text-red-600"
                 }`}
               >
-                {percentage}%
+                {percentage as number}%
               </div>
               <p className="text-sm text-gray-600">
                 {risk === "Low Risk" && "Highly engaged, regular activity"}

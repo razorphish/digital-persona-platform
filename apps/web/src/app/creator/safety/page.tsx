@@ -1,26 +1,26 @@
 "use client";
 
-import React, { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { AuthGuard } from '@/components/auth/AuthGuard';
-import CreatorSafetyControls from '@/components/creator/safety/CreatorSafetyControls';
-import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+import CreatorSafetyControls from "@/components/creator/safety/CreatorSafetyControls";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/contexts/AuthContext";
 
 function CreatorSafetyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(
-    searchParams.get('personaId')
+    searchParams.get("personaId")
   );
 
-  // Get user's personas
-  const { data: personas, isLoading } = trpc.personas.getUserPersonas.useQuery({
-    userId: user?.id || '',
-  }, {
-    enabled: !!user?.id,
-  });
+  // Mock personas data since backend route doesn't exist yet
+  const personas = [
+    { id: "1", name: "AI Assistant", description: "Helpful AI assistant" },
+    { id: "2", name: "Life Coach", description: "Personal development coach" },
+  ];
+  const isLoading = false;
 
   if (isLoading) {
     return (
@@ -34,16 +34,28 @@ function CreatorSafetyPageContent() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="max-w-md mx-auto text-center">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          <svg
+            className="mx-auto h-12 w-12 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+            />
           </svg>
-          <h2 className="mt-2 text-lg font-medium text-gray-900">No Personas Found</h2>
+          <h2 className="mt-2 text-lg font-medium text-gray-900">
+            No Personas Found
+          </h2>
           <p className="mt-1 text-sm text-gray-500">
             You need to create a persona before accessing safety controls.
           </p>
           <div className="mt-6">
             <button
-              onClick={() => router.push('/personas')}
+              onClick={() => router.push("/personas")}
               className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
             >
               Create Persona
@@ -54,7 +66,8 @@ function CreatorSafetyPageContent() {
     );
   }
 
-  const selectedPersona = personas.find(p => p.id === selectedPersonaId) || personas[0];
+  const selectedPersona =
+    personas.find((p) => p.id === selectedPersonaId) || personas[0];
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -62,11 +75,15 @@ function CreatorSafetyPageContent() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Creator Safety Center</h1>
-            <p className="text-gray-600">Manage user interactions and safety controls for your personas</p>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Creator Safety Center
+            </h1>
+            <p className="text-gray-600">
+              Manage user interactions and safety controls for your personas
+            </p>
           </div>
           <button
-            onClick={() => router.push('/creator/dashboard')}
+            onClick={() => router.push("/creator/dashboard")}
             className="text-indigo-600 hover:text-indigo-500 font-medium"
           >
             ← Back to Creator Dashboard

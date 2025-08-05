@@ -216,10 +216,7 @@ export class StripeService {
           {
             price_data: {
               currency: "usd",
-              product_data: {
-                name: `${tierType} tier - Persona subscription`,
-                description: `Access to persona with ${tierType} tier features`,
-              },
+              product: `${tierType} tier - Persona subscription`,
               unit_amount: totalAmount * 100, // Convert to cents
               recurring: {
                 interval: "month",
@@ -590,7 +587,7 @@ export class StripeService {
         chargesEnabled: account.charges_enabled,
         payoutsEnabled: account.payouts_enabled,
         detailsSubmitted: account.details_submitted,
-        capabilities: account.capabilities || {},
+        capabilities: (account.capabilities as Record<string, string>) || {},
         requirements: account.requirements || {},
         currentlyDue: account.requirements?.currently_due || [],
         eventuallyDue: account.requirements?.eventually_due || [],
