@@ -29,6 +29,13 @@
       "when": 1754326514398,
       "tag": "0003_magical_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1754337097227,
+      "tag": "0004_clean_mad_thinker",
+      "breakpoints": true
     }
   ]
 }

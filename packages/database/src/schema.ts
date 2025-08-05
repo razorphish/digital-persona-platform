@@ -79,6 +79,22 @@ export const personas = pgTable("personas", {
   name: text("name").notNull(),
   description: text("description"),
   avatar: text("avatar"),
+  category: text("category", {
+    enum: [
+      "entertainment",
+      "education",
+      "lifestyle",
+      "business",
+      "gaming",
+      "art",
+      "music",
+      "fitness",
+      "cooking",
+      "technology",
+      "general",
+    ],
+  }).default("general"),
+  profilePicture: text("profile_picture"), // Alias for avatar for compatibility
 
   // Persona type and hierarchy
   personaType: text("persona_type", {
@@ -117,6 +133,7 @@ export const personas = pgTable("personas", {
 
   // Social and monetization
   isPubliclyListed: boolean("is_publicly_listed").default(false),
+  isPublic: boolean("is_public").default(false), // Alias for compatibility
   allowConnections: boolean("allow_connections").default(true),
   requiresSubscription: boolean("requires_subscription").default(false),
   subscriptionPrice: decimal("subscription_price", { precision: 10, scale: 2 }),

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import MainNavigation from "@/components/navigation/MainNavigation";
 import { trpc } from "@/lib/trpc";
 
 // Types for personas
@@ -132,51 +133,23 @@ function PersonasPageContent() {
     personas?.reduce((sum, p) => sum + (p.interactionCount || 0), 0) || 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gray-50">
       {/* Navigation */}
-      <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push("/dashboard")}
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Persona Dashboard
-                </h1>
-                <p className="text-sm text-gray-600">
-                  Manage your digital personalities
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome, {user?.name}!</span>
-              <button
-                onClick={handleLogout}
-                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
-              >
-                Logout
-              </button>
-            </div>
+      <MainNavigation />
+
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900">
+              Your Personas [[memory:2424662]]
+            </h1>
+            <p className="mt-2 text-lg text-gray-600">
+              Manage your digital personalities and AI personas
+            </p>
           </div>
         </div>
-      </nav>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -237,8 +210,6 @@ function PersonasPageContent() {
               </div>
             </div>
           </div>
-
-
 
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center">
@@ -314,12 +285,11 @@ function PersonasPageContent() {
                 </div>
 
                 <div className="flex space-x-3">
-
                   <button
-                    onClick={() => router.push("/chat")}
+                    onClick={() => router.push("/personas")}
                     className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
                   >
-                    Chat with Persona
+                    Manage Personas
                   </button>
                   <button
                     onClick={() => router.push("/privacy")}
@@ -497,14 +467,16 @@ function PersonasPageContent() {
 
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => router.push(`/chat?persona=${persona.id}`)}
+                      onClick={() => router.push(`/personas/${persona.id}`)}
                       className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
                     >
-                      Chat
+                      View Profile
                     </button>
                     {persona.requiresSubscription ? (
                       <button
-                        onClick={() => router.push(`/personas/${persona.id}/subscribe`)}
+                        onClick={() =>
+                          router.push(`/personas/${persona.id}/subscribe`)
+                        }
                         className="px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
                       >
                         Subscribe
@@ -528,8 +500,6 @@ function PersonasPageContent() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-
           <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
             <div className="flex items-center mb-4">
               <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">

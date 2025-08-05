@@ -206,10 +206,10 @@ export class AdvancedAnalyticsService {
             (analytics.location as Record<string, number>) || {},
         },
         engagement: {
-          totalSessions: analytics.totalSessions,
-          averageSessionDuration: analytics.averageSessionDuration,
-          personasViewed: analytics.totalPersonasViewed,
-          personasInteracted: analytics.totalPersonasInteracted,
+          totalSessions: analytics.totalSessions || 0,
+          averageSessionDuration: analytics.averageSessionDuration || 0,
+          personasViewed: analytics.totalPersonasViewed || 0,
+          personasInteracted: analytics.totalPersonasInteracted || 0,
           conversionRate: parseFloat(analytics.conversionRate || "0"),
         },
         behavior: {
@@ -219,7 +219,7 @@ export class AdvancedAnalyticsService {
           preferredInteractionTime:
             (analytics.preferredInteractionTime as Record<string, number>) ||
             {},
-          visitStreak: analytics.visitStreak,
+          visitStreak: analytics.visitStreak || 0,
         },
       };
     } catch (error) {
@@ -264,8 +264,8 @@ export class AdvancedAnalyticsService {
           monthlyRecurringRevenue: parseFloat(
             analytics.monthlyRecurringRevenue || "0"
           ),
-          totalSubscribers: analytics.totalSubscribers,
-          totalViews: analytics.totalViews,
+          totalSubscribers: analytics.totalSubscribers || 0,
+          totalViews: analytics.totalViews || 0,
           averageRating: parseFloat(analytics.averageRating || "0"),
         },
         growth: {
@@ -281,11 +281,11 @@ export class AdvancedAnalyticsService {
             analytics.followerToSubscriberRate || "0"
           ),
           responseRate: parseFloat(analytics.responseRate || "0"),
-          averageResponseTime: analytics.averageResponseTime,
+          averageResponseTime: analytics.averageResponseTime || 0,
         },
         ranking: {
-          categoryRank: analytics.categoryRank,
-          overallRank: analytics.overallRank,
+          categoryRank: analytics.categoryRank || 0,
+          overallRank: analytics.overallRank || 0,
           percentileScore: parseFloat(analytics.percentileScore || "50"),
         },
       };
@@ -409,7 +409,7 @@ export class AdvancedAnalyticsService {
           userValue: userMetrics.totalViews,
           benchmarkMedian: benchmark.averageViews,
           percentile: this.calculatePercentile(
-            userMetrics.totalViews,
+            userMetrics.totalViews || 0,
             benchmark.percentileData as any,
             "views"
           ),
@@ -418,7 +418,7 @@ export class AdvancedAnalyticsService {
           userValue: userMetrics.totalSubscribers,
           benchmarkMedian: benchmark.averageSubscribers,
           percentile: this.calculatePercentile(
-            userMetrics.totalSubscribers,
+            userMetrics.totalSubscribers || 0,
             benchmark.percentileData as any,
             "subscribers"
           ),

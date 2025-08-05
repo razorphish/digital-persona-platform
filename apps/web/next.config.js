@@ -10,6 +10,19 @@ const nextConfig = {
     },
   }),
   transpilePackages: ["@digital-persona/shared", "@digital-persona/database"],
+
+  // Development optimizations to reduce warnings
+  experimental: {
+    optimizeCss: true,
+  },
+
+  // Better source map handling for development
+  webpack: (config, { dev, isServer }) => {
+    if (dev && !isServer) {
+      config.devtool = "cheap-module-source-map";
+    }
+    return config;
+  },
   env: {
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "build-time-secret",
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || "http://localhost:3000",

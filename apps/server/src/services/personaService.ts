@@ -121,7 +121,34 @@ export class PersonaService {
     try {
       // Check if user already has a main persona (using isDefault for now)
       const existingMain = await db
-        .select()
+        .select({
+          id: personas.id,
+          userId: personas.userId,
+          name: personas.name,
+          description: personas.description,
+          avatar: personas.avatar,
+          category: sql<string>`'general'`.as("category"), // Fallback since category column doesn't exist yet
+          personaType: personas.personaType,
+          isMainPersona: personas.isMainPersona,
+          parentPersonaId: personas.parentPersonaId,
+          traits: personas.traits,
+          preferences: personas.preferences,
+          memoryContext: personas.memoryContext,
+          personalityProfile: personas.personalityProfile,
+          privacyLevel: personas.privacyLevel,
+          isPubliclyListed: personas.isPubliclyListed,
+          allowConnections: personas.allowConnections,
+          requiresSubscription: personas.requiresSubscription,
+          subscriptionPrice: personas.subscriptionPrice,
+          learningEnabled: personas.learningEnabled,
+          interactionCount: personas.interactionCount,
+          lastInteraction: personas.lastInteraction,
+          isDefault: personas.isDefault,
+          isActive: personas.isActive,
+          isDeletable: personas.isDeletable,
+          createdAt: personas.createdAt,
+          updatedAt: personas.updatedAt,
+        })
         .from(personas)
         .where(and(eq(personas.userId, userId), eq(personas.isDefault, true)))
         .limit(1);
@@ -801,7 +828,34 @@ export class PersonaService {
   static async getOrCreateMainPersona(userId: string) {
     try {
       const [mainPersona] = await db
-        .select()
+        .select({
+          id: personas.id,
+          userId: personas.userId,
+          name: personas.name,
+          description: personas.description,
+          avatar: personas.avatar,
+          category: sql<string>`'general'`.as("category"), // Fallback since category column doesn't exist yet
+          personaType: personas.personaType,
+          isMainPersona: personas.isMainPersona,
+          parentPersonaId: personas.parentPersonaId,
+          traits: personas.traits,
+          preferences: personas.preferences,
+          memoryContext: personas.memoryContext,
+          personalityProfile: personas.personalityProfile,
+          privacyLevel: personas.privacyLevel,
+          isPubliclyListed: personas.isPubliclyListed,
+          allowConnections: personas.allowConnections,
+          requiresSubscription: personas.requiresSubscription,
+          subscriptionPrice: personas.subscriptionPrice,
+          learningEnabled: personas.learningEnabled,
+          interactionCount: personas.interactionCount,
+          lastInteraction: personas.lastInteraction,
+          isDefault: personas.isDefault,
+          isActive: personas.isActive,
+          isDeletable: personas.isDeletable,
+          createdAt: personas.createdAt,
+          updatedAt: personas.updatedAt,
+        })
         .from(personas)
         .where(and(eq(personas.userId, userId), eq(personas.isDefault, true)))
         .limit(1);

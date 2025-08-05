@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import MainNavigation from "@/components/navigation/MainNavigation";
 import { trpc } from "@/lib/trpc";
 
 // Types for social connections
@@ -195,50 +196,20 @@ function SocialPageContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100">
-      {/* Navigation */}
-      <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push("/personas")}
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Social Network
-                </h1>
-                <p className="text-sm text-gray-600">
-                  Connect with personas and build your network
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome, {user?.name}!</span>
-              <button
-                onClick={() => logout()}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
+      {/* Main Navigation */}
+      <MainNavigation />
+      
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900">Social Network</h1>
+            <p className="mt-2 text-gray-600">
+              Connect with personas and build your network
+            </p>
           </div>
         </div>
-      </nav>
+      </div>
 
       {/* Tab Navigation */}
       <div className="bg-white border-b border-gray-200">
@@ -494,12 +465,10 @@ function SocialPageContent() {
                     )}
                     {persona.connectionStatus === "connected" && (
                       <button
-                        onClick={() =>
-                          router.push(`/chat?persona=${persona.id}`)
-                        }
+                        onClick={() => router.push(`/personas/${persona.id}`)}
                         className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
                       >
-                        Chat
+                        View Profile
                       </button>
                     )}
                   </div>

@@ -1,4 +1,9 @@
 import { initTRPC, TRPCError } from "@trpc/server";
+// Load environment variables first
+import dotenv from "dotenv";
+import path from "path";
+dotenv.config({ path: path.resolve("../../.env") });
+
 import { z } from "zod";
 import superjson from "superjson";
 
@@ -11,6 +16,7 @@ import {
   conversations,
   messages,
   socialConnections,
+  personaMonetization,
 } from "@digital-persona/database";
 import { eq, and, desc, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -39,6 +45,9 @@ import { BehaviorAnalysisService } from "./services/behaviorAnalysisService.js";
 import { DiscoveryService } from "./services/discoveryService.js";
 import { SocialEngagementService } from "./services/socialEngagementService.js";
 import { FeedAlgorithmService } from "./services/feedAlgorithmService.js";
+
+// Import advanced analytics services
+import { AdvancedAnalyticsService } from "./services/advancedAnalyticsService.js";
 
 // Import enhanced types
 import {
@@ -315,9 +324,13 @@ const authRouter = router({
       // 1. Add the token to a blacklist/revoked tokens table
       // 2. Clear any server-side sessions
       // 3. Log the logout event for security auditing
-      
-      console.log(`🔒 User ${ctx.user.id} (${ctx.user.email}) logged out at ${new Date().toISOString()}`);
-      
+
+      console.log(
+        `🔒 User ${ctx.user.id} (${
+          ctx.user.email
+        }) logged out at ${new Date().toISOString()}`
+      );
+
       // For now, we'll just log the logout event
       // In the future, implement token blacklisting:
       // await db.insert(revokedTokens).values({
@@ -349,12 +362,39 @@ const personasRouter = router({
   // Get all personas for user
   list: protectedProcedure.query(async ({ ctx }) => {
     const userPersonas = await db
-      .select()
+      .select({
+        id: personas.id,
+        userId: personas.userId,
+        name: personas.name,
+        description: personas.description,
+        avatar: personas.avatar,
+        category: sql<string>`'general'`.as("category"), // Fallback since category column doesn't exist yet
+        personaType: personas.personaType,
+        isMainPersona: personas.isMainPersona,
+        parentPersonaId: personas.parentPersonaId,
+        traits: personas.traits,
+        preferences: personas.preferences,
+        memoryContext: personas.memoryContext,
+        personalityProfile: personas.personalityProfile,
+        privacyLevel: personas.privacyLevel,
+        isPubliclyListed: personas.isPubliclyListed,
+        allowConnections: personas.allowConnections,
+        requiresSubscription: personas.requiresSubscription,
+        subscriptionPrice: personas.subscriptionPrice,
+        learningEnabled: personas.learningEnabled,
+        interactionCount: personas.interactionCount,
+        lastInteraction: personas.lastInteraction,
+        isDefault: personas.isDefault,
+        isActive: personas.isActive,
+        isDeletable: personas.isDeletable,
+        createdAt: personas.createdAt,
+        updatedAt: personas.updatedAt,
+      })
       .from(personas)
       .where(eq(personas.userId, ctx.user.id))
       .orderBy(desc(personas.createdAt));
 
-    return userPersonas.map((persona: typeof personas.$inferSelect) => ({
+    return userPersonas.map((persona) => ({
       ...persona,
       createdAt: persona.createdAt.toISOString(),
       updatedAt: persona.updatedAt.toISOString(),
@@ -366,7 +406,34 @@ const personasRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input, ctx }) => {
       const [persona] = await db
-        .select()
+        .select({
+          id: personas.id,
+          userId: personas.userId,
+          name: personas.name,
+          description: personas.description,
+          avatar: personas.avatar,
+          category: sql<string>`'general'`.as("category"), // Fallback since category column doesn't exist yet
+          personaType: personas.personaType,
+          isMainPersona: personas.isMainPersona,
+          parentPersonaId: personas.parentPersonaId,
+          traits: personas.traits,
+          preferences: personas.preferences,
+          memoryContext: personas.memoryContext,
+          personalityProfile: personas.personalityProfile,
+          privacyLevel: personas.privacyLevel,
+          isPubliclyListed: personas.isPubliclyListed,
+          allowConnections: personas.allowConnections,
+          requiresSubscription: personas.requiresSubscription,
+          subscriptionPrice: personas.subscriptionPrice,
+          learningEnabled: personas.learningEnabled,
+          interactionCount: personas.interactionCount,
+          lastInteraction: personas.lastInteraction,
+          isDefault: personas.isDefault,
+          isActive: personas.isActive,
+          isDeletable: personas.isDeletable,
+          createdAt: personas.createdAt,
+          updatedAt: personas.updatedAt,
+        })
         .from(personas)
         .where(and(eq(personas.id, input.id), eq(personas.userId, ctx.user.id)))
         .limit(1);
@@ -757,27 +824,33 @@ const chatRouter = router({
 
   // Initialize Airica session with dynamic greeting
   initializeSession: protectedProcedure
-    .input(z.object({ 
-      conversationId: z.string().uuid().optional() 
-    }))
+    .input(
+      z.object({
+        conversationId: z.string().uuid().optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const greeting = await conversationIntelligence.initializeSession(
-          ctx.user.id, 
+          ctx.user.id,
           input.conversationId
         );
 
         return {
           success: true,
           greeting,
-          relationshipStage: await conversationIntelligence.determineRelationshipStage(ctx.user.id)
+          relationshipStage:
+            await conversationIntelligence.determineRelationshipStage(
+              ctx.user.id
+            ),
         };
       } catch (error) {
-        logger.error('Failed to initialize Airica session:', error);
+        logger.error("Failed to initialize Airica session:", error);
         return {
           success: false,
-          greeting: "Hello! I'm Airica, your AI companion. How are you doing today?",
-          relationshipStage: null
+          greeting:
+            "Hello! I'm Airica, your AI companion. How are you doing today?",
+          relationshipStage: null,
         };
       }
     }),
@@ -800,15 +873,16 @@ const chatRouter = router({
           .returning();
 
         // Process user response with conversation intelligence
-        const { followUpQuestion, insights } = await conversationIntelligence.processUserResponse(
-          ctx.user.id,
-          input.conversationId,
-          input.content
-        );
+        const { followUpQuestion, insights } =
+          await conversationIntelligence.processUserResponse(
+            ctx.user.id,
+            input.conversationId,
+            input.content
+          );
 
         // Generate Airica's response
         let airicaResponse = "Thank you for sharing that with me!";
-        
+
         if (followUpQuestion) {
           airicaResponse = followUpQuestion;
         } else {
@@ -818,9 +892,10 @@ const chatRouter = router({
             "I appreciate you sharing that with me.",
             "That gives me great insight into who you are.",
             "Thanks for opening up about that!",
-            "I'm learning so much about what makes you unique."
+            "I'm learning so much about what makes you unique.",
           ];
-          airicaResponse = responses[Math.floor(Math.random() * responses.length)];
+          airicaResponse =
+            responses[Math.floor(Math.random() * responses.length)];
         }
 
         // Create Airica's message
@@ -831,7 +906,7 @@ const chatRouter = router({
             role: "assistant",
             content: airicaResponse,
             messageType: followUpQuestion ? "learning_response" : "text",
-            personalityInsights: insights.length > 0 ? JSON.stringify(insights) : null,
+            personalityInsights: insights.length > 0 ? insights : undefined,
           })
           .returning();
 
@@ -852,12 +927,11 @@ const chatRouter = router({
             createdAt: aiMessage.createdAt.toISOString(),
           },
           insights: insights.length,
-          isLearningQuestion: !!followUpQuestion
+          isLearningQuestion: !!followUpQuestion,
         };
-
       } catch (error) {
-        logger.error('Error in enhanced sendMessage:', error);
-        
+        logger.error("Error in enhanced sendMessage:", error);
+
         // Fallback to simple message creation
         const [userMessage] = await db
           .insert(messages)
@@ -873,7 +947,8 @@ const chatRouter = router({
           .values({
             conversationId: input.conversationId,
             role: "assistant",
-            content: "Thank you for sharing that with me. I'm here to listen and learn about you!",
+            content:
+              "Thank you for sharing that with me. I'm here to listen and learn about you!",
           })
           .returning();
 
@@ -888,47 +963,52 @@ const chatRouter = router({
             createdAt: aiMessage.createdAt.toISOString(),
           },
           insights: 0,
-          isLearningQuestion: false
+          isLearningQuestion: false,
         };
       }
     }),
 
   // Get Airica's relationship assessment
-  getRelationshipStatus: protectedProcedure
-    .query(async ({ ctx }) => {
-      try {
-        const stage = await conversationIntelligence.determineRelationshipStage(ctx.user.id);
-        return {
-          success: true,
-          stage: stage.stage,
-          name: stage.name,
-          description: stage.description,
-          messageThreshold: stage.messageThreshold,
-          intimacyLevel: stage.intimacyLevel
-        };
-      } catch (error) {
-        logger.error('Error getting relationship status:', error);
-        return {
-          success: false,
-          stage: 'stranger',
-          name: 'Getting to Know You',
-          description: 'Learning the basics about who you are',
-          messageThreshold: 0,
-          intimacyLevel: 2
-        };
-      }
-    }),
+  getRelationshipStatus: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const stage = await conversationIntelligence.determineRelationshipStage(
+        ctx.user.id
+      );
+      return {
+        success: true,
+        stage: stage.stage,
+        name: stage.name,
+        description: stage.description,
+        messageThreshold: stage.messageThreshold,
+        intimacyLevel: stage.intimacyLevel,
+      };
+    } catch (error) {
+      logger.error("Error getting relationship status:", error);
+      return {
+        success: false,
+        stage: "stranger",
+        name: "Getting to Know You",
+        description: "Learning the basics about who you are",
+        messageThreshold: 0,
+        intimacyLevel: 2,
+      };
+    }
+  }),
 
   // Generate a random learning question (for testing/manual triggers)
   getLearningQuestion: protectedProcedure
-    .input(z.object({
-      conversationId: z.string().uuid().optional(),
-      category: z.string().optional()
-    }))
+    .input(
+      z.object({
+        conversationId: z.string().uuid().optional(),
+        category: z.string().optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
-        const stage = await conversationIntelligence.determineRelationshipStage(ctx.user.id);
-        
+        const stage = await conversationIntelligence.determineRelationshipStage(
+          ctx.user.id
+        );
+
         // Try to get AI-generated question first
         const greeting = await conversationIntelligence.initializeSession(
           ctx.user.id,
@@ -939,15 +1019,15 @@ const chatRouter = router({
           success: true,
           question: greeting,
           stage: stage.stage,
-          source: 'ai-generated'
+          source: "ai-generated",
         };
       } catch (error) {
-        logger.error('Error generating learning question:', error);
+        logger.error("Error generating learning question:", error);
         return {
           success: false,
           question: "What's something that's been on your mind lately?",
-          stage: 'stranger',
-          source: 'fallback'
+          stage: "stranger",
+          source: "fallback",
         };
       }
     }),
@@ -1130,14 +1210,19 @@ const discoveryService = new DiscoveryService();
 const socialEngagementService = new SocialEngagementService();
 const feedAlgorithmService = new FeedAlgorithmService();
 
+// Initialize advanced analytics services
+const advancedAnalyticsService = new AdvancedAnalyticsService();
+
 // Creator Verification Router
 const creatorVerificationRouter = router({
   // Start verification process
   startVerification: protectedProcedure
-    .input(z.object({
-      ipAddress: z.string(),
-      userAgent: z.string()
-    }))
+    .input(
+      z.object({
+        ipAddress: z.string(),
+        userAgent: z.string(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         return await creatorVerificationService.startVerification(
@@ -1146,24 +1231,31 @@ const creatorVerificationRouter = router({
           input.userAgent
         );
       } catch (error) {
-        logger.error('Error starting creator verification:', error);
+        logger.error("Error starting creator verification:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to start verification process'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to start verification process",
         });
       }
     }),
 
   // Submit identity verification
   submitIdentityVerification: protectedProcedure
-    .input(z.object({
-      verificationId: z.string().uuid(),
-      legalName: z.string().min(2).max(100),
-      dateOfBirth: z.date(),
-      governmentIdType: z.enum(['drivers_license', 'passport', 'state_id', 'national_id']),
-      governmentIdNumber: z.string().min(6).max(20),
-      governmentIdExpiryDate: z.date()
-    }))
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        legalName: z.string().min(2).max(100),
+        dateOfBirth: z.date(),
+        governmentIdType: z.enum([
+          "drivers_license",
+          "passport",
+          "state_id",
+          "national_id",
+        ]),
+        governmentIdNumber: z.string().min(6).max(20),
+        governmentIdExpiryDate: z.date(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...identityData } = input;
@@ -1173,25 +1265,27 @@ const creatorVerificationRouter = router({
           identityData
         );
       } catch (error) {
-        logger.error('Error submitting identity verification:', error);
+        logger.error("Error submitting identity verification:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to submit identity verification'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to submit identity verification",
         });
       }
     }),
 
   // Submit address verification
   submitAddressVerification: protectedProcedure
-    .input(z.object({
-      verificationId: z.string().uuid(),
-      addressLine1: z.string().min(5).max(100),
-      addressLine2: z.string().max(100).optional(),
-      city: z.string().min(2).max(50),
-      state: z.string().min(2).max(50),
-      postalCode: z.string().min(5).max(10),
-      country: z.string().default('US')
-    }))
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        addressLine1: z.string().min(5).max(100),
+        addressLine2: z.string().max(100).optional(),
+        city: z.string().min(2).max(50),
+        state: z.string().min(2).max(50),
+        postalCode: z.string().min(5).max(10),
+        country: z.string().default("US"),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...addressData } = input;
@@ -1201,23 +1295,25 @@ const creatorVerificationRouter = router({
           addressData
         );
       } catch (error) {
-        logger.error('Error submitting address verification:', error);
+        logger.error("Error submitting address verification:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to submit address verification'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to submit address verification",
         });
       }
     }),
 
   // Submit banking verification
   submitBankingVerification: protectedProcedure
-    .input(z.object({
-      verificationId: z.string().uuid(),
-      bankName: z.string().min(2).max(100),
-      bankAccountType: z.enum(['checking', 'savings']),
-      routingNumber: z.string().length(9),
-      accountNumber: z.string().min(4).max(20)
-    }))
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        bankName: z.string().min(2).max(100),
+        bankAccountType: z.enum(["checking", "savings"]),
+        routingNumber: z.string().length(9),
+        accountNumber: z.string().min(4).max(20),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...bankingData } = input;
@@ -1227,22 +1323,24 @@ const creatorVerificationRouter = router({
           bankingData
         );
       } catch (error) {
-        logger.error('Error submitting banking verification:', error);
+        logger.error("Error submitting banking verification:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to submit banking verification'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to submit banking verification",
         });
       }
     }),
 
   // Submit tax verification
   submitTaxVerification: protectedProcedure
-    .input(z.object({
-      verificationId: z.string().uuid(),
-      taxIdType: z.enum(['ssn', 'ein', 'itin']),
-      taxId: z.string().min(9).max(11),
-      w9FormSubmitted: z.boolean()
-    }))
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        taxIdType: z.enum(["ssn", "ein", "itin"]),
+        taxId: z.string().min(9).max(11),
+        w9FormSubmitted: z.boolean(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...taxData } = input;
@@ -1252,19 +1350,21 @@ const creatorVerificationRouter = router({
           taxData
         );
       } catch (error) {
-        logger.error('Error submitting tax verification:', error);
+        logger.error("Error submitting tax verification:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to submit tax verification'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to submit tax verification",
         });
       }
     }),
 
   // Submit verification for review
   submitForReview: protectedProcedure
-    .input(z.object({
-      verificationId: z.string().uuid()
-    }))
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         return await creatorVerificationService.submitForReview(
@@ -1272,38 +1372,41 @@ const creatorVerificationRouter = router({
           input.verificationId
         );
       } catch (error) {
-        logger.error('Error submitting verification for review:', error);
+        logger.error("Error submitting verification for review:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to submit verification for review'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to submit verification for review",
         });
       }
     }),
 
   // Get verification status
-  getVerificationStatus: protectedProcedure
-    .query(async ({ ctx }) => {
-      try {
-        return await creatorVerificationService.getVerificationStatus(ctx.user.id);
-      } catch (error) {
-        logger.error('Error getting verification status:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get verification status'
-        });
-      }
-    }),
+  getVerificationStatus: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await creatorVerificationService.getVerificationStatus(
+        ctx.user.id
+      );
+    } catch (error) {
+      logger.error("Error getting verification status:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get verification status",
+      });
+    }
+  }),
 });
 
 // Creator Monetization Router
 const creatorMonetizationRouter = router({
   // Create Stripe Connect account
   createStripeAccount: protectedProcedure
-    .input(z.object({
-      verificationId: z.string().uuid(),
-      email: z.string().email(),
-      country: z.string().default('US')
-    }))
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        email: z.string().email(),
+        country: z.string().default("US"),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         return await stripeService.createConnectAccount(
@@ -1313,22 +1416,24 @@ const creatorMonetizationRouter = router({
           input.country
         );
       } catch (error) {
-        logger.error('Error creating Stripe Connect account:', error);
+        logger.error("Error creating Stripe Connect account:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to create payment account'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create payment account",
         });
       }
     }),
 
   // Create subscription for persona
   createSubscription: protectedProcedure
-    .input(z.object({
-      creatorId: z.string().uuid(),
-      personaId: z.string().uuid(),
-      priceId: z.string(),
-      tierType: z.enum(['basic', 'average', 'advanced'])
-    }))
+    .input(
+      z.object({
+        creatorId: z.string().uuid(),
+        personaId: z.string().uuid(),
+        priceId: z.string(),
+        tierType: z.enum(["basic", "average", "advanced"]),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         return await stripeService.createSubscription(
@@ -1339,22 +1444,24 @@ const creatorMonetizationRouter = router({
           input.tierType
         );
       } catch (error) {
-        logger.error('Error creating subscription:', error);
+        logger.error("Error creating subscription:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to create subscription'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create subscription",
         });
       }
     }),
 
   // Create time-based payment
   createTimeBasedPayment: protectedProcedure
-    .input(z.object({
-      creatorId: z.string().uuid(),
-      personaId: z.string().uuid(),
-      sessionMinutes: z.number().min(1).max(1440), // Max 24 hours
-      hourlyRate: z.number().min(0.01).max(1000)
-    }))
+    .input(
+      z.object({
+        creatorId: z.string().uuid(),
+        personaId: z.string().uuid(),
+        sessionMinutes: z.number().min(1).max(1440), // Max 24 hours
+        hourlyRate: z.number().min(0.01).max(1000),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         return await stripeService.createTimeBasedPayment(
@@ -1365,50 +1472,51 @@ const creatorMonetizationRouter = router({
           input.hourlyRate
         );
       } catch (error) {
-        logger.error('Error creating time-based payment:', error);
+        logger.error("Error creating time-based payment:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to create payment'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create payment",
         });
       }
     }),
 
   // Get creator earnings summary
-  getEarningsSummary: protectedProcedure
-    .query(async ({ ctx }) => {
-      try {
-        // TODO: Implement earnings summary calculation
-        return {
-          totalEarnings: 0,
-          monthlyEarnings: 0,
-          pendingPayouts: 0,
-          totalSubscribers: 0,
-          activeSubscriptions: 0
-        };
-      } catch (error) {
-        logger.error('Error getting earnings summary:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get earnings summary'
-        });
-      }
-    }),
+  getEarningsSummary: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      // TODO: Implement earnings summary calculation
+      return {
+        totalEarnings: 0,
+        monthlyEarnings: 0,
+        pendingPayouts: 0,
+        totalSubscribers: 0,
+        activeSubscriptions: 0,
+      };
+    } catch (error) {
+      logger.error("Error getting earnings summary:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get earnings summary",
+      });
+    }
+  }),
 
   // Stripe webhook endpoint (handled via raw HTTP)
   processWebhook: protectedProcedure
-    .input(z.object({
-      body: z.string(),
-      signature: z.string()
-    }))
+    .input(
+      z.object({
+        body: z.string(),
+        signature: z.string(),
+      })
+    )
     .mutation(async ({ input }) => {
       try {
         await stripeService.processWebhook(input.body, input.signature);
         return { success: true };
       } catch (error) {
-        logger.error('Error processing Stripe webhook:', error);
+        logger.error("Error processing Stripe webhook:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to process webhook'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to process webhook",
         });
       }
     }),
@@ -1418,18 +1526,25 @@ const creatorMonetizationRouter = router({
 const personaMonetizationRouter = router({
   // Configure persona monetization
   configureMonetization: protectedProcedure
-    .input(z.object({
-      personaId: z.string().uuid(),
-      isMonetized: z.boolean(),
-      pricingModel: z.enum(['subscription_only', 'time_based_only', 'hybrid', 'free_with_limits']),
-      basicTierPrice: z.number().min(0).optional(),
-      averageTierPrice: z.number().min(0).optional(),
-      advancedTierPrice: z.number().min(0).optional(),
-      timeBasedEnabled: z.boolean().optional(),
-      hourlyRate: z.number().min(0).optional(),
-      freeMessagesPerDay: z.number().min(0).default(3),
-      freeMinutesPerDay: z.number().min(0).default(10)
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+        isMonetized: z.boolean(),
+        pricingModel: z.enum([
+          "subscription_only",
+          "time_based_only",
+          "hybrid",
+          "free_with_limits",
+        ]),
+        basicTierPrice: z.number().min(0).optional(),
+        averageTierPrice: z.number().min(0).optional(),
+        advancedTierPrice: z.number().min(0).optional(),
+        timeBasedEnabled: z.boolean().optional(),
+        hourlyRate: z.number().min(0).optional(),
+        freeMessagesPerDay: z.number().min(0).default(3),
+        freeMinutesPerDay: z.number().min(0).default(10),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         // Update persona monetization settings
@@ -1446,7 +1561,7 @@ const personaMonetizationRouter = router({
             timeBasedEnabled: input.timeBasedEnabled || false,
             hourlyRate: input.hourlyRate?.toString(),
             freeMessagesPerDay: input.freeMessagesPerDay,
-            freeMinutesPerDay: input.freeMinutesPerDay
+            freeMinutesPerDay: input.freeMinutesPerDay,
           })
           .onConflictDoUpdate({
             target: personaMonetization.personaId,
@@ -1460,60 +1575,72 @@ const personaMonetizationRouter = router({
               hourlyRate: input.hourlyRate?.toString(),
               freeMessagesPerDay: input.freeMessagesPerDay,
               freeMinutesPerDay: input.freeMinutesPerDay,
-              updatedAt: new Date()
-            }
+              updatedAt: new Date(),
+            },
           });
 
         return { success: true };
       } catch (error) {
-        logger.error('Error configuring persona monetization:', error);
+        logger.error("Error configuring persona monetization:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to configure monetization'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to configure monetization",
         });
       }
     }),
 
   // Get persona monetization settings
   getMonetizationSettings: protectedProcedure
-    .input(z.object({
-      personaId: z.string().uuid()
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const settings = await db
           .select()
           .from(personaMonetization)
-          .where(and(
-            eq(personaMonetization.personaId, input.personaId),
-            eq(personaMonetization.userId, ctx.user.id)
-          ))
+          .where(
+            and(
+              eq(personaMonetization.personaId, input.personaId),
+              eq(personaMonetization.userId, ctx.user.id)
+            )
+          )
           .limit(1);
 
         if (settings.length === 0) {
           return {
             isMonetized: false,
-            pricingModel: 'free_with_limits',
+            pricingModel: "free_with_limits",
             freeMessagesPerDay: 3,
-            freeMinutesPerDay: 10
+            freeMinutesPerDay: 10,
           };
         }
 
         const setting = settings[0];
         return {
           ...setting,
-          basicTierPrice: setting.basicTierPrice ? parseFloat(setting.basicTierPrice) : undefined,
-          averageTierPrice: setting.averageTierPrice ? parseFloat(setting.averageTierPrice) : undefined,
-          advancedTierPrice: setting.advancedTierPrice ? parseFloat(setting.advancedTierPrice) : undefined,
-          hourlyRate: setting.hourlyRate ? parseFloat(setting.hourlyRate) : undefined,
+          basicTierPrice: setting.basicTierPrice
+            ? parseFloat(setting.basicTierPrice)
+            : undefined,
+          averageTierPrice: setting.averageTierPrice
+            ? parseFloat(setting.averageTierPrice)
+            : undefined,
+          advancedTierPrice: setting.advancedTierPrice
+            ? parseFloat(setting.advancedTierPrice)
+            : undefined,
+          hourlyRate: setting.hourlyRate
+            ? parseFloat(setting.hourlyRate)
+            : undefined,
           createdAt: setting.createdAt.toISOString(),
-          updatedAt: setting.updatedAt.toISOString()
+          updatedAt: setting.updatedAt.toISOString(),
         };
       } catch (error) {
-        logger.error('Error getting persona monetization settings:', error);
+        logger.error("Error getting persona monetization settings:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get monetization settings'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get monetization settings",
         });
       }
     }),
@@ -1523,14 +1650,22 @@ const personaMonetizationRouter = router({
 const contentModerationRouter = router({
   // Moderate content (called internally or by admins)
   moderateContent: protectedProcedure
-    .input(z.object({
-      contentType: z.enum(['message', 'persona_description', 'user_profile', 'media', 'conversation']),
-      contentId: z.string(),
-      content: z.string(),
-      userId: z.string().uuid().optional(),
-      personaId: z.string().uuid().optional(),
-      metadata: z.any().optional(),
-    }))
+    .input(
+      z.object({
+        contentType: z.enum([
+          "message",
+          "persona_description",
+          "user_profile",
+          "media",
+          "conversation",
+        ]),
+        contentId: z.string(),
+        content: z.string(),
+        userId: z.string().uuid().optional(),
+        personaId: z.string().uuid().optional(),
+        metadata: z.any().optional(),
+      })
+    )
     .mutation(async ({ input }) => {
       try {
         const result = await contentModerationService.moderateContent({
@@ -1544,73 +1679,81 @@ const contentModerationRouter = router({
 
         return result;
       } catch (error) {
-        logger.error('Error moderating content:', error);
+        logger.error("Error moderating content:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to moderate content'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to moderate content",
         });
       }
     }),
 
   // Get user safety profile
   getUserSafetyProfile: protectedProcedure
-    .input(z.object({
-      userId: z.string().uuid()
-    }))
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         // Only allow users to view their own profile or creators to view subscriber profiles
         if (input.userId !== ctx.user.id) {
           // TODO: Add creator permission check
           throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Not authorized to view this safety profile'
+            code: "FORBIDDEN",
+            message: "Not authorized to view this safety profile",
           });
         }
 
-        const profile = await contentModerationService.getUserSafetyProfile(input.userId);
+        const profile = await contentModerationService.getUserSafetyProfile(
+          input.userId
+        );
         return profile;
       } catch (error) {
-        logger.error('Error getting user safety profile:', error);
+        logger.error("Error getting user safety profile:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get safety profile'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get safety profile",
         });
       }
     }),
 
   // Rate user interaction (for creators)
   rateUserInteraction: protectedProcedure
-    .input(z.object({
-      ratedUserId: z.string().uuid(),
-      personaId: z.string().uuid(),
-      conversationId: z.string().uuid(),
-      safetyRating: z.number().min(1).max(5),
-      behaviorTags: z.array(z.string()),
-      isInappropriate: z.boolean().optional(),
-      isThreatening: z.boolean().optional(),
-      isHarassing: z.boolean().optional(),
-      isSpam: z.boolean().optional(),
-      ratingReason: z.string().optional(),
-      ratingNotes: z.string().optional(),
-      isBlocked: z.boolean().optional(),
-    }))
+    .input(
+      z.object({
+        ratedUserId: z.string().uuid(),
+        personaId: z.string().uuid(),
+        conversationId: z.string().uuid(),
+        safetyRating: z.number().min(1).max(5),
+        behaviorTags: z.array(z.string()),
+        isInappropriate: z.boolean().optional(),
+        isThreatening: z.boolean().optional(),
+        isHarassing: z.boolean().optional(),
+        isSpam: z.boolean().optional(),
+        ratingReason: z.string().optional(),
+        ratingNotes: z.string().optional(),
+        isBlocked: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         // Verify the creator owns the persona
         const persona = await db
           .select()
           .from(personas)
-          .where(and(
-            eq(personas.id, input.personaId),
-            eq(personas.userId, ctx.user.id)
-          ))
+          .where(
+            and(
+              eq(personas.id, input.personaId),
+              eq(personas.userId, ctx.user.id)
+            )
+          )
           .limit(1);
 
         if (persona.length === 0) {
           throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Not authorized to rate interactions for this persona'
+            code: "FORBIDDEN",
+            message: "Not authorized to rate interactions for this persona",
           });
         }
 
@@ -1634,20 +1777,22 @@ const contentModerationRouter = router({
 
         return result;
       } catch (error) {
-        logger.error('Error rating user interaction:', error);
+        logger.error("Error rating user interaction:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to rate interaction'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to rate interaction",
         });
       }
     }),
 
   // Get user interaction ratings (for creators)
   getUserInteractionRatings: protectedProcedure
-    .input(z.object({
-      userId: z.string().uuid(),
-      personaId: z.string().uuid().optional(),
-    }))
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        personaId: z.string().uuid().optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         // Verify the creator owns the persona if specified
@@ -1655,58 +1800,65 @@ const contentModerationRouter = router({
           const persona = await db
             .select()
             .from(personas)
-            .where(and(
-              eq(personas.id, input.personaId),
-              eq(personas.userId, ctx.user.id)
-            ))
+            .where(
+              and(
+                eq(personas.id, input.personaId),
+                eq(personas.userId, ctx.user.id)
+              )
+            )
             .limit(1);
 
           if (persona.length === 0) {
             throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Not authorized to view ratings for this persona'
+              code: "FORBIDDEN",
+              message: "Not authorized to view ratings for this persona",
             });
           }
         }
 
-        const ratings = await contentModerationService.getUserInteractionRatings(
-          input.userId,
-          input.personaId
-        );
+        const ratings =
+          await contentModerationService.getUserInteractionRatings(
+            input.userId,
+            input.personaId
+          );
 
         return ratings;
       } catch (error) {
-        logger.error('Error getting user interaction ratings:', error);
+        logger.error("Error getting user interaction ratings:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get interaction ratings'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get interaction ratings",
         });
       }
     }),
 
   // Block/unblock user
   blockUser: protectedProcedure
-    .input(z.object({
-      userId: z.string().uuid(),
-      personaId: z.string().uuid(),
-      isBlocked: z.boolean(),
-    }))
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        personaId: z.string().uuid(),
+        isBlocked: z.boolean(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         // Verify the creator owns the persona
         const persona = await db
           .select()
           .from(personas)
-          .where(and(
-            eq(personas.id, input.personaId),
-            eq(personas.userId, ctx.user.id)
-          ))
+          .where(
+            and(
+              eq(personas.id, input.personaId),
+              eq(personas.userId, ctx.user.id)
+            )
+          )
           .limit(1);
 
         if (persona.length === 0) {
           throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Not authorized to block users for this persona'
+            code: "FORBIDDEN",
+            message: "Not authorized to block users for this persona",
           });
         }
 
@@ -1719,20 +1871,28 @@ const contentModerationRouter = router({
 
         return result;
       } catch (error) {
-        logger.error('Error blocking/unblocking user:', error);
+        logger.error("Error blocking/unblocking user:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to update user block status'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update user block status",
         });
       }
     }),
 
   // Get moderation history
   getModerationHistory: protectedProcedure
-    .input(z.object({
-      contentId: z.string(),
-      contentType: z.enum(['message', 'persona_description', 'user_profile', 'media', 'conversation']),
-    }))
+    .input(
+      z.object({
+        contentId: z.string(),
+        contentType: z.enum([
+          "message",
+          "persona_description",
+          "user_profile",
+          "media",
+          "conversation",
+        ]),
+      })
+    )
     .query(async ({ input }) => {
       try {
         const history = await contentModerationService.getModerationHistory(
@@ -1742,10 +1902,10 @@ const contentModerationRouter = router({
 
         return history;
       } catch (error) {
-        logger.error('Error getting moderation history:', error);
+        logger.error("Error getting moderation history:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get moderation history'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get moderation history",
         });
       }
     }),
@@ -1755,18 +1915,20 @@ const contentModerationRouter = router({
 const behaviorAnalysisRouter = router({
   // Analyze user behavior
   analyzeUserBehavior: protectedProcedure
-    .input(z.object({
-      userId: z.string().uuid(),
-      timeframeHours: z.number().optional().default(24),
-    }))
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        timeframeHours: z.number().optional().default(24),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         // Only allow analysis of own behavior or by authorized users
         if (input.userId !== ctx.user.id) {
           // TODO: Add admin/creator permission check
           throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Not authorized to analyze this user'
+            code: "FORBIDDEN",
+            message: "Not authorized to analyze this user",
           });
         }
 
@@ -1777,37 +1939,41 @@ const behaviorAnalysisRouter = router({
 
         return analysis;
       } catch (error) {
-        logger.error('Error analyzing user behavior:', error);
+        logger.error("Error analyzing user behavior:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to analyze behavior'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to analyze behavior",
         });
       }
     }),
 
   // Get behavior summary
   getBehaviorSummary: protectedProcedure
-    .input(z.object({
-      userId: z.string().uuid(),
-    }))
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         // Only allow viewing own summary or by authorized users
         if (input.userId !== ctx.user.id) {
           // TODO: Add admin/creator permission check
           throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Not authorized to view this behavior summary'
+            code: "FORBIDDEN",
+            message: "Not authorized to view this behavior summary",
           });
         }
 
-        const summary = await behaviorAnalysisService.getBehaviorSummary(input.userId);
+        const summary = await behaviorAnalysisService.getBehaviorSummary(
+          input.userId
+        );
         return summary;
       } catch (error) {
-        logger.error('Error getting behavior summary:', error);
+        logger.error("Error getting behavior summary:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get behavior summary'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get behavior summary",
         });
       }
     }),
@@ -1819,39 +1985,44 @@ const behaviorAnalysisRouter = router({
 const discoveryRouter = router({
   // Get personalized recommendations
   getPersonalizedRecommendations: protectedProcedure
-    .input(z.object({
-      limit: z.number().optional().default(20),
-      categories: z.array(z.string()).optional(),
-      excludePersonaIds: z.array(z.string()).optional(),
-    }))
+    .input(
+      z.object({
+        limit: z.number().optional().default(20),
+        categories: z.array(z.string()).optional(),
+        excludePersonaIds: z.array(z.string()).optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
-        const recommendations = await discoveryService.getPersonalizedRecommendations(
-          ctx.user.id,
-          input.limit,
-          {
-            categories: input.categories,
-            excludePersonaIds: input.excludePersonaIds,
-          }
-        );
+        const recommendations =
+          await discoveryService.getPersonalizedRecommendations(
+            ctx.user.id,
+            input.limit,
+            {
+              categories: input.categories,
+              excludePersonaIds: input.excludePersonaIds,
+            }
+          );
 
         return recommendations;
       } catch (error) {
-        logger.error('Error getting personalized recommendations:', error);
+        logger.error("Error getting personalized recommendations:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get recommendations'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get recommendations",
         });
       }
     }),
 
   // Get trending personas
   getTrendingPersonas: publicProcedure
-    .input(z.object({
-      timeframe: z.enum(['24h', '7d', '30d']).optional().default('24h'),
-      limit: z.number().optional().default(50),
-      categories: z.array(z.string()).optional(),
-    }))
+    .input(
+      z.object({
+        timeframe: z.enum(["24h", "7d", "30d"]).optional().default("24h"),
+        limit: z.number().optional().default(50),
+        categories: z.array(z.string()).optional(),
+      })
+    )
     .query(async ({ input }) => {
       try {
         const trending = await discoveryService.getTrendingPersonas(
@@ -1862,28 +2033,30 @@ const discoveryRouter = router({
 
         return trending;
       } catch (error) {
-        logger.error('Error getting trending personas:', error);
+        logger.error("Error getting trending personas:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get trending personas'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get trending personas",
         });
       }
     }),
 
   // Search personas
   searchPersonas: publicProcedure
-    .input(z.object({
-      query: z.string(),
-      limit: z.number().optional().default(20),
-      categories: z.array(z.string()).optional(),
-      minRating: z.number().optional(),
-      hideNSFW: z.boolean().optional(),
-    }))
+    .input(
+      z.object({
+        query: z.string(),
+        limit: z.number().optional().default(20),
+        categories: z.array(z.string()).optional(),
+        minRating: z.number().optional(),
+        hideNSFW: z.boolean().optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const results = await discoveryService.searchPersonas(
           input.query,
-          ctx.user?.id,
+          ctx.user?.id || null,
           input.limit,
           {
             categories: input.categories,
@@ -1894,20 +2067,22 @@ const discoveryRouter = router({
 
         return results;
       } catch (error) {
-        logger.error('Error searching personas:', error);
+        logger.error("Error searching personas:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to search personas'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to search personas",
         });
       }
     }),
 
   // Get similar personas
   getSimilarPersonas: protectedProcedure
-    .input(z.object({
-      personaId: z.string().uuid(),
-      limit: z.number().optional().default(10),
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+        limit: z.number().optional().default(10),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const similar = await discoveryService.getSimilarPersonas(
@@ -1918,10 +2093,10 @@ const discoveryRouter = router({
 
         return similar;
       } catch (error) {
-        logger.error('Error getting similar personas:', error);
+        logger.error("Error getting similar personas:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get similar personas'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get similar personas",
         });
       }
     }),
@@ -1931,10 +2106,19 @@ const discoveryRouter = router({
 const socialEngagementRouter = router({
   // Follow/unfollow creator
   toggleFollow: protectedProcedure
-    .input(z.object({
-      creatorId: z.string().uuid(),
-      followReason: z.enum(['creator_interest', 'persona_discovery', 'friend_connection', 'recommendation']).optional(),
-    }))
+    .input(
+      z.object({
+        creatorId: z.string().uuid(),
+        followReason: z
+          .enum([
+            "creator_interest",
+            "persona_discovery",
+            "friend_connection",
+            "recommendation",
+          ])
+          .optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         const result = await socialEngagementService.toggleFollow(
@@ -1945,21 +2129,35 @@ const socialEngagementRouter = router({
 
         return result;
       } catch (error) {
-        logger.error('Error toggling follow:', error);
+        logger.error("Error toggling follow:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to update follow status'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update follow status",
         });
       }
     }),
 
   // Like/unlike persona
   toggleLike: protectedProcedure
-    .input(z.object({
-      personaId: z.string().uuid(),
-      likeType: z.enum(['like', 'favorite', 'bookmark', 'interested']).optional().default('like'),
-      discoveredVia: z.enum(['feed', 'search', 'trending', 'recommendation', 'creator_profile', 'direct_link']).optional(),
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+        likeType: z
+          .enum(["like", "favorite", "bookmark", "interested"])
+          .optional()
+          .default("like"),
+        discoveredVia: z
+          .enum([
+            "feed",
+            "search",
+            "trending",
+            "recommendation",
+            "creator_profile",
+            "direct_link",
+          ])
+          .optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         const result = await socialEngagementService.toggleLike(
@@ -1971,49 +2169,56 @@ const socialEngagementRouter = router({
 
         return result;
       } catch (error) {
-        logger.error('Error toggling like:', error);
+        logger.error("Error toggling like:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to update like status'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update like status",
         });
       }
     }),
 
   // Submit review
   submitReview: protectedProcedure
-    .input(z.object({
-      personaId: z.string().uuid(),
-      rating: z.number().min(1).max(5),
-      title: z.string().optional(),
-      reviewText: z.string().optional(),
-      categories: z.array(z.string()).optional(),
-      pros: z.array(z.string()).optional(),
-      cons: z.array(z.string()).optional(),
-      subscriptionTier: z.string().optional(),
-      interactionDuration: z.number().optional(),
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+        rating: z.number().min(1).max(5),
+        title: z.string().optional(),
+        reviewText: z.string().optional(),
+        categories: z.array(z.string()).optional(),
+        pros: z.array(z.string()).optional(),
+        cons: z.array(z.string()).optional(),
+        subscriptionTier: z.string().optional(),
+        interactionDuration: z.number().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
-        const result = await socialEngagementService.submitReview(ctx.user.id, input);
+        const result = await socialEngagementService.submitReview(
+          ctx.user.id,
+          input
+        );
         return result;
       } catch (error) {
-        logger.error('Error submitting review:', error);
+        logger.error("Error submitting review:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to submit review'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to submit review",
         });
       }
     }),
 
   // Get user social stats
   getUserSocialStats: protectedProcedure
-    .input(z.object({
-      userId: z.string().uuid().optional(),
-    }))
+    .input(
+      z.object({
+        userId: z.string().uuid().optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const userId = input.userId || ctx.user.id;
-        
+
         // Only allow viewing own stats or public stats
         if (userId !== ctx.user.id) {
           // Add permission check here for public stats
@@ -2022,40 +2227,49 @@ const socialEngagementRouter = router({
         const stats = await socialEngagementService.getUserSocialStats(userId);
         return stats;
       } catch (error) {
-        logger.error('Error getting user social stats:', error);
+        logger.error("Error getting user social stats:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get social stats'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get social stats",
         });
       }
     }),
 
   // Get persona engagement
   getPersonaEngagement: publicProcedure
-    .input(z.object({
-      personaId: z.string().uuid(),
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+      })
+    )
     .query(async ({ input }) => {
       try {
-        const engagement = await socialEngagementService.getPersonaEngagement(input.personaId);
+        const engagement = await socialEngagementService.getPersonaEngagement(
+          input.personaId
+        );
         return engagement;
       } catch (error) {
-        logger.error('Error getting persona engagement:', error);
+        logger.error("Error getting persona engagement:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get persona engagement'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get persona engagement",
         });
       }
     }),
 
   // Get persona reviews
   getPersonaReviews: publicProcedure
-    .input(z.object({
-      personaId: z.string().uuid(),
-      limit: z.number().optional().default(10),
-      offset: z.number().optional().default(0),
-      sortBy: z.enum(['newest', 'oldest', 'rating_high', 'rating_low', 'helpful']).optional().default('newest'),
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+        limit: z.number().optional().default(10),
+        offset: z.number().optional().default(0),
+        sortBy: z
+          .enum(["newest", "oldest", "rating_high", "rating_low", "helpful"])
+          .optional()
+          .default("newest"),
+      })
+    )
     .query(async ({ input }) => {
       try {
         const reviews = await socialEngagementService.getPersonaReviews(
@@ -2067,20 +2281,22 @@ const socialEngagementRouter = router({
 
         return reviews;
       } catch (error) {
-        logger.error('Error getting persona reviews:', error);
+        logger.error("Error getting persona reviews:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get reviews'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get reviews",
         });
       }
     }),
 
   // Get user's following
   getUserFollowing: protectedProcedure
-    .input(z.object({
-      limit: z.number().optional().default(50),
-      offset: z.number().optional().default(0),
-    }))
+    .input(
+      z.object({
+        limit: z.number().optional().default(50),
+        offset: z.number().optional().default(0),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const following = await socialEngagementService.getUserFollowing(
@@ -2091,20 +2307,22 @@ const socialEngagementRouter = router({
 
         return following;
       } catch (error) {
-        logger.error('Error getting user following:', error);
+        logger.error("Error getting user following:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get following list'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get following list",
         });
       }
     }),
 
   // Get user's liked personas
   getUserLikedPersonas: protectedProcedure
-    .input(z.object({
-      limit: z.number().optional().default(50),
-      offset: z.number().optional().default(0),
-    }))
+    .input(
+      z.object({
+        limit: z.number().optional().default(50),
+        offset: z.number().optional().default(0),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const liked = await socialEngagementService.getUserLikedPersonas(
@@ -2115,40 +2333,50 @@ const socialEngagementRouter = router({
 
         return liked;
       } catch (error) {
-        logger.error('Error getting user liked personas:', error);
+        logger.error("Error getting user liked personas:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get liked personas'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get liked personas",
         });
       }
     }),
 
   // Check if following creator
   isFollowing: protectedProcedure
-    .input(z.object({
-      creatorId: z.string().uuid(),
-    }))
+    .input(
+      z.object({
+        creatorId: z.string().uuid(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
-        const isFollowing = await socialEngagementService.isFollowing(ctx.user.id, input.creatorId);
+        const isFollowing = await socialEngagementService.isFollowing(
+          ctx.user.id,
+          input.creatorId
+        );
         return { isFollowing };
       } catch (error) {
-        logger.error('Error checking follow status:', error);
+        logger.error("Error checking follow status:", error);
         return { isFollowing: false };
       }
     }),
 
   // Check if persona is liked
   isLiked: protectedProcedure
-    .input(z.object({
-      personaId: z.string().uuid(),
-    }))
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
-        const isLiked = await socialEngagementService.isLiked(ctx.user.id, input.personaId);
+        const isLiked = await socialEngagementService.isLiked(
+          ctx.user.id,
+          input.personaId
+        );
         return { isLiked };
       } catch (error) {
-        logger.error('Error checking like status:', error);
+        logger.error("Error checking like status:", error);
         return { isLiked: false };
       }
     }),
@@ -2158,31 +2386,38 @@ const socialEngagementRouter = router({
 const feedRouter = router({
   // Generate personalized feed
   generateFeed: protectedProcedure
-    .input(z.object({
-      limit: z.number().optional().default(50),
-      includePromoted: z.boolean().optional().default(true),
-      refreshExisting: z.boolean().optional().default(false),
-      categories: z.array(z.string()).optional(),
-    }))
+    .input(
+      z.object({
+        limit: z.number().optional().default(50),
+        includePromoted: z.boolean().optional().default(true),
+        refreshExisting: z.boolean().optional().default(false),
+        categories: z.array(z.string()).optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
-        const feed = await feedAlgorithmService.generatePersonalizedFeed(ctx.user.id, input);
+        const feed = await feedAlgorithmService.generatePersonalizedFeed(
+          ctx.user.id,
+          input
+        );
         return feed;
       } catch (error) {
-        logger.error('Error generating feed:', error);
+        logger.error("Error generating feed:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to generate feed'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to generate feed",
         });
       }
     }),
 
   // Get user's feed
   getFeed: protectedProcedure
-    .input(z.object({
-      limit: z.number().optional().default(50),
-      offset: z.number().optional().default(0),
-    }))
+    .input(
+      z.object({
+        limit: z.number().optional().default(50),
+        offset: z.number().optional().default(0),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
         const feed = await feedAlgorithmService.getUserFeed(
@@ -2193,20 +2428,28 @@ const feedRouter = router({
 
         return feed;
       } catch (error) {
-        logger.error('Error getting feed:', error);
+        logger.error("Error getting feed:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get feed'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get feed",
         });
       }
     }),
 
   // Track feed interaction
   trackInteraction: protectedProcedure
-    .input(z.object({
-      feedItemId: z.string().uuid(),
-      interactionType: z.enum(['viewed', 'clicked', 'liked', 'shared', 'dismissed']),
-    }))
+    .input(
+      z.object({
+        feedItemId: z.string().uuid(),
+        interactionType: z.enum([
+          "viewed",
+          "clicked",
+          "liked",
+          "shared",
+          "dismissed",
+        ]),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       try {
         const success = await feedAlgorithmService.trackFeedInteraction(
@@ -2217,25 +2460,30 @@ const feedRouter = router({
 
         return { success };
       } catch (error) {
-        logger.error('Error tracking feed interaction:', error);
+        logger.error("Error tracking feed interaction:", error);
         return { success: false };
       }
     }),
 
   // Get feed metrics
   getFeedMetrics: protectedProcedure
-    .input(z.object({
-      timeframe: z.enum(['24h', '7d', '30d']).optional().default('7d'),
-    }))
+    .input(
+      z.object({
+        timeframe: z.enum(["24h", "7d", "30d"]).optional().default("7d"),
+      })
+    )
     .query(async ({ input, ctx }) => {
       try {
-        const metrics = await feedAlgorithmService.getFeedMetrics(ctx.user.id, input.timeframe);
+        const metrics = await feedAlgorithmService.getFeedMetrics(
+          ctx.user.id,
+          input.timeframe
+        );
         return metrics;
       } catch (error) {
-        logger.error('Error getting feed metrics:', error);
+        logger.error("Error getting feed metrics:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to get feed metrics'
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get feed metrics",
         });
       }
     }),

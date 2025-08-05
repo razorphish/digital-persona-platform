@@ -153,3 +153,4 @@ test-server-startup.py
 .next/
 out/
 .turbo/
+.env.bak

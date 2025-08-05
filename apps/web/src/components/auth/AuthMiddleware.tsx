@@ -33,7 +33,6 @@ export function AuthMiddleware() {
       "/feed",
       "/dashboard",
       "/files",
-      "/chat",
       "/social",
       "/analytics",
       "/personas",
@@ -83,40 +82,18 @@ export function AuthMiddleware() {
       isAuthenticated,
     });
 
-    // Handle protected routes - but be less aggressive on first load
+    // Handle protected routes - simplified to prevent race conditions
     if (isProtectedRoute && !isAuthenticated) {
-      // Give more time to allow for auth state restoration
-      const timer = setTimeout(() => {
-        // Re-check authentication state before redirecting
-        const tokens = AuthUtils.getTokens();
-        if (!tokens?.accessToken) {
-          console.warn(
-            `Access denied to protected route: ${pathname} - no valid token found`
-          );
-          router.replace("/");
-        } else {
-          console.log(
-            `Protected route access delayed - token exists, waiting for auth context`
-          );
-          // If token exists but user not authenticated, give more time
-          setTimeout(() => {
-            const stillNotAuthenticated = !AuthUtils.getTokens()?.accessToken;
-            if (stillNotAuthenticated) {
-              console.warn(
-                `Final redirect to login - auth state not resolved for ${pathname}`
-              );
-              router.replace("/");
-            }
-          }, 300); // Additional delay if token exists
-        }
-      }, 500); // Increased from 200ms to 500ms
-
-      return () => clearTimeout(timer);
+      console.warn(
+        `Access denied to protected route: ${pathname} - redirecting to login`
+      );
+      router.replace("/");
+      return;
     }
 
-    // Redirect authenticated users away from auth pages
-    if (isAuthRoute && isAuthenticated) {
-      console.info("Authenticated user redirected from auth page to feed");
+    // Redirect authenticated users away from auth pages and home page
+    if ((isAuthRoute || pathname === "/") && isAuthenticated) {
+      console.info("Authenticated user redirected to feed");
       router.replace("/feed");
       return;
     }

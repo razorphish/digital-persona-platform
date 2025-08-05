@@ -1,13 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface FeedItem {
   id: string;
-  itemType: 'persona_recommendation' | 'trending_persona' | 'creator_update' | 'followed_creator_persona' | 'similar_personas' | 'review_highlight';
+  itemType:
+    | "persona_recommendation"
+    | "trending_persona"
+    | "creator_update"
+    | "followed_creator_persona"
+    | "similar_personas"
+    | "review_highlight";
   persona?: any;
   creator?: any;
   relevanceScore: number;
@@ -23,11 +29,18 @@ interface FeedItem {
 
 interface PersonaFeedCardProps {
   feedItem: FeedItem;
-  onInteraction: (feedItemId: string, interactionType: 'viewed' | 'clicked' | 'liked' | 'shared' | 'dismissed') => void;
+  onInteraction: (
+    feedItemId: string,
+    interactionType: "viewed" | "clicked" | "liked" | "shared" | "dismissed"
+  ) => void;
   viewportIndex: number;
 }
 
-export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex }: PersonaFeedCardProps) {
+export default function PersonaFeedCard({
+  feedItem,
+  onInteraction,
+  viewportIndex,
+}: PersonaFeedCardProps) {
   const router = useRouter();
   const { user } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
@@ -37,40 +50,98 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
 
   const { persona, creator, metadata, isPromoted, isTrending } = feedItem;
 
-  // tRPC queries
-  const { data: personaEngagement } = trpc.socialEngagement.getPersonaEngagement.useQuery({
-    personaId: persona?.id || '',
-  }, {
-    enabled: !!persona?.id,
-  });
+  // Check if backend is available before making any tRPC calls
+  const backendAvailable = Boolean(
+    trpc.socialEngagement &&
+      typeof trpc.socialEngagement.getPersonaEngagement === "function"
+  );
 
-  const { data: likedStatus } = trpc.socialEngagement.isLiked.useQuery({
-    personaId: persona?.id || '',
-  }, {
-    enabled: !!persona?.id,
-  });
+  // Helper function to validate UUID format
+  const isValidUuid = (id: string | undefined | null): id is string => {
+    if (!id || typeof id !== "string") return false;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
+  };
 
-  const { data: followStatus } = trpc.socialEngagement.isFollowing.useQuery({
-    creatorId: creator?.id || persona?.userId || '',
-  }, {
-    enabled: !!(creator?.id || persona?.userId),
-  });
+  // Only make tRPC queries if backend is available and IDs are valid UUIDs
+  const personaEngagementQuery =
+    backendAvailable && isValidUuid(persona?.id)
+      ? trpc.socialEngagement.getPersonaEngagement.useQuery(
+          {
+            personaId: persona.id,
+          },
+          {
+            enabled: true,
+          }
+        )
+      : null;
 
-  // tRPC mutations
-  const toggleLikeMutation = trpc.socialEngagement.toggleLike.useMutation({
-    onSuccess: (result) => {
-      setIsLiked(result.isLiked);
-      setLikeCount(result.likeCount);
-    },
-  });
+  const likedStatusQuery =
+    backendAvailable && isValidUuid(persona?.id)
+      ? trpc.socialEngagement.isLiked.useQuery(
+          {
+            personaId: persona.id,
+          },
+          {
+            enabled: true,
+          }
+        )
+      : null;
 
-  const toggleFollowMutation = trpc.socialEngagement.toggleFollow.useMutation({
-    onSuccess: (result) => {
-      setIsFollowing(result.isFollowing);
-    },
-  });
+  const validCreatorId = creator?.id || persona?.userId;
+  const followStatusQuery =
+    backendAvailable && isValidUuid(validCreatorId)
+      ? trpc.socialEngagement.isFollowing.useQuery(
+          {
+            creatorId: validCreatorId!,
+          },
+          {
+            enabled: true,
+          }
+        )
+      : null;
 
-  // Initialize state from tRPC data
+  // Extract data with fallbacks
+  const personaEngagement =
+    personaEngagementQuery?.data || metadata?.engagementData;
+  const likedStatus = likedStatusQuery?.data || { isLiked: false };
+  const followStatus = followStatusQuery?.data || { isFollowing: false };
+
+  // tRPC mutations with fallbacks for when endpoints are disabled
+  const toggleLikeMutation = backendAvailable
+    ? trpc.socialEngagement.toggleLike.useMutation({
+        onSuccess: (result) => {
+          setIsLiked(result.isLiked);
+          setLikeCount(result.likeCount);
+        },
+      })
+    : {
+        mutate: () => {
+          // Mock toggle like behavior
+          setIsLiked(!isLiked);
+          setLikeCount(likeCount + (isLiked ? -1 : 1));
+          console.log("Toggle like endpoint disabled - using mock behavior");
+        },
+        isLoading: false,
+      };
+
+  const toggleFollowMutation = backendAvailable
+    ? trpc.socialEngagement.toggleFollow.useMutation({
+        onSuccess: (result) => {
+          setIsFollowing(result.isFollowing);
+        },
+      })
+    : {
+        mutate: () => {
+          // Mock toggle follow behavior
+          setIsFollowing(!isFollowing);
+          console.log("Toggle follow endpoint disabled - using mock behavior");
+        },
+        isLoading: false,
+      };
+
+  // Initialize state from data (either from tRPC or mock data)
   useEffect(() => {
     if (likedStatus) {
       setIsLiked(likedStatus.isLiked);
@@ -84,17 +155,19 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
   }, [followStatus]);
 
   useEffect(() => {
-    if (personaEngagement) {
+    if (personaEngagement?.likes) {
       setLikeCount(personaEngagement.likes);
+    } else if (metadata?.engagementData?.likes) {
+      setLikeCount(metadata.engagementData.likes);
     }
-  }, [personaEngagement]);
+  }, [personaEngagement, metadata?.engagementData]);
 
   // Track view when card comes into viewport
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!isViewed) {
         setIsViewed(true);
-        onInteraction(feedItem.id, 'viewed');
+        onInteraction(feedItem.id, "viewed");
       }
     }, 1000); // Mark as viewed after 1 second
 
@@ -102,39 +175,41 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
   }, [feedItem.id, isViewed, onInteraction]);
 
   const handleLike = () => {
-    if (!persona?.id) return;
+    if (!isValidUuid(persona?.id)) return;
 
     toggleLikeMutation.mutate({
       personaId: persona.id,
-      likeType: 'like',
-      discoveredVia: 'feed',
+      likeType: "like",
+      discoveredVia: "feed",
     });
 
-    onInteraction(feedItem.id, 'liked');
+    onInteraction(feedItem.id, "liked");
   };
 
   const handleFollow = () => {
     const creatorId = creator?.id || persona?.userId;
-    if (!creatorId) return;
+    if (!isValidUuid(creatorId)) return;
 
     toggleFollowMutation.mutate({
-      creatorId: creatorId,
-      followReason: 'persona_discovery',
+      creatorId: creatorId!,
+      followReason: "persona_discovery",
     });
   };
 
   const handlePersonaClick = () => {
-    if (!persona?.id) return;
-    
-    onInteraction(feedItem.id, 'clicked');
+    if (!isValidUuid(persona?.id)) return;
+
+    onInteraction(feedItem.id, "clicked");
     router.push(`/personas/${persona.id}`);
   };
 
   const handleCreatorClick = () => {
-    const creatorId = creator?.id || persona?.userId;
-    if (!creatorId) return;
+    // For now, navigate to the persona page since we don't have creator profiles yet
+    // In the future, this could go to a creator profile page showing all their personas
+    if (!isValidUuid(persona?.id)) return;
 
-    router.push(`/creators/${creatorId}`);
+    onInteraction(feedItem.id, "clicked");
+    router.push(`/personas/${persona.id}`);
   };
 
   const handleShare = () => {
@@ -146,21 +221,25 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
       });
     } else {
       // Fallback to clipboard
-      navigator.clipboard.writeText(`${window.location.origin}/personas/${persona.id}`);
+      navigator.clipboard.writeText(
+        `${window.location.origin}/personas/${persona.id}`
+      );
     }
-    
-    onInteraction(feedItem.id, 'shared');
+
+    onInteraction(feedItem.id, "shared");
   };
 
   const handleDismiss = () => {
-    onInteraction(feedItem.id, 'dismissed');
+    onInteraction(feedItem.id, "dismissed");
   };
 
   const getRatingStars = (rating: number) => {
     return Array.from({ length: 5 }, (_, i) => (
       <svg
         key={i}
-        className={`w-4 h-4 ${i < rating ? 'text-yellow-400' : 'text-gray-300'}`}
+        className={`w-4 h-4 ${
+          i < rating ? "text-yellow-400" : "text-gray-300"
+        }`}
         fill="currentColor"
         viewBox="0 0 20 20"
       >
@@ -171,35 +250,35 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
 
   const getItemTypeIcon = () => {
     switch (feedItem.itemType) {
-      case 'trending_persona':
-        return '🔥';
-      case 'followed_creator_persona':
-        return '👥';
-      case 'persona_recommendation':
-        return '✨';
-      case 'similar_personas':
-        return '🎯';
-      case 'creator_update':
-        return '🆕';
+      case "trending_persona":
+        return "🔥";
+      case "followed_creator_persona":
+        return "👥";
+      case "persona_recommendation":
+        return "✨";
+      case "similar_personas":
+        return "🎯";
+      case "creator_update":
+        return "🆕";
       default:
-        return '📱';
+        return "📱";
     }
   };
 
   const getItemTypeLabel = () => {
     switch (feedItem.itemType) {
-      case 'trending_persona':
-        return 'Trending';
-      case 'followed_creator_persona':
-        return 'From creator you follow';
-      case 'persona_recommendation':
-        return 'Recommended for you';
-      case 'similar_personas':
-        return 'Similar to what you like';
-      case 'creator_update':
-        return 'New creator';
+      case "trending_persona":
+        return "Trending";
+      case "followed_creator_persona":
+        return "From creator you follow";
+      case "persona_recommendation":
+        return "Recommended for you";
+      case "similar_personas":
+        return "Similar to what you like";
+      case "creator_update":
+        return "New creator";
       default:
-        return 'Discover';
+        return "Discover";
     }
   };
 
@@ -216,25 +295,35 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
             {/* Creator Avatar */}
             <button onClick={handleCreatorClick} className="focus:outline-none">
               <div className="w-10 h-10 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
-                {(creator?.name || persona?.creatorName || 'A')[0].toUpperCase()}
+                {(creator?.name ||
+                  persona?.creatorName ||
+                  "A")[0].toUpperCase()}
               </div>
             </button>
-            
+
             <div className="flex-1">
               <div className="flex items-center space-x-2">
-                <button 
+                <button
                   onClick={handleCreatorClick}
                   className="font-medium text-gray-900 hover:text-indigo-600 transition-colors"
                 >
-                  {creator?.name || persona?.creatorName || 'Anonymous Creator'}
+                  {creator?.name || persona?.creatorName || "Anonymous Creator"}
                 </button>
                 {creator?.isVerified && (
-                  <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  <svg
+                    className="w-4 h-4 text-blue-500"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 )}
               </div>
-              
+
               <div className="flex items-center space-x-2 text-sm text-gray-500">
                 <span>{getItemTypeIcon()}</span>
                 <span>{getItemTypeLabel()}</span>
@@ -258,11 +347,15 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
             disabled={toggleFollowMutation.isLoading}
             className={`px-4 py-1 rounded-lg text-sm font-medium transition-colors ${
               isFollowing
-                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-indigo-600 text-white hover:bg-indigo-700"
             }`}
           >
-            {toggleFollowMutation.isLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
+            {toggleFollowMutation.isLoading
+              ? "..."
+              : isFollowing
+              ? "Following"
+              : "Follow"}
           </button>
         </div>
       </div>
@@ -292,14 +385,16 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
         <div className="p-4">
           {!persona.profilePicture && (
             <div className="mb-3">
-              <h3 className="text-lg font-bold text-gray-900 mb-1">{persona.name}</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">
+                {persona.name}
+              </h3>
               <p className="text-sm text-gray-600">{persona.category}</p>
             </div>
           )}
 
           {/* Description */}
           <p className="text-gray-800 mb-3 line-clamp-2">
-            {persona.description || 'An interesting persona to chat with...'}
+            {persona.description || "An interesting persona to chat with..."}
           </p>
 
           {/* Tags */}
@@ -326,7 +421,8 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
                 {personaEngagement.averageRating.toFixed(1)}
               </span>
               <span className="text-sm text-gray-500">
-                ({personaEngagement.reviews} review{personaEngagement.reviews !== 1 ? 's' : ''})
+                ({personaEngagement.reviews} review
+                {personaEngagement.reviews !== 1 ? "s" : ""})
               </span>
             </div>
           )}
@@ -336,7 +432,7 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
             <div className="bg-blue-50 rounded-lg p-3 mb-3">
               <p className="text-sm text-blue-800">
                 <span className="font-medium">Why you might like this: </span>
-                {metadata.reason.join(', ')}
+                {metadata.reason.join(", ")}
               </p>
             </div>
           )}
@@ -354,8 +450,10 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
               className="flex items-center space-x-2 text-gray-600 hover:text-red-500 transition-colors"
             >
               <svg
-                className={`w-6 h-6 ${isLiked ? 'text-red-500 fill-current' : ''}`}
-                fill={isLiked ? 'currentColor' : 'none'}
+                className={`w-6 h-6 ${
+                  isLiked ? "text-red-500 fill-current" : ""
+                }`}
+                fill={isLiked ? "currentColor" : "none"}
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
@@ -369,24 +467,23 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
               {likeCount > 0 && <span className="text-sm">{likeCount}</span>}
             </button>
 
-            {/* Chat Button */}
-            <button
-              onClick={handlePersonaClick}
-              className="flex items-center space-x-2 text-gray-600 hover:text-indigo-500 transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              <span className="text-sm">Chat</span>
-            </button>
-
             {/* Share Button */}
             <button
               onClick={handleShare}
               className="flex items-center space-x-2 text-gray-600 hover:text-green-500 transition-colors"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+                />
               </svg>
             </button>
           </div>
@@ -396,8 +493,18 @@ export default function PersonaFeedCard({ feedItem, onInteraction, viewportIndex
             onClick={handleDismiss}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>

@@ -5,7 +5,11 @@ import { TRPCProvider } from "../components/providers/TRPCProvider";
 import { AuthProvider } from "../contexts/AuthContext";
 import { AuthMiddleware } from "../components/auth/AuthMiddleware";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap", // Prevents font flash and improves loading
+  preload: true,
+});
 
 export const metadata: Metadata = {
   title: "Hibiji - Connect, Share, and Build Your Digital Persona",
@@ -14,7 +18,8 @@ export const metadata: Metadata = {
   keywords: "social media, digital persona, AI, social network, connect, share",
   openGraph: {
     title: "Hibiji - Connect, Share, and Build Your Digital Persona",
-    description: "Join Hibiji, the social platform where you connect with friends and build your AI-powered digital persona.",
+    description:
+      "Join Hibiji, the social platform where you connect with friends and build your AI-powered digital persona.",
     type: "website",
   },
   icons: {
