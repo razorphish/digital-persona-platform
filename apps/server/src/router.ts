@@ -34,7 +34,7 @@ import { PersonaService } from "./services/personaService.js";
 import { ConversationIntelligenceService } from "./services/conversationIntelligence.js";
 
 // Import creator economy services
-import { CreatorVerificationService } from "./services/creatorVerificationService.js";
+import { CreatorVerificationService, IdentityVerificationData } from "./services/creatorVerificationService.js";
 import { StripeService } from "./services/stripeService.js";
 
 // Import content moderation services
@@ -1259,10 +1259,18 @@ const creatorVerificationRouter = router({
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...identityData } = input;
+        // Ensure the identityData matches the required type
+        const verificationData: IdentityVerificationData = {
+          legalName: identityData.legalName,
+          dateOfBirth: identityData.dateOfBirth,
+          governmentIdType: identityData.governmentIdType,
+          governmentIdNumber: identityData.governmentIdNumber,
+          governmentIdExpiryDate: identityData.governmentIdExpiryDate,
+        };
         return await creatorVerificationService.submitIdentityVerification(
           ctx.user.id,
           verificationId,
-          identityData
+          verificationData
         );
       } catch (error) {
         logger.error("Error submitting identity verification:", error);
