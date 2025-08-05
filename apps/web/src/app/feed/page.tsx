@@ -167,7 +167,7 @@ function FeedPageContent() {
       likesGrowth: 35,
       thumbnailUrl: null,
     },
-  ];
+  ], []);
 
   // Always start with mock data to ensure immediate rendering
   const [feedItems, setFeedItems] = useState<FeedItem[]>(mockFeedItems);
