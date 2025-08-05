@@ -287,7 +287,7 @@ export class BehaviorAnalysisService {
   private async detectSpamPattern(userId: string, timeframe: Date): Promise<ThreatIndicator | null> {
     try {
       // Get message frequency and repetition patterns
-      const messages = await this.db
+      const messagesData = await this.db
         .select({
           content: messages.content,
           createdAt: messages.createdAt,
@@ -302,16 +302,16 @@ export class BehaviorAnalysisService {
         )
         .orderBy(desc(messages.createdAt));
 
-      if (messages.length < 5) return null;
+      if (messagesData.length < 5) return null;
 
       // Check for rapid-fire messaging
-      const rapidMessages = this.checkRapidMessaging(messages);
+      const rapidMessages = this.checkRapidMessaging(messagesData);
       
       // Check for repetitive content
-      const repetitiveContent = this.checkRepetitiveContent(messages);
+      const repetitiveContent = this.checkRepetitiveContent(messagesData);
       
       // Check for link spam
-      const linkSpam = this.checkLinkSpam(messages);
+      const linkSpam = this.checkLinkSpam(messagesData);
 
       if (rapidMessages || repetitiveContent || linkSpam) {
         const severity = rapidMessages && repetitiveContent ? 'high' : 'medium';
@@ -324,7 +324,7 @@ export class BehaviorAnalysisService {
             rapidMessages,
             repetitiveContent,
             linkSpam,
-            messageCount: messages.length,
+            messageCount: messagesData.length,
           },
         };
       }
@@ -563,9 +563,7 @@ export class BehaviorAnalysisService {
       await this.db.insert(safetyIncidents).values({
         userId: userId,
         incidentType: 'behavior_violation',
-        severity: pattern.riskLevel,
-        detectionMethod: 'pattern_analysis',
-        confidence: pattern.confidence,
+        severity: pattern.riskLevel as "low" | "medium" | "high" | "critical",
         description: `Behavior pattern analysis: ${pattern.patternType} detected`,
         evidence: {
           pattern,

@@ -39,6 +39,7 @@ import {
   IdentityVerificationData,
   AddressVerificationData,
   BankingVerificationData,
+  TaxVerificationData,
 } from "./services/creatorVerificationService.js";
 import { StripeService } from "./services/stripeService.js";
 
@@ -1373,10 +1374,16 @@ const creatorVerificationRouter = router({
     .mutation(async ({ input, ctx }) => {
       try {
         const { verificationId, ...taxData } = input;
+        // Ensure the taxData matches the required type
+        const verificationData: TaxVerificationData = {
+          taxIdType: taxData.taxIdType,
+          taxId: taxData.taxId,
+          w9FormSubmitted: taxData.w9FormSubmitted,
+        };
         return await creatorVerificationService.submitTaxVerification(
           ctx.user.id,
           verificationId,
-          taxData
+          verificationData
         );
       } catch (error) {
         logger.error("Error submitting tax verification:", error);
@@ -2085,7 +2092,7 @@ const discoveryRouter = router({
       try {
         const results = await discoveryService.searchPersonas(
           input.query,
-          ctx.user?.id || null,
+          (ctx as any).user?.id || null,
           input.limit,
           {
             categories: input.categories,
@@ -2223,9 +2230,21 @@ const socialEngagementRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       try {
+        // Create properly typed review submission
+        const reviewSubmission = {
+          personaId: input.personaId!,
+          rating: input.rating!,
+          title: input.title,
+          reviewText: input.reviewText,
+          categories: input.categories,
+          pros: input.pros,
+          cons: input.cons,
+          subscriptionTier: input.subscriptionTier,
+          interactionDuration: input.interactionDuration,
+        };
         const result = await socialEngagementService.submitReview(
           ctx.user.id,
-          input
+          reviewSubmission
         );
         return result;
       } catch (error) {

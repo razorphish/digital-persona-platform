@@ -847,7 +847,7 @@ export class AdvancedAnalyticsService {
     // This would typically involve calculating medians from existing user data
     await this.db.insert(performanceBenchmarks).values({
       category,
-      tier,
+      tier: tier as "new" | "emerging" | "established" | "top_performer",
       benchmarkDate: new Date(),
       sampleSize: 1,
       // Default benchmark values
@@ -900,11 +900,11 @@ export class AdvancedAnalyticsService {
           : 0,
       totalSubscriptions: subscriptions.length,
       totalPersonasViewed: sessions.reduce(
-        (sum, s) => sum + (s.personasViewed?.length || 0),
+        (sum, s) => sum + (Array.isArray(s.personasViewed) ? s.personasViewed.length : 0),
         0
       ),
       totalPersonasInteracted: sessions.reduce(
-        (sum, s) => sum + (s.personasInteracted?.length || 0),
+        (sum, s) => sum + (Array.isArray(s.personasInteracted) ? s.personasInteracted.length : 0),
         0
       ),
       lastActiveDate:
@@ -914,7 +914,7 @@ export class AdvancedAnalyticsService {
 
   private async calculateCreatorMetrics(userId: string): Promise<any> {
     // Calculate comprehensive creator metrics
-    const [personas, revenue, subscribers, reviews] = await Promise.all([
+    const [personasData, revenue, subscribers, reviews] = await Promise.all([
       this.db.select().from(personas).where(eq(personas.userId, userId)),
       this.db
         .select()
@@ -942,8 +942,8 @@ export class AdvancedAnalyticsService {
         : 0;
 
     return {
-      totalPersonas: personas.length,
-      activePersonas: personas.filter((p) => p.isPublic).length,
+      totalPersonas: personasData.length,
+      activePersonas: personasData.filter((p) => p.isPublic).length,
       totalRevenue: totalRevenue.toString(),
       monthlyRecurringRevenue: (totalRevenue / 12).toString(), // Simplified calculation
       totalSubscribers: subscribers[0]?.count || 0,
