@@ -46,13 +46,35 @@ import {
 import { StripeService } from "./services/stripeService.js";
 
 // Import content moderation services
-import { ContentModerationService } from "./services/contentModerationService.js";
-import { BehaviorAnalysisService } from "./services/behaviorAnalysisService.js";
+import { 
+  ContentModerationService, 
+  type ModerationResult,
+  type SafetyProfile 
+} from "./services/contentModerationService.js";
+import { 
+  BehaviorAnalysisService,
+  type BehaviorPattern 
+} from "./services/behaviorAnalysisService.js";
 
 // Import social features services
-import { DiscoveryService } from "./services/discoveryService.js";
-import { SocialEngagementService } from "./services/socialEngagementService.js";
-import { FeedAlgorithmService } from "./services/feedAlgorithmService.js";
+import { 
+  DiscoveryService,
+  type PersonaDiscoveryItem,
+  type TrendingPersona 
+} from "./services/discoveryService.js";
+import { 
+  SocialEngagementService,
+  type FollowResult,
+  type LikeResult,
+  type ReviewResult,
+  type PersonaEngagement,
+  type SocialStats 
+} from "./services/socialEngagementService.js";
+import { 
+  FeedAlgorithmService,
+  type FeedItem,
+  type FeedMetrics 
+} from "./services/feedAlgorithmService.js";
 
 // Import advanced analytics services
 import { AdvancedAnalyticsService } from "./services/advancedAnalyticsService.js";
@@ -118,7 +140,29 @@ async function getOrCreateDefaultPersona(userId: string) {
   return await PersonaService.getOrCreateMainPersona(userId);
 }
 
-const t = initTRPC.create({
+// Define context type based on actual database schema
+interface Context {
+  req?: any;
+  res?: any;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+    passwordHash: string | null;
+    emailVerified: Date | null;
+    image: string | null;
+    dateOfBirth: Date | null;
+    location: string | null;
+    bio: string | null;
+    isActive: boolean | null;
+    allowSocialConnections: boolean | null;
+    defaultPrivacyLevel: "public" | "friends" | "subscribers" | "private" | null;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+}
+
+const t = initTRPC.context<Context>().create({
   transformer: superjson,
 });
 
@@ -160,6 +204,7 @@ const isAuthed = t.middleware(async ({ ctx, next }) => {
 
     return next({
       ctx: {
+        ...ctx,
         user: user[0],
       },
     });
@@ -171,7 +216,23 @@ const isAuthed = t.middleware(async ({ ctx, next }) => {
   }
 });
 
-const protectedProcedure = publicProcedure.use(isAuthed);
+// Create a strongly typed protected procedure that ensures user is available
+const protectedProcedure = publicProcedure
+  .use(isAuthed)
+  .use(t.middleware(({ ctx, next }) => {
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      });
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user,
+      },
+    });
+  }));
 
 // Queue file for AI processing
 async function queueFileForAIProcessing(

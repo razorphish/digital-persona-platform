@@ -46,7 +46,7 @@ app.use(
   "/api/trpc",
   createExpressMiddleware({
     router: appRouter,
-    createContext: ({ req, res }) => ({ req, res }),
+    createContext: ({ req, res }) => ({ req, res } as any),
   })
 );
 

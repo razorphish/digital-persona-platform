@@ -106,7 +106,7 @@ app.use(
   "/api/trpc",
   createExpressMiddleware({
     router: appRouter,
-    createContext: ({ req, res }) => ({ req, res }),
+    createContext: ({ req, res }) => ({ req, res } as any),
     onError: ({ error, type, path, input, ctx, req }) => {
       logger.error("tRPC error occurred", {
         error: error.message,
