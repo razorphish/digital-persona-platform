@@ -11,6 +11,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
+// Database schema for Digital Persona Platform
+// Last updated: 2025-08-06 - Testing migration runner after TypeScript fixes
+
 // Users table
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
