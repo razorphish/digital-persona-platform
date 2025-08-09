@@ -10,7 +10,6 @@ import SubscriberDemographics from "@/components/analytics/SubscriberDemographic
 import PerformanceBenchmarks from "@/components/analytics/PerformanceBenchmarks";
 import UserBehaviorAnalytics from "@/components/analytics/UserBehaviorAnalytics";
 import BusinessIntelligence from "@/components/analytics/BusinessIntelligence";
-import MainNavigation from "@/components/navigation/MainNavigation";
 
 interface AnalyticsData {
   overview: any;
@@ -109,8 +108,7 @@ function AnalyticsPageContent() {
   if (isDataLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Navigation */}
-        <MainNavigation />
+        {/* Navigation provided globally by layout */}
 
         {/* Header */}
         <div className="bg-white border-b border-gray-200">
@@ -154,8 +152,7 @@ function AnalyticsPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <MainNavigation />
+      {/* Navigation provided globally by layout */}
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">

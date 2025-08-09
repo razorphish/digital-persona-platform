@@ -8,6 +8,8 @@
     "build:lambda": "node build-lambda.js",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "seed:users": "tsx src/scripts/seedUsers.ts",
+    "feed:check": "tsx src/scripts/checkFeed.ts",
     "type-check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist && rm -rf .turbo && rm -rf lambda-dist",

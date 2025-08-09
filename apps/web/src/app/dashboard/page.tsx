@@ -29,13 +29,15 @@ function DashboardPageContent() {
   const [message, setMessage] = useState("");
 
   // Airica intelligence states
-  const [airicaMessages, setAiricaMessages] = useState<Array<{
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    timestamp: Date;
-    isLearningQuestion?: boolean;
-    insights?: number;
-  }>>([]);
+  const [airicaMessages, setAiricaMessages] = useState<
+    Array<{
+      role: "user" | "assistant" | "system";
+      content: string;
+      timestamp: Date;
+      isLearningQuestion?: boolean;
+      insights?: number;
+    }>
+  >([]);
   const [isAiricaLoading, setIsAiricaLoading] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [relationshipStage, setRelationshipStage] = useState<any>(null);
@@ -733,13 +735,15 @@ function DashboardPageContent() {
     if (initializeSession.data && !hasInitialized) {
       setHasInitialized(true);
       if (initializeSession.data.success) {
-        setAiricaMessages([{
-          role: 'assistant',
-          content: initializeSession.data.greeting,
-          timestamp: new Date(),
-          isLearningQuestion: false,
-          insights: 0
-        }]);
+        setAiricaMessages([
+          {
+            role: "assistant",
+            content: initializeSession.data.greeting,
+            timestamp: new Date(),
+            isLearningQuestion: false,
+            insights: 0,
+          },
+        ]);
         setRelationshipStage(initializeSession.data.relationshipStage);
       }
     }
@@ -756,15 +760,18 @@ function DashboardPageContent() {
     if (!message.trim() && uploadedFiles.length === 0) return;
 
     setIsAiricaLoading(true);
-    
+
     try {
       // Add user message to chat immediately for UI responsiveness
       if (message.trim()) {
-        setAiricaMessages(prev => [...prev, {
-          role: 'user',
-          content: message.trim(),
-          timestamp: new Date(),
-        }]);
+        setAiricaMessages((prev) => [
+          ...prev,
+          {
+            role: "user",
+            content: message.trim(),
+            timestamp: new Date(),
+          },
+        ]);
       }
 
       // Upload any pending files first
@@ -831,35 +838,41 @@ function DashboardPageContent() {
           mediaFiles: uploadedFiles
             .filter((f) => f.uploadStatus === "completed")
             .map((f) => f.fileId)
-            .filter(Boolean) as string[]
+            .filter(Boolean) as string[],
         });
 
         if (response.success && response.aiMessage) {
           // Add Airica's response to chat
-          setAiricaMessages(prev => [...prev, {
-            role: 'assistant',
-            content: response.aiMessage.content,
-            timestamp: new Date(response.aiMessage.createdAt),
-            isLearningQuestion: response.isLearningQuestion,
-            insights: response.insights
-          }]);
+          setAiricaMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: response.aiMessage.content,
+              timestamp: new Date(response.aiMessage.createdAt),
+              isLearningQuestion: response.isLearningQuestion,
+              insights: response.insights,
+            },
+          ]);
         }
       }
 
       // Clear the input
       setMessage("");
       setUploadedFiles([]);
-
     } catch (error) {
       console.error("Error sending message to Airica:", error);
       // Add error message to chat
-      setAiricaMessages(prev => [...prev, {
-        role: 'assistant',
-        content: "I'm sorry, I had trouble processing that. Could you try again?",
-        timestamp: new Date(),
-        isLearningQuestion: false,
-        insights: 0
-      }]);
+      setAiricaMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "I'm sorry, I had trouble processing that. Could you try again?",
+          timestamp: new Date(),
+          isLearningQuestion: false,
+          insights: 0,
+        },
+      ]);
     } finally {
       setIsAiricaLoading(false);
     }
@@ -867,86 +880,7 @@ function DashboardPageContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Navigation */}
-      <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                Digital Persona Platform
-              </h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome, {user?.name}!</span>
-              <div className="relative menu-container">
-                <button
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 6h16M4 12h16m-7 6h7"
-                    />
-                  </svg>
-                </button>
-
-                {/* Dropdown Menu */}
-                {isMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-900">
-                        {user?.name}
-                      </p>
-                      <p className="text-xs text-gray-500">{user?.email}</p>
-                    </div>
-
-                    {navigationItems.map((item) => (
-                      <button
-                        key={item.name}
-                        onClick={() => handleNavigation(item.href)}
-                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                      >
-                        <span className="mr-3">{item.icon}</span>
-                        {item.name}
-                      </button>
-                    ))}
-
-                    <hr className="my-2 border-gray-100" />
-
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <svg
-                        className="w-4 h-4 mr-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                        />
-                      </svg>
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
+      {/* Global navigation is provided by MainNavigation in layout */}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -957,8 +891,6 @@ function DashboardPageContent() {
               Manage your digital persona and AI interactions
             </p>
           </div>
-
-
 
           {/* Chat Window */}
           <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8 shadow-lg">
@@ -1032,7 +964,7 @@ function DashboardPageContent() {
                   {/* Airica Conversation Messages */}
                   {airicaMessages.map((msg, index) => (
                     <div key={index} className="flex items-start space-x-3">
-                      {msg.role === 'assistant' && (
+                      {msg.role === "assistant" && (
                         <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
                           <svg
                             className="w-4 h-4 text-white"
@@ -1049,15 +981,23 @@ function DashboardPageContent() {
                           </svg>
                         </div>
                       )}
-                      <div className={`flex-1 ${msg.role === 'user' ? 'ml-12' : ''}`}>
-                        <div className={`rounded-lg p-4 max-w-lg ${
-                          msg.role === 'user' 
-                            ? 'bg-indigo-500 text-white ml-auto' 
-                            : 'bg-gray-100'
-                        }`}>
-                          {msg.role === 'assistant' && (
+                      <div
+                        className={`flex-1 ${
+                          msg.role === "user" ? "ml-12" : ""
+                        }`}
+                      >
+                        <div
+                          className={`rounded-lg p-4 max-w-lg ${
+                            msg.role === "user"
+                              ? "bg-indigo-500 text-white ml-auto"
+                              : "bg-gray-100"
+                          }`}
+                        >
+                          {msg.role === "assistant" && (
                             <div className="flex items-center space-x-2 mb-2">
-                              <span className="font-semibold text-purple-600">Airica</span>
+                              <span className="font-semibold text-purple-600">
+                                Airica
+                              </span>
                               <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs">
                                 AI Companion
                               </span>
@@ -1068,21 +1008,32 @@ function DashboardPageContent() {
                               )}
                               {msg.insights && msg.insights > 0 && (
                                 <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                                  ✨ {msg.insights} insight{msg.insights > 1 ? 's' : ''}
+                                  ✨ {msg.insights} insight
+                                  {msg.insights > 1 ? "s" : ""}
                                 </span>
                               )}
                             </div>
                           )}
-                          <p className={msg.role === 'user' ? 'text-white' : 'text-gray-800'}>
+                          <p
+                            className={
+                              msg.role === "user"
+                                ? "text-white"
+                                : "text-gray-800"
+                            }
+                          >
                             {msg.content}
                           </p>
                         </div>
-                        <p className={`text-xs mt-1 ${
-                          msg.role === 'user' ? 'text-gray-500 text-right' : 'text-gray-500'
-                        }`}>
-                          {msg.timestamp.toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
+                        <p
+                          className={`text-xs mt-1 ${
+                            msg.role === "user"
+                              ? "text-gray-500 text-right"
+                              : "text-gray-500"
+                          }`}
+                        >
+                          {msg.timestamp.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
                           })}
                         </p>
                       </div>
@@ -1113,7 +1064,9 @@ function DashboardPageContent() {
                             <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
                             <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-75"></div>
                             <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
-                            <span className="text-gray-500 text-sm ml-2">Airica is thinking...</span>
+                            <span className="text-gray-500 text-sm ml-2">
+                              Airica is thinking...
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1133,26 +1086,29 @@ function DashboardPageContent() {
                   )}
 
                   {/* Empty state when no messages */}
-                  {airicaMessages.length === 0 && !initializeSession.isLoading && (
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg
-                          className="w-8 h-8 text-indigo-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                          />
-                        </svg>
+                  {airicaMessages.length === 0 &&
+                    !initializeSession.isLoading && (
+                      <div className="text-center py-8">
+                        <div className="w-16 h-16 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg
+                            className="w-8 h-8 text-indigo-600"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                            />
+                          </svg>
+                        </div>
+                        <p className="text-gray-500 text-sm">
+                          Airica is getting ready to chat with you...
+                        </p>
                       </div>
-                      <p className="text-gray-500 text-sm">Airica is getting ready to chat with you...</p>
-                    </div>
-                  )}
+                    )}
                 </div>
               </div>
 
@@ -1759,8 +1715,6 @@ function DashboardPageContent() {
               </button>
             </div>
 
-
-
             <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
               <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
                 <svg
@@ -1841,7 +1795,8 @@ function DashboardPageContent() {
                 Creator Dashboard
               </h3>
               <p className="text-gray-600 mb-4">
-                Track your earnings, manage subscribers, and grow your creator business
+                Track your earnings, manage subscribers, and grow your creator
+                business
               </p>
               <div className="space-y-2">
                 <button
@@ -1885,7 +1840,8 @@ function DashboardPageContent() {
                 Safety Dashboard
               </h3>
               <p className="text-gray-600 mb-4">
-                Monitor your account safety, interaction history, and privacy settings
+                Monitor your account safety, interaction history, and privacy
+                settings
               </p>
               <button
                 onClick={() => router.push("/safety")}
@@ -1909,8 +1865,8 @@ function DashboardPageContent() {
                 personality insights.
               </p>
               <div className="mt-4 text-sm text-green-600">
-                💡 <strong>Pro tip:</strong> Jump into a conversation right
-                here with voice and text to start building your digital persona!
+                💡 <strong>Pro tip:</strong> Jump into a conversation right here
+                with voice and text to start building your digital persona!
               </div>
             </div>
           </div>

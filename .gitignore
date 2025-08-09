@@ -154,3 +154,6 @@ test-server-startup.py
 out/
 .turbo/
 .env.bak
+
+# Local seed credentials
+data/.local-seed-users.md

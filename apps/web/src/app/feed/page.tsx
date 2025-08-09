@@ -5,7 +5,6 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import PersonaFeedCard from "@/components/feed/PersonaFeedCard";
 import TrendingSection from "@/components/feed/TrendingSection";
 import FeedFilters from "@/components/feed/FeedFilters";
-import MainNavigation from "@/components/navigation/MainNavigation";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -317,9 +316,6 @@ function FeedPageContent() {
   if (backendAvailable && (isLoading || feedLoading)) {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Navigation */}
-        <MainNavigation />
-
         {/* Loading Header */}
         <div className="bg-white border-b border-gray-200">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -381,9 +377,6 @@ function FeedPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <MainNavigation />
-
       {/* Feed Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">

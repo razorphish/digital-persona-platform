@@ -268,58 +268,7 @@ function PrivacyPageContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-100">
-      {/* Navigation */}
-      <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push("/personas")}
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Privacy Control Center
-                </h1>
-                <p className="text-sm text-gray-600">
-                  Configure guard rails and access permissions
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              {isDirty && (
-                <button
-                  onClick={savePrivacySettings}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-                >
-                  Save Changes
-                </button>
-              )}
-              <span className="text-gray-700">Welcome, {user?.name}!</span>
-              <button
-                onClick={() => logout()}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      {/* Navigation provided globally by layout */}
 
       {/* Persona Selection */}
       <div className="bg-white border-b border-gray-200">

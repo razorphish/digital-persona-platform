@@ -4,6 +4,7 @@ import "./globals.css";
 import { TRPCProvider } from "../components/providers/TRPCProvider";
 import { AuthProvider } from "../contexts/AuthContext";
 import { AuthMiddleware } from "../components/auth/AuthMiddleware";
+import ConditionalNavigation from "../components/navigation/ConditionalNavigation";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -40,6 +41,7 @@ export default function RootLayout({
         <TRPCProvider>
           <AuthProvider>
             <AuthMiddleware />
+            <ConditionalNavigation />
             {children}
           </AuthProvider>
         </TRPCProvider>

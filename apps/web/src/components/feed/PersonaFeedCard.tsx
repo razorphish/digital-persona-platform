@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/contexts/AuthContext";
@@ -50,6 +50,34 @@ export default function PersonaFeedCard({
 
   const { persona, creator, metadata, isPromoted, isTrending } = feedItem;
 
+  // Intersection observer to avoid fetching and tracking when off-screen
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
+  const [fetchReady, setFetchReady] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting) {
+          setInView(true);
+        }
+      },
+      { threshold: 0.25 }
+    );
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Gentle stagger to prevent request spikes
+  useEffect(() => {
+    if (!inView || fetchReady) return;
+    const delayMs = Math.min(viewportIndex * 60, 600);
+    const t = setTimeout(() => setFetchReady(true), delayMs);
+    return () => clearTimeout(t);
+  }, [inView, fetchReady, viewportIndex]);
+
   // Check if backend is available before making any tRPC calls
   const backendAvailable = Boolean(
     trpc.socialEngagement &&
@@ -64,56 +92,42 @@ export default function PersonaFeedCard({
     return uuidRegex.test(id);
   };
 
-  // Only make tRPC queries if backend is available and IDs are valid UUIDs
-  const personaEngagementQuery =
-    backendAvailable && isValidUuid(persona?.id)
-      ? trpc.socialEngagement.getPersonaEngagement.useQuery(
-          {
-            personaId: persona.id,
-          },
-          {
-            enabled: true,
-          }
-        )
-      : null;
+  // Compute flags for conditional fetching; always call hooks with enabled to satisfy rules of hooks
+  const shouldFetchPersona =
+    backendAvailable && isValidUuid(persona?.id) && fetchReady;
 
-  const likedStatusQuery =
-    backendAvailable && isValidUuid(persona?.id)
-      ? trpc.socialEngagement.isLiked.useQuery(
-          {
-            personaId: persona.id,
-          },
-          {
-            enabled: true,
-          }
-        )
-      : null;
+  const personaEngagementQuery =
+    trpc.socialEngagement.getPersonaEngagement.useQuery(
+      { personaId: persona?.id as string },
+      { enabled: shouldFetchPersona }
+    );
+
+  const likedStatusQuery = trpc.socialEngagement.isLiked.useQuery(
+    { personaId: persona?.id as string },
+    { enabled: shouldFetchPersona }
+  );
 
   const validCreatorId = creator?.id || persona?.userId;
-  const followStatusQuery =
-    backendAvailable && isValidUuid(validCreatorId)
-      ? trpc.socialEngagement.isFollowing.useQuery(
-          {
-            creatorId: validCreatorId!,
-          },
-          {
-            enabled: true,
-          }
-        )
-      : null;
+  const shouldFetchFollow =
+    backendAvailable && isValidUuid(validCreatorId) && fetchReady;
+
+  const followStatusQuery = trpc.socialEngagement.isFollowing.useQuery(
+    { creatorId: validCreatorId as string },
+    { enabled: shouldFetchFollow }
+  );
 
   // Extract data with fallbacks using useMemo to prevent unnecessary re-renders
   const personaEngagement =
-    personaEngagementQuery?.data || metadata?.engagementData;
-  
-  const likedStatus = useMemo(() => 
-    likedStatusQuery?.data || { isLiked: false },
-    [likedStatusQuery?.data]
+    personaEngagementQuery.data || metadata?.engagementData;
+
+  const likedStatus = useMemo(
+    () => likedStatusQuery.data || { isLiked: false },
+    [likedStatusQuery.data]
   );
-  
-  const followStatus = useMemo(() => 
-    followStatusQuery?.data || { isFollowing: false },
-    [followStatusQuery?.data]
+
+  const followStatus = useMemo(
+    () => followStatusQuery.data || { isFollowing: false },
+    [followStatusQuery.data]
   );
 
   // tRPC mutations with fallbacks for when endpoints are disabled
@@ -170,17 +184,13 @@ export default function PersonaFeedCard({
     }
   }, [personaEngagement, metadata?.engagementData]);
 
-  // Track view when card comes into viewport
+  // Track view only when in viewport, once
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!isViewed) {
-        setIsViewed(true);
-        onInteraction(feedItem.id, "viewed");
-      }
-    }, 1000); // Mark as viewed after 1 second
-
-    return () => clearTimeout(timer);
-  }, [feedItem.id, isViewed, onInteraction]);
+    if (inView && !isViewed) {
+      setIsViewed(true);
+      onInteraction(feedItem.id, "viewed");
+    }
+  }, [inView, isViewed, feedItem.id, onInteraction]);
 
   const handleLike = () => {
     if (!isValidUuid(persona?.id)) return;
@@ -295,7 +305,10 @@ export default function PersonaFeedCard({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
+    <div
+      ref={containerRef}
+      className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow"
+    >
       {/* Card Header */}
       <div className="p-4 border-b border-gray-100">
         <div className="flex items-center justify-between">

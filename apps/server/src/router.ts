@@ -19,8 +19,10 @@ import {
   personaMonetization,
   userConnections,
   subscriptionPayments,
+  userDmThreads,
+  userDmMessages,
 } from "@digital-persona/database";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import {
@@ -46,34 +48,34 @@ import {
 import { StripeService } from "./services/stripeService.js";
 
 // Import content moderation services
-import { 
-  ContentModerationService, 
+import {
+  ContentModerationService,
   type ModerationResult,
-  type SafetyProfile 
+  type SafetyProfile,
 } from "./services/contentModerationService.js";
-import { 
+import {
   BehaviorAnalysisService,
-  type BehaviorPattern 
+  type BehaviorPattern,
 } from "./services/behaviorAnalysisService.js";
 
 // Import social features services
-import { 
+import {
   DiscoveryService,
   type PersonaDiscoveryItem,
-  type TrendingPersona 
+  type TrendingPersona,
 } from "./services/discoveryService.js";
-import { 
+import {
   SocialEngagementService,
   type FollowResult,
   type LikeResult,
   type ReviewResult,
   type PersonaEngagement,
-  type SocialStats 
+  type SocialStats,
 } from "./services/socialEngagementService.js";
-import { 
+import {
   FeedAlgorithmService,
   type FeedItem,
-  type FeedMetrics 
+  type FeedMetrics,
 } from "./services/feedAlgorithmService.js";
 
 // Import advanced analytics services
@@ -156,7 +158,12 @@ interface Context {
     bio: string | null;
     isActive: boolean | null;
     allowSocialConnections: boolean | null;
-    defaultPrivacyLevel: "public" | "friends" | "subscribers" | "private" | null;
+    defaultPrivacyLevel:
+      | "public"
+      | "friends"
+      | "subscribers"
+      | "private"
+      | null;
     createdAt: Date;
     updatedAt: Date;
   };
@@ -217,9 +224,8 @@ const isAuthed = t.middleware(async ({ ctx, next }) => {
 });
 
 // Create a strongly typed protected procedure that ensures user is available
-const protectedProcedure = publicProcedure
-  .use(isAuthed)
-  .use(t.middleware(({ ctx, next }) => {
+const protectedProcedure = publicProcedure.use(isAuthed).use(
+  t.middleware(({ ctx, next }) => {
     if (!ctx.user) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
@@ -232,7 +238,8 @@ const protectedProcedure = publicProcedure
         user: ctx.user,
       },
     });
-  }));
+  })
+);
 
 // Queue file for AI processing
 async function queueFileForAIProcessing(
@@ -428,6 +435,47 @@ const authRouter = router({
 
 // Enhanced Personas router with new functionality
 const personasRouter = router({
+  // Get a public persona by ID (no ownership required)
+  getPublic: publicProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const [persona] = await db
+        .select({
+          id: personas.id,
+          userId: personas.userId,
+          name: personas.name,
+          description: personas.description,
+          avatar: personas.avatar,
+          category: sql<string>`'general'`.as("category"),
+          personaType: personas.personaType,
+          traits: personas.traits,
+          preferences: personas.preferences,
+          privacyLevel: personas.privacyLevel,
+          isPubliclyListed: personas.isPubliclyListed,
+          requiresSubscription: personas.requiresSubscription,
+          subscriptionPrice: personas.subscriptionPrice,
+          createdAt: personas.createdAt,
+          updatedAt: personas.updatedAt,
+        })
+        .from(personas)
+        .where(
+          and(eq(personas.id, input.id), eq(personas.privacyLevel, "public"))
+        )
+        .limit(1);
+
+      if (!persona) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Persona not found",
+        });
+      }
+
+      return {
+        ...persona,
+        createdAt: persona.createdAt.toISOString(),
+        updatedAt: persona.updatedAt.toISOString(),
+      };
+    }),
   // Get all personas for user
   list: protectedProcedure.query(async ({ ctx }) => {
     const userPersonas = await db
@@ -1102,6 +1150,128 @@ const chatRouter = router({
     }),
 });
 
+// Direct Messages Router (user-to-user)
+const directMessagesRouter = router({
+  listThreads: protectedProcedure.query(async ({ ctx }) => {
+    const threads = await db
+      .select()
+      .from(userDmThreads)
+      .where(
+        or(
+          eq(userDmThreads.userAId, ctx.user.id),
+          eq(userDmThreads.userBId, ctx.user.id)
+        )
+      )
+      .orderBy(
+        desc(userDmThreads.lastMessageAt),
+        desc(userDmThreads.updatedAt)
+      );
+    return threads.map((t: any) => ({
+      ...t,
+      createdAt: t.createdAt?.toISOString?.(),
+      updatedAt: t.updatedAt?.toISOString?.(),
+      lastMessageAt: t.lastMessageAt?.toISOString?.(),
+    }));
+  }),
+
+  getOrCreateThread: protectedProcedure
+    .input(z.object({ otherUserId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const a = ctx.user.id;
+      const b = input.otherUserId;
+      const [existing] = await db
+        .select()
+        .from(userDmThreads)
+        .where(
+          or(
+            and(eq(userDmThreads.userAId, a), eq(userDmThreads.userBId, b)),
+            and(eq(userDmThreads.userAId, b), eq(userDmThreads.userBId, a))
+          )
+        )
+        .limit(1);
+      if (existing) return existing;
+      const [thread] = await db
+        .insert(userDmThreads)
+        .values({ userAId: a, userBId: b, lastMessageAt: new Date() })
+        .returning();
+      return thread;
+    }),
+
+  listMessages: protectedProcedure
+    .input(
+      z.object({
+        threadId: z.string().uuid(),
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const [thread] = await db
+        .select()
+        .from(userDmThreads)
+        .where(eq(userDmThreads.id, input.threadId))
+        .limit(1);
+      if (
+        !thread ||
+        (thread.userAId !== ctx.user.id && thread.userBId !== ctx.user.id)
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not a participant",
+        });
+      }
+      const msgs = await db
+        .select()
+        .from(userDmMessages)
+        .where(eq(userDmMessages.threadId, input.threadId))
+        .orderBy(desc(userDmMessages.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+      return msgs.map((m: any) => ({
+        ...m,
+        createdAt: m.createdAt?.toISOString?.(),
+      }));
+    }),
+
+  sendMessage: protectedProcedure
+    .input(
+      z.object({
+        threadId: z.string().uuid(),
+        content: z.string().min(1),
+        parentMessageId: z.string().uuid().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const [thread] = await db
+        .select()
+        .from(userDmThreads)
+        .where(eq(userDmThreads.id, input.threadId))
+        .limit(1);
+      if (
+        !thread ||
+        (thread.userAId !== ctx.user.id && thread.userBId !== ctx.user.id)
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not a participant",
+        });
+      }
+      const [msg] = await db
+        .insert(userDmMessages)
+        .values({
+          threadId: input.threadId,
+          senderId: ctx.user.id,
+          content: input.content,
+          parentMessageId: input.parentMessageId,
+        })
+        .returning();
+      await db
+        .update(userDmThreads)
+        .set({ lastMessageAt: new Date(), updatedAt: new Date() })
+        .where(eq(userDmThreads.id, input.threadId));
+      return { ...msg, createdAt: (msg as any).createdAt?.toISOString?.() };
+    }),
+});
 // Media router (existing functionality)
 const mediaRouter = router({
   requestPresignedUrl: protectedProcedure
@@ -2917,6 +3087,7 @@ export const appRouter = router({
   personas: personasRouter,
   learning: learningRouter,
   chat: chatRouter,
+  directMessages: directMessagesRouter,
   media: mediaRouter,
   social: socialRouter,
   creatorVerification: creatorVerificationRouter,

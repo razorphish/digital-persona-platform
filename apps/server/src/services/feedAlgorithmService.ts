@@ -398,10 +398,11 @@ export class FeedAlgorithmService {
         .leftJoin(discoveryMetrics, eq(personas.id, discoveryMetrics.personaId))
         .where(
           and(
-            eq(personas.isPublic, true),
-            sql`${personas.userId} = ANY(${followedCreators.map(
-              (f) => f.creatorId
-            )})`
+            eq(personas.privacyLevel, "public"),
+            inArray(
+              personas.userId,
+              followedCreators.map((f) => f.creatorId)
+            )
           )
         )
         .orderBy(desc(personas.createdAt))

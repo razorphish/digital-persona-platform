@@ -16,9 +16,19 @@ const port = Number(process.env.PORT) || 4001;
 app.use(
   cors({
     origin: function (origin, callback) {
-      const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
-        o.trim()
-      ) || ["http://localhost:4000"];
+      // Merge env-provided origins with sensible local defaults
+      const envOrigins = process.env.CORS_ORIGIN
+        ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+        : [];
+      const defaultLocalOrigins = [
+        "http://localhost:4000",
+        "http://127.0.0.1:4000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+      ];
+      const allowedOrigins = Array.from(
+        new Set([...defaultLocalOrigins, ...envOrigins])
+      );
 
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);

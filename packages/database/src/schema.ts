@@ -1577,6 +1577,46 @@ export const feedItems = pgTable("feed_items", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ===========================
+// User-to-User Direct Messaging
+// ===========================
+
+// Direct message threads between two users
+export const userDmThreads = pgTable("user_dm_threads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userAId: uuid("user_a_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  userBId: uuid("user_b_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Bookkeeping
+  lastMessageAt: timestamp("last_message_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Direct messages within a thread
+export const userDmMessages = pgTable("user_dm_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  threadId: uuid("thread_id")
+    .notNull()
+    .references(() => userDmThreads.id, { onDelete: "cascade" }),
+  senderId: uuid("sender_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+
+  // Optional parent for replies/comments
+  parentMessageId: uuid("parent_message_id"),
+
+  // Read flag per receiver (basic implementation)
+  isRead: boolean("is_read").default(false),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // User preferences for feed algorithm
 export const userFeedPreferences = pgTable("user_feed_preferences", {
   id: uuid("id").primaryKey().defaultRandom(),

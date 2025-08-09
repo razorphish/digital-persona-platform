@@ -93,8 +93,8 @@ export function AuthMiddleware() {
 
     // Redirect authenticated users away from auth pages and home page
     if ((isAuthRoute || pathname === "/") && isAuthenticated) {
-      console.info("Authenticated user redirected to feed");
-      router.replace("/feed");
+      console.info("Authenticated user redirected to dashboard");
+      router.replace("/dashboard");
       return;
     }
 

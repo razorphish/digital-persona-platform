@@ -16,9 +16,131 @@ export default function MainNavigation() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  // Hide navigation on auth routes and landing page to avoid showing header on login/signout
+  const hideOnAuthRoutes = pathname === "/" || pathname.startsWith("/auth/");
+  if (hideOnAuthRoutes) {
+    return null;
+  }
+
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isMessagesOpen, setIsMessagesOpen] = useState(false);
+
+  const DEFAULT_RECENT_NOTIFICATIONS = 8; // can be overridden via admin later
+  const notifications = [
+    {
+      id: "n1",
+      title: "New follower on your persona",
+      time: "2m ago",
+      type: "social" as const,
+    },
+    {
+      id: "n2",
+      title: "Your persona was liked",
+      time: "10m ago",
+      type: "like" as const,
+    },
+    {
+      id: "n3",
+      title: "New review received",
+      time: "23m ago",
+      type: "review" as const,
+    },
+    {
+      id: "n4",
+      title: "Trending boost: +12%",
+      time: "1h ago",
+      type: "trending" as const,
+    },
+    {
+      id: "n5",
+      title: "Recommendation added to feed",
+      time: "3h ago",
+      type: "feed" as const,
+    },
+    {
+      id: "n6",
+      title: "Subscription inquiry",
+      time: "5h ago",
+      type: "monetization" as const,
+    },
+    {
+      id: "n7",
+      title: "System message updated",
+      time: "Yesterday",
+      type: "system" as const,
+    },
+    {
+      id: "n8",
+      title: "New persona suggestion",
+      time: "Yesterday",
+      type: "suggestion" as const,
+    },
+    {
+      id: "n9",
+      title: "Two-factor login from Chrome",
+      time: "2d ago",
+      type: "security" as const,
+    },
+  ];
+
+  const DEFAULT_RECENT_MESSAGES = 8; // configurable later
+  const messages = [
+    {
+      id: "m1",
+      from: "Airica",
+      preview: "Here’s your daily insight…",
+      time: "2m ago",
+    },
+    {
+      id: "m2",
+      from: "Alex J.",
+      preview: "Thanks for the collab!",
+      time: "12m ago",
+    },
+    {
+      id: "m3",
+      from: "System",
+      preview: "Your export is ready.",
+      time: "34m ago",
+    },
+    {
+      id: "m4",
+      from: "Support",
+      preview: "We’ve updated your ticket.",
+      time: "1h ago",
+    },
+    {
+      id: "m5",
+      from: "Marcus R.",
+      preview: "Let’s chat tomorrow.",
+      time: "3h ago",
+    },
+    {
+      id: "m6",
+      from: "Airica",
+      preview: "New suggestion for you.",
+      time: "5h ago",
+    },
+    {
+      id: "m7",
+      from: "Sarah K.",
+      preview: "Loved your persona!",
+      time: "Yesterday",
+    },
+    { id: "m8", from: "Billing", preview: "Invoice paid.", time: "2d ago" },
+  ];
 
   const mainNavItems: NavigationItem[] = [
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: (
+        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
+        </svg>
+      ),
+    },
     {
       name: "Feed",
       href: "/feed",
@@ -142,32 +264,151 @@ export default function MainNavigation() {
             {/* Quick Actions */}
             <div className="flex items-center space-x-2">
               {/* Messages */}
-              <button className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full">
-                <svg
-                  className="w-6 h-6"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
+              <div
+                className="relative"
+                onMouseEnter={() => setIsMessagesOpen(true)}
+                onMouseLeave={() => setIsMessagesOpen(false)}
+              >
+                <button
+                  onClick={() => setIsMessagesOpen((v) => !v)}
+                  className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full"
                 >
-                  <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
-                </svg>
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  3
-                </span>
-              </button>
+                  <svg
+                    className="w-6 h-6"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
+                  </svg>
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {Math.min(messages.length, 9)}
+                  </span>
+                </button>
+
+                {isMessagesOpen && (
+                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <h4 className="text-sm font-semibold text-gray-900">
+                        Messages
+                      </h4>
+                      <p className="text-xs text-gray-500">
+                        Showing latest {DEFAULT_RECENT_MESSAGES}
+                      </p>
+                    </div>
+                    <ul className="max-h-96 overflow-auto">
+                      {messages.slice(0, DEFAULT_RECENT_MESSAGES).map((m) => (
+                        <li
+                          key={m.id}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-xs font-medium">
+                              {m.from.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <div className="text-sm font-medium text-gray-900 truncate">
+                                  {m.from}
+                                </div>
+                                <div className="text-xs text-gray-500 ml-2 flex-shrink-0">
+                                  {m.time}
+                                </div>
+                              </div>
+                              <div className="text-sm text-gray-600 truncate">
+                                {m.preview}
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="px-4 py-2 border-t border-gray-100 text-right">
+                      <a
+                        href="/messages"
+                        onClick={() => setIsMessagesOpen(false)}
+                        className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                      >
+                        See All →
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Notifications */}
-              <button className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full">
-                <svg
-                  className="w-6 h-6"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
+              <div
+                className="relative"
+                onMouseEnter={() => setIsNotificationsOpen(true)}
+                onMouseLeave={() => setIsNotificationsOpen(false)}
+              >
+                <button
+                  onClick={() => setIsNotificationsOpen((v) => !v)}
+                  className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full"
                 >
-                  <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-                </svg>
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  7
-                </span>
-              </button>
+                  <svg
+                    className="w-6 h-6"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+                  </svg>
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {Math.min(notifications.length, 9)}
+                  </span>
+                </button>
+
+                {isNotificationsOpen && (
+                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <h4 className="text-sm font-semibold text-gray-900">
+                        Notifications
+                      </h4>
+                      <p className="text-xs text-gray-500">
+                        Showing latest {DEFAULT_RECENT_NOTIFICATIONS}
+                      </p>
+                    </div>
+                    <ul className="max-h-96 overflow-auto">
+                      {notifications
+                        .slice(0, DEFAULT_RECENT_NOTIFICATIONS)
+                        .map((n) => (
+                          <li
+                            key={n.id}
+                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-start gap-3"
+                          >
+                            <span className="text-lg">
+                              {n.type === "like" && "👍"}
+                              {n.type === "social" && "👥"}
+                              {n.type === "review" && "📝"}
+                              {n.type === "trending" && "🔥"}
+                              {n.type === "feed" && "✨"}
+                              {n.type === "monetization" && "💰"}
+                              {n.type === "system" && "🔔"}
+                              {n.type === "suggestion" && "💡"}
+                              {n.type === "security" && "🛡️"}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-gray-900 truncate">
+                                {n.title}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {n.time}
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                    </ul>
+                    <div className="px-4 py-2 border-t border-gray-100 text-right">
+                      <a
+                        href="/notifications"
+                        onClick={() => setIsNotificationsOpen(false)}
+                        className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                      >
+                        See All →
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Profile Dropdown */}
