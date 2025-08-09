@@ -16,15 +16,15 @@ export default function MainNavigation() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isMessagesOpen, setIsMessagesOpen] = useState(false);
+
   // Hide navigation on auth routes and landing page to avoid showing header on login/signout
   const hideOnAuthRoutes = pathname === "/" || pathname.startsWith("/auth/");
   if (hideOnAuthRoutes) {
     return null;
   }
-
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isMessagesOpen, setIsMessagesOpen] = useState(false);
 
   const DEFAULT_RECENT_NOTIFICATIONS = 8; // can be overridden via admin later
   const notifications = [
