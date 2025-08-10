@@ -218,7 +218,7 @@ export default function PersonaFeedCard({
     if (!isValidUuid(persona?.id)) return;
 
     onInteraction(feedItem.id, "clicked");
-    router.push(`/personas/${persona.id}`);
+    router.push(`/persona-details?id=${persona.id}`);
   };
 
   const handleCreatorClick = () => {
@@ -227,7 +227,7 @@ export default function PersonaFeedCard({
     if (!isValidUuid(persona?.id)) return;
 
     onInteraction(feedItem.id, "clicked");
-    router.push(`/personas/${persona.id}`);
+    router.push(`/persona-details?id=${persona.id}`);
   };
 
   const handleShare = () => {
