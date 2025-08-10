@@ -30,11 +30,35 @@ app.use(
         new Set([...defaultLocalOrigins, ...envOrigins])
       );
 
+      // Allow-list by domain suffix (e.g., all subdomains of hibiji.com)
+      const allowedDomainSuffixes = (process.env.CORS_ALLOW_DOMAIN_SUFFIXES ||
+        "hibiji.com")
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
 
-      // Check if the origin is in the allowed list
-      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+      // Check if the origin is in the allowed list or matches any allowed domain suffix
+      const isExplicitlyAllowed =
+        allowedOrigins.includes("*") ||
+        (origin ? allowedOrigins.includes(origin) : false);
+
+      let isSuffixAllowed = false;
+      if (origin && !isExplicitlyAllowed && allowedDomainSuffixes.length > 0) {
+        try {
+          const url = new URL(origin);
+          const host = url.hostname.toLowerCase();
+          isSuffixAllowed = allowedDomainSuffixes.some((suffix) =>
+            host === suffix || host.endsWith(`.${suffix}`)
+          );
+        } catch {
+          // ignore parse errors
+        }
+      }
+
+      if (isExplicitlyAllowed || isSuffixAllowed) {
         return callback(null, true);
       } else {
         console.error(
