@@ -435,6 +435,26 @@ const authRouter = router({
 
 // Enhanced Personas router with new functionality
 const personasRouter = router({
+  // Get an owned persona by ID (requires ownership)
+  getOwned: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const [persona] = await db
+        .select()
+        .from(personas)
+        .where(and(eq(personas.id, input.id), eq(personas.userId, ctx.user.id)))
+        .limit(1);
+
+      if (!persona) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Persona not found" });
+      }
+
+      return {
+        ...persona,
+        createdAt: persona.createdAt.toISOString(),
+        updatedAt: persona.updatedAt.toISOString(),
+      } as any;
+    }),
   // Get a public persona by ID (no ownership required)
   getPublic: publicProcedure
     .input(z.object({ id: z.string().uuid() }))
