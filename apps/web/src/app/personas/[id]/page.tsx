@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-static";
 export async function generateStaticParams() {
   return [] as Array<{ id: string }>;
 }
 
-export default function PersonaDynamicRedirectPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default function Page({ params }: { params: { id: string } }) {
   redirect(`/persona-details?id=${params.id}`);
 }
+
+
