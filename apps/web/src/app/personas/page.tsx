@@ -385,7 +385,7 @@ function PersonasPageContent() {
                     <div className="flex space-x-1">
                       <button
                         onClick={() =>
-                          router.push(`/personas/${persona.id}/edit`)
+                          router.push(`/persona-edit?id=${persona.id}`)
                         }
                         className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                         title="Edit persona"
@@ -463,7 +463,9 @@ function PersonasPageContent() {
 
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => router.push(`/persona-owned-details?id=${persona.id}`)}
+                      onClick={() =>
+                        router.push(`/persona-owned-details?id=${persona.id}`)
+                      }
                       className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
                     >
                       View Details
