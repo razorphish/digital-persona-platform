@@ -63,9 +63,13 @@ logger.info("📦 Setting up middleware");
 app.use(
   cors({
     origin: function (origin, callback) {
-      const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) =>
-        o.trim()
-      ) || ["*"];
+      const configured = process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [];
+      // Always allow same-site UI based on API host naming (devNN-api.hibiji.com -> devNN.hibiji.com)
+      const host = (origin || "").replace(/^https?:\/\//, "");
+      const dynamicUi = host.includes("-api.")
+        ? origin?.replace("-api.", ".")
+        : undefined;
+      const allowedOrigins = Array.from(new Set(["http://localhost:3000","http://localhost:3100","http://127.0.0.1:3000","http://127.0.0.1:3100", ...configured, ...(dynamicUi ? [dynamicUi] : [])]));
 
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
@@ -83,6 +87,16 @@ app.use(
       }
     },
     credentials: true,
+    methods: ["GET","HEAD","OPTIONS","POST","PUT","PATCH","DELETE"],
+    allowedHeaders: [
+      "Content-Type",
+      "X-Requested-With",
+      "Authorization",
+      "x-trpc-source",
+      "x-amz-date",
+      "x-amz-security-token",
+      "x-api-key"
+    ],
   })
 );
 

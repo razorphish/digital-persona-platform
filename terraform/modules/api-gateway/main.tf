@@ -171,6 +171,11 @@ resource "aws_cloudfront_distribution" "api" {
     origin_path = "/${aws_apigatewayv2_stage.main.name}"
   }
 
+  # Attach a strict CORS response headers policy at the CDN layer so even
+  # Gateway/CloudFront-generated errors include the correct CORS headers.
+  # This complements (does not replace) API Gateway CORS.
+  depends_on = [aws_cloudfront_response_headers_policy.api_cors]
+
   # Default cache behavior for API (no caching for dynamic content)
   default_cache_behavior {
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
@@ -178,6 +183,7 @@ resource "aws_cloudfront_distribution" "api" {
     target_origin_id       = "APIGateway-${aws_apigatewayv2_api.main.id}"
     compress               = true
     viewer_protocol_policy = "redirect-to-https"
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.api_cors.id
 
     forwarded_values {
       query_string = true
@@ -208,6 +214,7 @@ resource "aws_cloudfront_distribution" "api" {
     target_origin_id       = "APIGateway-${aws_apigatewayv2_api.main.id}"
     compress               = true
     viewer_protocol_policy = "redirect-to-https"
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.api_cors.id
 
     forwarded_values {
       query_string = false
@@ -231,4 +238,27 @@ resource "aws_cloudfront_distribution" "api" {
     Name = "${var.environment}-${var.sub_environment}-${var.project_name}-api-cdn"
     Type = "CloudFrontDistribution"
   })
+}
+
+# CloudFront Response Headers Policy for CORS (reflects configured origins)
+resource "aws_cloudfront_response_headers_policy" "api_cors" {
+  name = "${var.environment}-${var.sub_environment}-${var.project_name}-api-cors"
+
+  cors_config {
+    access_control_allow_credentials = var.cors_allow_credentials
+
+    access_control_allow_headers {
+      items = var.cors_allow_headers
+    }
+
+    access_control_allow_methods {
+      items = var.cors_allow_methods[0] == "*" ? ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"] : var.cors_allow_methods
+    }
+
+    access_control_allow_origins {
+      items = var.cors_allow_origins
+    }
+
+    origin_override = true
+  }
 }
