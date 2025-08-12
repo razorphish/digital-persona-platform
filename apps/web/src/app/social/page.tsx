@@ -461,7 +461,9 @@ function SocialPageContent() {
                     )}
                     {persona.connectionStatus === "connected" && (
                       <button
-                        onClick={() => router.push(`/personas/${persona.id}`)}
+                        onClick={() =>
+                          router.push(`/persona-details?id=${persona.id}`)
+                        }
                         className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
                       >
                         View Profile

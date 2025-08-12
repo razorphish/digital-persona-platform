@@ -1,7 +1,7 @@
 "use client";
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
+import React from "react";
+import { useRouter } from "next/navigation";
 
 interface TrendingPersona {
   personaId: string;
@@ -21,24 +21,27 @@ interface TrendingSectionProps {
   isLoading: boolean;
 }
 
-export default function TrendingSection({ trending, isLoading }: TrendingSectionProps) {
+export default function TrendingSection({
+  trending,
+  isLoading,
+}: TrendingSectionProps) {
   const router = useRouter();
 
   const handlePersonaClick = (personaId: string) => {
-    router.push(`/personas/${personaId}`);
+    router.push(`/persona-details?id=${personaId}`);
   };
 
   const formatGrowth = (growth: number) => {
-    if (growth === 0) return '+0%';
-    const sign = growth > 0 ? '+' : '';
+    if (growth === 0) return "+0%";
+    const sign = growth > 0 ? "+" : "";
     return `${sign}${Math.round(growth * 100)}%`;
   };
 
   const getTrendingIcon = (score: number) => {
-    if (score > 0.8) return '🔥';
-    if (score > 0.6) return '📈';
-    if (score > 0.4) return '⭐';
-    return '✨';
+    if (score > 0.8) return "🔥";
+    if (score > 0.6) return "📈";
+    if (score > 0.4) return "⭐";
+    return "✨";
   };
 
   if (isLoading) {
@@ -50,7 +53,7 @@ export default function TrendingSection({ trending, isLoading }: TrendingSection
             <div className="h-4 w-12 bg-gray-200 rounded"></div>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex items-center space-x-3 animate-pulse">
@@ -80,10 +83,17 @@ export default function TrendingSection({ trending, isLoading }: TrendingSection
         <div className="text-center py-8">
           <div className="w-12 h-12 mx-auto mb-3 text-gray-400">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+              />
             </svg>
           </div>
-          <p className="text-sm text-gray-600">No trending personas right now</p>
+          <p className="text-sm text-gray-600">
+            No trending personas right now
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -103,7 +113,7 @@ export default function TrendingSection({ trending, isLoading }: TrendingSection
                     />
                   ) : (
                     <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                      {persona.name[0]?.toUpperCase() || 'P'}
+                      {persona.name[0]?.toUpperCase() || "P"}
                     </div>
                   )}
                   <div className="absolute -top-1 -right-1 text-xs">
@@ -131,10 +141,15 @@ export default function TrendingSection({ trending, isLoading }: TrendingSection
               </div>
 
               <div className="flex-shrink-0 text-right">
-                <div className={`text-xs font-medium ${
-                  persona.engagementGrowth > 0 ? 'text-green-600' : 
-                  persona.engagementGrowth < 0 ? 'text-red-600' : 'text-gray-600'
-                }`}>
+                <div
+                  className={`text-xs font-medium ${
+                    persona.engagementGrowth > 0
+                      ? "text-green-600"
+                      : persona.engagementGrowth < 0
+                      ? "text-red-600"
+                      : "text-gray-600"
+                  }`}
+                >
                   {formatGrowth(persona.engagementGrowth)}
                 </div>
                 <div className="text-xs text-gray-500">
@@ -152,13 +167,13 @@ export default function TrendingSection({ trending, isLoading }: TrendingSection
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
               <div className="text-lg font-semibold text-gray-900">
-                {trending.filter(p => p.engagementGrowth > 0).length}
+                {trending.filter((p) => p.engagementGrowth > 0).length}
               </div>
               <div className="text-xs text-gray-600">Rising</div>
             </div>
             <div>
               <div className="text-lg font-semibold text-gray-900">
-                {trending.filter(p => p.trendingScore > 0.7).length}
+                {trending.filter((p) => p.trendingScore > 0.7).length}
               </div>
               <div className="text-xs text-gray-600">Hot</div>
             </div>
@@ -168,13 +183,15 @@ export default function TrendingSection({ trending, isLoading }: TrendingSection
 
       {/* Trending Categories */}
       <div className="mt-4 pt-4 border-t border-gray-200">
-        <h4 className="text-sm font-medium text-gray-900 mb-2">Popular Topics</h4>
+        <h4 className="text-sm font-medium text-gray-900 mb-2">
+          Popular Topics
+        </h4>
         <div className="flex flex-wrap gap-1">
           {[
-            { name: 'Entertainment', emoji: '🎭', count: 24 },
-            { name: 'Education', emoji: '📚', count: 18 },
-            { name: 'Lifestyle', emoji: '🌟', count: 15 },
-            { name: 'Gaming', emoji: '🎮', count: 12 },
+            { name: "Entertainment", emoji: "🎭", count: 24 },
+            { name: "Education", emoji: "📚", count: 18 },
+            { name: "Lifestyle", emoji: "🌟", count: 15 },
+            { name: "Gaming", emoji: "🎮", count: 12 },
           ].map((topic) => (
             <button
               key={topic.name}

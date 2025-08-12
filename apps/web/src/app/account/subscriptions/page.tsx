@@ -260,7 +260,9 @@ function SubscriptionManagementContent() {
                     <div className="flex-shrink-0 space-x-3">
                       <button
                         onClick={() =>
-                          router.push(`/personas/${subscription.personaId}`)
+                          router.push(
+                            `/persona-details?id=${subscription.personaId}`
+                          )
                         }
                         className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
                       >
