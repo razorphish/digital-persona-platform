@@ -1,13 +1,6 @@
-import { redirect } from "next/navigation";
-
-export const dynamic = "force-static";
-export const dynamicParams = false;
-export async function generateStaticParams() {
-  return [] as Array<{ id: string }>;
-}
-
-export default function Page({ params }: { params: { id: string } }) {
-  redirect(`/persona-details?id=${params.id}`);
+// Dynamic route removed to support Next.js static export.
+export default function Removed() {
+  return null;
 }
 
 
