@@ -716,7 +716,7 @@ module "api_gateway" {
   # Lambda function configuration
   lambda_function_name       = module.lambda_backend.lambda_function_name
   lambda_function_invoke_arn = module.lambda_backend.lambda_function_invoke_arn
-
+  
   # CORS configuration
   cors_allow_origins = [
     "https://${module.s3_website.cloudfront_domain_name}",
@@ -724,6 +724,9 @@ module "api_gateway" {
     "http://localhost:3000",           # Development
     "http://localhost:3100"            # Docker development
   ]
+  cors_allow_methods = ["GET","HEAD","OPTIONS","POST","PUT","PATCH","DELETE"]
+  cors_allow_headers = ["*"]
+  cors_allow_credentials = true
 
   # Custom domain configuration (enabled)
   custom_domain_name = local.api_domain
