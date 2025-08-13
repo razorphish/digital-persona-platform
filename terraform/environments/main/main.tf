@@ -575,6 +575,9 @@ module "api_gateway" {
     "http://localhost:3000",           # Development
     "http://localhost:3100"            # Docker development
   ]
+  cors_allow_methods = ["GET","HEAD","OPTIONS","POST","PUT","PATCH","DELETE"]
+  cors_allow_headers = ["*"]
+  cors_allow_credentials = true
 
   # Custom domain configuration (optional)
   custom_domain_name = local.api_domain

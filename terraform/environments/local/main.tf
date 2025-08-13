@@ -738,6 +738,9 @@ module "api_gateway" {
     "http://127.0.0.1:3000",
     "http://127.0.0.1:4000"
   ]
+  cors_allow_methods = ["GET","HEAD","OPTIONS","POST","PUT","PATCH","DELETE"]
+  cors_allow_headers = ["*"]
+  cors_allow_credentials = true
 
   # Custom domain configuration
   custom_domain_name = local.api_domain
