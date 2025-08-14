@@ -582,7 +582,15 @@ module "api_gateway" {
     "http://localhost:3100"            # Docker development
   ]
   cors_allow_methods = ["GET","HEAD","OPTIONS","POST","PUT","PATCH","DELETE"]
-  cors_allow_headers = ["*"]
+  cors_allow_headers = [
+    "content-type",
+    "authorization",
+    "x-requested-with",
+    "x-trpc-source",
+    "x-amz-date",
+    "x-amz-security-token",
+    "x-api-key"
+  ]
   cors_allow_credentials = true
 
   # Custom domain configuration (optional)
