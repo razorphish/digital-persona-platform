@@ -100,6 +100,63 @@ app.use(
   })
 );
 
+// Explicit preflight handler with detailed logging
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    const origin = (req.headers["origin"] as string) || "";
+    const acrMethod = (req.headers["access-control-request-method"] as string) || "";
+    const acrHeaders = (req.headers["access-control-request-headers"] as string) || "";
+
+    const configured = process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [];
+    const hostHeader = (req.headers["host"] as string) || "";
+    const dynamicUi = hostHeader.includes("-api.")
+      ? `${origin?.startsWith("http:") ? "http" : "https"}://${hostHeader.replace("-api.", ".")}`
+      : undefined;
+    const allowedOrigins = Array.from(
+      new Set([
+        "http://localhost:3000",
+        "http://localhost:3100",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3100",
+        ...configured,
+        ...(dynamicUi ? [dynamicUi] : []),
+      ])
+    );
+
+    const isAllowed = !origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin);
+
+    logger.info("CORS preflight received", {
+      url: req.url,
+      origin,
+      hostHeader,
+      acrMethod,
+      acrHeaders,
+      allowedOrigins,
+      isAllowed,
+    });
+
+    if (!isAllowed) {
+      logger.error("CORS preflight blocked", { origin, allowedOrigins });
+      return res.status(403).json({ error: "CORS not allowed", origin });
+    }
+
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Origin", origin || "");
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,HEAD,OPTIONS,POST,PUT,PATCH,DELETE"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      acrHeaders || "Content-Type, Authorization, X-Requested-With, x-trpc-source"
+    );
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    return res.status(204).end();
+  }
+  return next();
+});
+
 app.use(express.json());
 
 // Request logging middleware

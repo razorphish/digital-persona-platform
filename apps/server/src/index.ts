@@ -80,6 +80,22 @@ app.use((req, res, next) => {
   })(req, res, next);
 });
 
+// OPTIONS preflight logger for local dev
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    const origin = req.headers.origin || "";
+    const acrMethod = req.headers["access-control-request-method"] || "";
+    const acrHeaders = req.headers["access-control-request-headers"] || "";
+    console.log("[LOCAL CORS] Preflight", {
+      url: req.url,
+      origin,
+      acrMethod,
+      acrHeaders,
+    });
+  }
+  next();
+});
+
 app.use(express.json());
 
 // tRPC middleware
