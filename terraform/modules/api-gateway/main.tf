@@ -248,7 +248,15 @@ resource "aws_cloudfront_response_headers_policy" "api_cors" {
     access_control_allow_credentials = var.cors_allow_credentials
 
     access_control_allow_headers {
-      items = var.cors_allow_headers
+      # CloudFront does not allow "*" for allow-headers when credentials are true
+      items = var.cors_allow_headers[0] == "*" && var.cors_allow_credentials ? [
+        "authorization",
+        "content-type",
+        "x-requested-with",
+        "x-trpc-source",
+        "x-sentry-trace",
+        "baggage"
+      ] : var.cors_allow_headers
     }
 
     access_control_allow_methods {
