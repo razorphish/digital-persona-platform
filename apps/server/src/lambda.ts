@@ -190,6 +190,24 @@ app.use(
   })
 );
 
+// Mirror tRPC under stage path so CloudFront origin path "/v1" works
+app.use(
+  "/v1/api/trpc",
+  createExpressMiddleware({
+    router: appRouter,
+    createContext: ({ req, res }) => ({ req, res } as any),
+    onError: ({ error, type, path, input }) => {
+      logger.error("tRPC error occurred (/v1)", {
+        error: error.message,
+        type,
+        path,
+        input,
+        stack: error.stack,
+      });
+    },
+  })
+);
+
 logger.info("🏥 Setting up health check endpoint");
 
 // Enhanced health check endpoint with comprehensive diagnostics
