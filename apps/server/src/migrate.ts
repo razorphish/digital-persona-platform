@@ -19,6 +19,7 @@ const __dirname = dirname(__filename);
  * - Provides detailed logging
  * - Handles rollback scenarios
  * - Ensures data integrity
+ * Updated: Force migration trigger for dev01 environment
  */
 export async function runMigrations() {
   const connectionString = process.env.DATABASE_URL;
