@@ -312,9 +312,39 @@ app.get("/", (req, res) => {
       api: "/api/trpc",
       health: "/health",
       healthWithStage: "/v1/health",
+      migrate: "/migrate", // Temporary endpoint for database initialization
     },
     timestamp: new Date().toISOString(),
   });
+});
+
+logger.info("🚀 Setting up temporary migration endpoint");
+
+// Temporary migration endpoint for database initialization
+app.post("/migrate", async (req, res) => {
+  logger.info("Database migration requested");
+  
+  try {
+    // Import and run migrations
+    const { runMigrations } = await import("./migrate.js");
+    const result = await runMigrations();
+    
+    logger.info("Migration completed", result);
+    res.json({
+      status: "success",
+      message: "Database migration completed successfully",
+      result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error("Migration failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "Database migration failed",
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 logger.info("🔍 Setting up 404 handler");
