@@ -25,6 +25,11 @@ export default function MainNavigation() {
   if (hideOnAuthRoutes) {
     return null;
   }
+  
+  // Additional safety: Hide if user is not authenticated and on landing page
+  if (pathname === "/" && !user) {
+    return null;
+  }
 
   const DEFAULT_RECENT_NOTIFICATIONS = 8; // can be overridden via admin later
   const notifications = [
