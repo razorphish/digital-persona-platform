@@ -143,6 +143,7 @@ resource "aws_lambda_function" "api" {
     variables = merge({
       NODE_ENV            = var.environment
       DATABASE_URL        = var.database_url
+      JWT_SECRET          = jsondecode(data.aws_secretsmanager_secret_version.jwt_secret.secret_string)["jwt_secret"]
       JWT_SECRET_ARN      = var.jwt_secret_arn
       DATABASE_SECRET_ARN = var.database_secret_arn
       CORS_ORIGIN         = var.cors_origin
@@ -207,4 +208,9 @@ resource "aws_lambda_layer_version" "dependencies" {
 
 # Data sources
 data "aws_caller_identity" "current" {}
-data "aws_region" "current" {} 
+data "aws_region" "current" {}
+
+# Load JWT secret from Secrets Manager
+data "aws_secretsmanager_secret_version" "jwt_secret" {
+  secret_id = var.jwt_secret_arn
+}

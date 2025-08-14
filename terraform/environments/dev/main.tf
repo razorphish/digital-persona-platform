@@ -251,6 +251,7 @@ resource "aws_secretsmanager_secret" "database_password" {
 resource "aws_secretsmanager_secret_version" "database_password" {
   secret_id = aws_secretsmanager_secret.database_password.id
   secret_string = jsonencode({
+    username = aws_rds_cluster.database.master_username
     password = random_password.database_password.result
   })
 }
