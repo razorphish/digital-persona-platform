@@ -90,24 +90,18 @@ jobs:
         run: |
           echo "🔍 Checking for schema changes..."
 
-          # For workflow_dispatch events, always force migration unless it's a dry run
+          # For workflow_dispatch events, always force migration
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "📝 Manual workflow dispatch detected"
             if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
               echo "🧪 Dry run requested - checking for schema changes"
-              echo "has-changes=true" >> $GITHUB_OUTPUT
-              echo "🔄 Forcing schema check for dry run"
             else
               echo "🚀 Force migration requested - applying all pending migrations"
-              echo "has-changes=true" >> $GITHUB_OUTPUT
-              echo "✅ Forcing migration execution for manual dispatch"
             fi
-            return 0
-          fi
-
-          # For push events, check all commits in the push
-          if [ "${{ github.event_name }}" = "push" ]; then
-            # Get the range of commits in this push
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Forcing migration execution for manual dispatch"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # For push events, check all commits in the push
             if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
               # New branch - check last commit only
               COMMIT_RANGE="HEAD^ HEAD"
@@ -117,29 +111,48 @@ jobs:
               COMMIT_RANGE="${{ github.event.before }}..HEAD"
               echo "📝 Checking commit range: $COMMIT_RANGE"
             fi
+
+            echo "🔎 Commits in range:"
+            git log --oneline $COMMIT_RANGE || echo "No commits in range"
+            echo ""
+
+            echo "📁 All files changed in range:"
+            git diff --name-only $COMMIT_RANGE || echo "No files changed"
+            echo ""
+
+            # Check if any commits in the range modified schema files
+            if git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
+              echo "has-changes=true" >> $GITHUB_OUTPUT
+              echo "🔄 Database schema changes detected in commit range: $COMMIT_RANGE"
+              echo "📋 Modified schema files:"
+              git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" | sed 's/^/  - /'
+            else
+              echo "has-changes=false" >> $GITHUB_OUTPUT
+              echo "✅ No database schema changes in commit range: $COMMIT_RANGE"
+            fi
           else
             # For PR events, check the PR diff
             COMMIT_RANGE="${{ github.event.pull_request.base.sha }}..HEAD"
             echo "📝 PR detected, checking range: $COMMIT_RANGE"
-          fi
 
-          echo "🔎 Commits in range:"
-          git log --oneline $COMMIT_RANGE || echo "No commits in range"
-          echo ""
+            echo "🔎 Commits in range:"
+            git log --oneline $COMMIT_RANGE || echo "No commits in range"
+            echo ""
 
-          echo "📁 All files changed in range:"
-          git diff --name-only $COMMIT_RANGE || echo "No files changed"
-          echo ""
+            echo "📁 All files changed in range:"
+            git diff --name-only $COMMIT_RANGE || echo "No files changed"
+            echo ""
 
-          # Check if any commits in the range modified schema files
-          if git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
-            echo "has-changes=true" >> $GITHUB_OUTPUT
-            echo "🔄 Database schema changes detected in commit range: $COMMIT_RANGE"
-            echo "📋 Modified schema files:"
-            git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" | sed 's/^/  - /'
-          else
-            echo "has-changes=false" >> $GITHUB_OUTPUT
-            echo "✅ No database schema changes in commit range: $COMMIT_RANGE"
+            # Check if any commits in the range modified schema files
+            if git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
+              echo "has-changes=true" >> $GITHUB_OUTPUT
+              echo "🔄 Database schema changes detected in commit range: $COMMIT_RANGE"
+              echo "📋 Modified schema files:"
+              git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" | sed 's/^/  - /'
+            else
+              echo "has-changes=false" >> $GITHUB_OUTPUT
+              echo "✅ No database schema changes in commit range: $COMMIT_RANGE"
+            fi
           fi
 
       - name: Generate migration files
