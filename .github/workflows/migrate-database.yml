@@ -88,7 +88,22 @@ jobs:
       - name: Check for schema changes
         id: check-changes
         run: |
-          echo "🔍 Checking for schema changes in push..."
+          echo "🔍 Checking for schema changes..."
+
+          # For workflow_dispatch events, always force migration unless it's a dry run
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "📝 Manual workflow dispatch detected"
+            if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+              echo "🧪 Dry run requested - checking for schema changes"
+              echo "has-changes=true" >> $GITHUB_OUTPUT
+              echo "🔄 Forcing schema check for dry run"
+            else
+              echo "🚀 Force migration requested - applying all pending migrations"
+              echo "has-changes=true" >> $GITHUB_OUTPUT
+              echo "✅ Forcing migration execution for manual dispatch"
+            fi
+            return 0
+          fi
 
           # For push events, check all commits in the push
           if [ "${{ github.event_name }}" = "push" ]; then
