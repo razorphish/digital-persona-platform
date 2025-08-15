@@ -1193,10 +1193,10 @@ jobs:
       - name: Run Database Migrations via Lambda
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
-          
+
           echo "🗄️ Running database migrations via deployed Lambda..."
           echo "📤 Function: $FUNCTION_NAME"
-          
+
           # Create a migration payload for Lambda
           cat > migration-payload.json << 'EOF'
           {
@@ -1219,11 +1219,12 @@ jobs:
             "isBase64Encoded": false
           }
           EOF
-          
+
           # Invoke Lambda function to run migrations
           echo "📤 Invoking migration endpoint..."
           aws lambda invoke \
             --function-name $FUNCTION_NAME \
+            --cli-binary-format raw-in-base64-out \
             --payload file://migration-payload.json \
             --region us-west-1 \
             migration-result.json
@@ -1231,7 +1232,7 @@ jobs:
           # Check migration result
           echo "📋 Migration result:"
           cat migration-result.json | jq
-          
+
           # Check if migration was successful
           if cat migration-result.json | jq -e '.statusCode == 200' > /dev/null; then
             echo "✅ Database migrations completed successfully"
