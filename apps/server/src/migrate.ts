@@ -1,16 +1,8 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { config } from "dotenv";
-import { join } from "path";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
 
 // Load environment variables
-config({ path: join(process.cwd(), "..", "..", ".env") });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+config({ path: "../../.env" });
 
 /**
  * Safe database migration runner for CI/CD
@@ -54,10 +46,10 @@ export async function runMigrations() {
         WHERE table_schema = 'public' 
         AND table_name = 'users'
       `;
-      
+
       if (migrationCheck[0].count > 0) {
         console.log("✅ Database schema already exists - skipping migration");
-        
+
         // Verify schema completeness
         const tables = await migrationConnection`
           SELECT table_name 
@@ -65,9 +57,12 @@ export async function runMigrations() {
           WHERE table_schema = 'public' 
           ORDER BY table_name
         `;
-        
-        console.log("📋 Existing tables:", tables.map((t: any) => t.table_name).join(", "));
-        
+
+        console.log(
+          "📋 Existing tables:",
+          tables.map((t: any) => t.table_name).join(", ")
+        );
+
         return {
           success: true,
           message: "Schema already exists",
@@ -80,7 +75,7 @@ export async function runMigrations() {
 
     // Apply schema directly using SQL to avoid Drizzle's Lambda incompatibility
     console.log("🚀 Applying database schema via direct SQL...");
-    
+
     // Execute the complete schema creation
     await migrationConnection`
       CREATE TABLE IF NOT EXISTS "accounts" (
@@ -332,36 +327,4 @@ export async function rollbackMigration(targetMigration?: string) {
   );
 }
 
-// CLI interface
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const command = process.argv[2];
-
-  switch (command) {
-    case "up":
-      runMigrations()
-        .then((result) => {
-          if (result.success) {
-            console.log("Migration successful");
-            process.exit(0);
-          } else {
-            console.error("Migration failed:", result.error);
-            process.exit(1);
-          }
-        })
-        .catch((error) => {
-          console.error("Migration error:", error);
-          process.exit(1);
-        });
-      break;
-
-    case "rollback":
-      console.log("Rollback requested - requires manual intervention");
-      process.exit(1);
-      break;
-
-    default:
-      console.log("Usage: npm run migrate:up");
-      console.log("       npm run migrate:rollback");
-      process.exit(1);
-  }
-}
+// CLI interface removed - Lambda compatible only
