@@ -11,7 +11,7 @@
  */
 
 import esbuild from "esbuild";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, readdirSync, copyFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -109,11 +109,45 @@ try {
     JSON.stringify(lambdaPackageJson, null, 2)
   );
 
+  // Copy migration files for database migrations
+  console.log("📋 Copying migration files...");
+  const drizzleSourceDir = join(__dirname, "drizzle");
+  const drizzleDestDir = join(outDir, "drizzle");
+  
+  if (existsSync(drizzleSourceDir)) {
+    // Create drizzle directory in output
+    if (!existsSync(drizzleDestDir)) {
+      mkdirSync(drizzleDestDir, { recursive: true });
+    }
+    
+    // Copy all files from drizzle directory
+    const copyRecursively = (src, dest) => {
+      const stat = statSync(src);
+      if (stat.isDirectory()) {
+        if (!existsSync(dest)) {
+          mkdirSync(dest, { recursive: true });
+        }
+        const entries = readdirSync(src);
+        for (const entry of entries) {
+          copyRecursively(join(src, entry), join(dest, entry));
+        }
+      } else {
+        copyFileSync(src, dest);
+      }
+    };
+    
+    copyRecursively(drizzleSourceDir, drizzleDestDir);
+    console.log("✅ Migration files copied successfully");
+  } else {
+    console.warn("⚠️ No migration files found in drizzle directory");
+  }
+
   console.log("✅ Lambda function built successfully!");
   console.log(`📁 Output directory: ${outDir}`);
   console.log("📦 Files created:");
   console.log("  - index.js (bundled Lambda function)");
   console.log("  - package.json (Lambda package metadata)");
+  console.log("  - drizzle/ (migration files)");
 } catch (error) {
   console.error("❌ Build failed:", error);
   process.exit(1);
