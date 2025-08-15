@@ -53,12 +53,22 @@ export async function runMigrations() {
     console.log("🚀 Applying database migrations...");
 
     // Handle different path structures in Lambda vs local environments
-    const migrationsPath = process.env.AWS_LAMBDA_FUNCTION_NAME 
-      ? join(__dirname, "drizzle")  // In Lambda, files are in same directory
-      : join(__dirname, "..", "drizzle");  // In local dev, go up one level
+    let migrationsPath: string;
+    
+    if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      // In Lambda environment, use process.cwd() as base
+      migrationsPath = join(process.cwd(), "drizzle");
+      console.log("🔍 Lambda environment detected");
+    } else {
+      // In local development, use __dirname
+      migrationsPath = join(__dirname, "..", "drizzle");
+      console.log("🔍 Local environment detected");
+    }
     
     console.log("🔍 Migration path:", migrationsPath);
-    
+    console.log("🔍 Current working directory:", process.cwd());
+    console.log("🔍 __dirname:", __dirname);
+
     await migrate(db, {
       migrationsFolder: migrationsPath,
       migrationsTable: "drizzle_migrations",
