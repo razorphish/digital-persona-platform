@@ -1190,6 +1190,58 @@ jobs:
 
           update_lambda
 
+      - name: Run Database Migrations via Lambda
+        run: |
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
+          
+          echo "🗄️ Running database migrations via deployed Lambda..."
+          echo "📤 Function: $FUNCTION_NAME"
+          
+          # Create a migration payload for Lambda
+          cat > migration-payload.json << 'EOF'
+          {
+            "version": "2.0",
+            "routeKey": "POST /migrate",
+            "rawPath": "/migrate",
+            "rawQueryString": "",
+            "headers": {
+              "content-type": "application/json"
+            },
+            "requestContext": {
+              "http": {
+                "method": "POST",
+                "path": "/migrate",
+                "protocol": "HTTP/1.1",
+                "sourceIp": "127.0.0.1"
+              }
+            },
+            "body": "{}",
+            "isBase64Encoded": false
+          }
+          EOF
+          
+          # Invoke Lambda function to run migrations
+          echo "📤 Invoking migration endpoint..."
+          aws lambda invoke \
+            --function-name $FUNCTION_NAME \
+            --payload file://migration-payload.json \
+            --region us-west-1 \
+            migration-result.json
+            
+          # Check migration result
+          echo "📋 Migration result:"
+          cat migration-result.json | jq
+          
+          # Check if migration was successful
+          if cat migration-result.json | jq -e '.statusCode == 200' > /dev/null; then
+            echo "✅ Database migrations completed successfully"
+          else
+            echo "❌ Database migration failed"
+            cat migration-result.json | jq '.body // .errorMessage // .message'
+            # Don't fail the deployment if migration fails - just warn
+            echo "⚠️ Migration failed but continuing with deployment"
+          fi
+
       - name: Verify Lambda permissions after deployment
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
