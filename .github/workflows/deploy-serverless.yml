@@ -1268,34 +1268,29 @@ jobs:
             
             echo "👥 Seeding $USER_COUNT users with domain $EMAIL_DOMAIN"
             
-            # Create seeding payload for Lambda
-            cat > seeding-payload.json << 'EOF'
-            {
-              "version": "2.0",
-              "routeKey": "POST /seed",
-              "rawPath": "/seed",
-              "rawQueryString": "",
-              "headers": {
-                "content-type": "application/json"
-              },
-              "requestContext": {
-                "http": {
-                  "method": "POST",
-                  "path": "/seed",
-                  "protocol": "HTTP/1.1",
-                  "sourceIp": "127.0.0.1"
-                }
-              },
-              "body": "{}",
-              "isBase64Encoded": false
-            }
-            EOF
-            
-            # Update the payload with the actual parameters
-            jq --argjson userCount "$USER_COUNT" --arg emailDomain "$EMAIL_DOMAIN" \
-              '.body = "{\"userCount\": \($userCount), \"emailDomain\": \"\($emailDomain)\"}"' \
-              seeding-payload.json > seeding-payload-updated.json
-            mv seeding-payload-updated.json seeding-payload.json
+            # Create seeding payload for Lambda using jq (avoiding heredoc issues)
+            echo '{}' | jq \
+              --argjson userCount "$USER_COUNT" \
+              --arg emailDomain "$EMAIL_DOMAIN" \
+              '{
+                "version": "2.0",
+                "routeKey": "POST /seed",
+                "rawPath": "/seed",
+                "rawQueryString": "",
+                "headers": {
+                  "content-type": "application/json"
+                },
+                "requestContext": {
+                  "http": {
+                    "method": "POST",
+                    "path": "/seed",
+                    "protocol": "HTTP/1.1",
+                    "sourceIp": "127.0.0.1"
+                  }
+                },
+                "body": ("{\"userCount\": " + ($userCount | tostring) + ", \"emailDomain\": \"" + $emailDomain + "\"}"),
+                "isBase64Encoded": false
+              }' > seeding-payload.json
             
             # Invoke Lambda function to run seeding
             echo "📤 Invoking seeding endpoint..."
