@@ -162,11 +162,7 @@ async function createUsers(
     const name = makeName();
     const password = makePassword(i);
     
-    console.log(`🔐 Hashing password for user ${i}`);
-    const passwordHash = await bcrypt.hash(password, 12);
-    console.log(`✅ Password hashed for user ${i}`);
-
-    // Skip if exists
+    // Check if user exists first to avoid unnecessary bcrypt operations
     console.log(`🔍 Checking if user ${i} exists: ${email}`);
     const existing = await db
       .select({ id: users.id })
@@ -175,10 +171,16 @@ async function createUsers(
       .limit(1);
     
     if (existing[0]) {
-      console.log(`♻️  User ${i} already exists, skipping`);
+      console.log(`♻️  User ${i} already exists, skipping bcrypt and insert`);
       created.push({ id: existing[0].id, email, name, password });
       continue;
     }
+    
+    console.log(`🔐 Hashing password for user ${i}`);
+    // Use fewer rounds for dev/qa environments to speed up seeding
+    const bcryptRounds = process.env.NODE_ENV === 'production' ? 12 : 8;
+    const passwordHash = await bcrypt.hash(password, bcryptRounds);
+    console.log(`✅ Password hashed for user ${i} (${bcryptRounds} rounds)`);
 
     console.log(`💾 Inserting new user ${i} into database`);
     const [row] = await db
