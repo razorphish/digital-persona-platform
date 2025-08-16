@@ -1248,11 +1248,11 @@ jobs:
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
           ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
-          
+
           echo "🌱 Seeding database with test data..."
           echo "📤 Function: $FUNCTION_NAME"
           echo "🏷️ Environment: $ENVIRONMENT"
-          
+
           # Only seed for dev and qa environments
           if [[ "$ENVIRONMENT" =~ ^(dev|qa) ]]; then
             echo "✅ Environment qualifies for seeding"

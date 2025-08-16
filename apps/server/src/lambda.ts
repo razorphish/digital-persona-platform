@@ -63,13 +63,23 @@ logger.info("📦 Setting up middleware");
 app.use(
   cors({
     origin: function (origin, callback) {
-      const configured = process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [];
+      const configured =
+        process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [];
       // Always allow same-site UI based on API host naming (devNN-api.hibiji.com -> devNN.hibiji.com)
       const host = (origin || "").replace(/^https?:\/\//, "");
       const dynamicUi = host.includes("-api.")
         ? origin?.replace("-api.", ".")
         : undefined;
-      const allowedOrigins = Array.from(new Set(["http://localhost:3000","http://localhost:3100","http://127.0.0.1:3000","http://127.0.0.1:3100", ...configured, ...(dynamicUi ? [dynamicUi] : [])]));
+      const allowedOrigins = Array.from(
+        new Set([
+          "http://localhost:3000",
+          "http://localhost:3100",
+          "http://127.0.0.1:3000",
+          "http://127.0.0.1:3100",
+          ...configured,
+          ...(dynamicUi ? [dynamicUi] : []),
+        ])
+      );
 
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
@@ -87,7 +97,7 @@ app.use(
       }
     },
     credentials: true,
-    methods: ["GET","HEAD","OPTIONS","POST","PUT","PATCH","DELETE"],
+    methods: ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: [
       "Content-Type",
       "X-Requested-With",
@@ -95,7 +105,7 @@ app.use(
       "x-trpc-source",
       "x-amz-date",
       "x-amz-security-token",
-      "x-api-key"
+      "x-api-key",
     ],
   })
 );
@@ -104,13 +114,18 @@ app.use(
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
     const origin = (req.headers["origin"] as string) || "";
-    const acrMethod = (req.headers["access-control-request-method"] as string) || "";
-    const acrHeaders = (req.headers["access-control-request-headers"] as string) || "";
+    const acrMethod =
+      (req.headers["access-control-request-method"] as string) || "";
+    const acrHeaders =
+      (req.headers["access-control-request-headers"] as string) || "";
 
-    const configured = process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [];
+    const configured =
+      process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [];
     const hostHeader = (req.headers["host"] as string) || "";
     const dynamicUi = hostHeader.includes("-api.")
-      ? `${origin?.startsWith("http:") ? "http" : "https"}://${hostHeader.replace("-api.", ".")}`
+      ? `${
+          origin?.startsWith("http:") ? "http" : "https"
+        }://${hostHeader.replace("-api.", ".")}`
       : undefined;
     const allowedOrigins = Array.from(
       new Set([
@@ -123,7 +138,10 @@ app.use((req, res, next) => {
       ])
     );
 
-    const isAllowed = !origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin);
+    const isAllowed =
+      !origin ||
+      allowedOrigins.includes("*") ||
+      allowedOrigins.includes(origin);
 
     logger.info("CORS preflight received", {
       url: req.url,
@@ -148,7 +166,8 @@ app.use((req, res, next) => {
     );
     res.setHeader(
       "Access-Control-Allow-Headers",
-      acrHeaders || "Content-Type, Authorization, X-Requested-With, x-trpc-source"
+      acrHeaders ||
+        "Content-Type, Authorization, X-Requested-With, x-trpc-source"
     );
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Max-Age", "86400");
@@ -324,12 +343,12 @@ logger.info("🚀 Setting up temporary migration endpoint");
 // Temporary migration endpoint for database initialization
 app.post("/migrate", async (req, res) => {
   logger.info("Database migration requested");
-  
+
   try {
     // Import and run migrations
     const { runMigrations } = await import("./migrate.js");
     const result = await runMigrations();
-    
+
     logger.info("Migration completed", result);
     res.json({
       status: "success",
@@ -353,23 +372,25 @@ logger.info("🌱 Setting up temporary seeding endpoint");
 // Temporary seeding endpoint for database population
 app.post("/seed", async (req, res) => {
   logger.info("Database seeding requested");
-  
+
   try {
     // Parse environment variables from request body if provided
     const requestBody = req.body || {};
-    const userCount = requestBody.userCount || process.env.SEED_USER_COUNT || 300;
-    const emailDomain = requestBody.emailDomain || process.env.SEED_EMAIL_DOMAIN || "seed.local";
-    
+    const userCount =
+      requestBody.userCount || process.env.SEED_USER_COUNT || 300;
+    const emailDomain =
+      requestBody.emailDomain || process.env.SEED_EMAIL_DOMAIN || "seed.local";
+
     logger.info("Seeding parameters", { userCount, emailDomain });
-    
+
     // Set environment variables for seeding script
     process.env.SEED_USER_COUNT = String(userCount);
     process.env.SEED_EMAIL_DOMAIN = emailDomain;
-    
+
     // Import and run seeding script
     const { main: runSeeding } = await import("./scripts/seedUsers.js");
     await runSeeding();
-    
+
     logger.info("Database seeding completed successfully");
     res.json({
       status: "success",
@@ -377,14 +398,14 @@ app.post("/seed", async (req, res) => {
       result: {
         userCount: Number(userCount),
         emailDomain,
-        credentialsFile: "data/.local-seed-users.md"
+        credentialsFile: "data/.local-seed-users.md",
       },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
     logger.error("Database seeding failed", error);
     res.status(500).json({
-      status: "error", 
+      status: "error",
       message: "Database seeding failed",
       error: error instanceof Error ? error.message : String(error),
       timestamp: new Date().toISOString(),

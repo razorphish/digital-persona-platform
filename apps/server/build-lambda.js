@@ -11,7 +11,15 @@
  */
 
 import esbuild from "esbuild";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, readdirSync, copyFileSync } from "fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  statSync,
+  readdirSync,
+  copyFileSync,
+} from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -113,13 +121,13 @@ try {
   console.log("📋 Copying migration files...");
   const drizzleSourceDir = join(__dirname, "drizzle");
   const drizzleDestDir = join(outDir, "drizzle");
-  
+
   if (existsSync(drizzleSourceDir)) {
     // Create drizzle directory in output
     if (!existsSync(drizzleDestDir)) {
       mkdirSync(drizzleDestDir, { recursive: true });
     }
-    
+
     // Copy all files from drizzle directory
     const copyRecursively = (src, dest) => {
       const stat = statSync(src);
@@ -135,7 +143,7 @@ try {
         copyFileSync(src, dest);
       }
     };
-    
+
     copyRecursively(drizzleSourceDir, drizzleDestDir);
     console.log("✅ Migration files copied successfully");
   } else {

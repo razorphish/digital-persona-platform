@@ -19,9 +19,6 @@ export default function ConditionalNavigation() {
 
   // Hide global navigation on auth and landing pages only
   if (shouldHide) return null;
-  
-  // Extra safety: Always hide on root path
-  if (pathname === "/") return null;
 
   return <MainNavigation />;
 }
