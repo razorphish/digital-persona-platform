@@ -1244,7 +1244,7 @@ jobs:
           fi
 
       - name: Seed Database with Test Data
-        if: ${{ contains(github.event.inputs.environment, 'dev') || contains(github.event.inputs.environment, 'qa') }}
+        if: ${{ contains(needs.detect-environment.outputs.environment, 'dev') || contains(needs.detect-environment.outputs.environment, 'qa') }}
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
           ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
