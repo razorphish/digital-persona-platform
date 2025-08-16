@@ -1289,7 +1289,7 @@ jobs:
               "body": "{}",
               "isBase64Encoded": false
             }
-EOF
+            EOF
             
             # Update the payload with the actual parameters
             jq --argjson userCount "$USER_COUNT" --arg emailDomain "$EMAIL_DOMAIN" \
