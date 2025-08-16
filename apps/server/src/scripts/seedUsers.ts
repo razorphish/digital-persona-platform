@@ -892,7 +892,13 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  console.error("❌ Seed failed:", err);
-  process.exit(1);
-});
+// Export main function for Lambda usage
+export { main };
+
+// Only run if this is the main module (CLI execution)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error("❌ Seed failed:", err);
+    process.exit(1);
+  });
+}

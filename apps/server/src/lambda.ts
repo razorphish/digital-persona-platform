@@ -313,6 +313,7 @@ app.get("/", (req, res) => {
       health: "/health",
       healthWithStage: "/v1/health",
       migrate: "/migrate", // Temporary endpoint for database initialization
+      seed: "/seed", // Temporary endpoint for database seeding
     },
     timestamp: new Date().toISOString(),
   });
@@ -341,6 +342,50 @@ app.post("/migrate", async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Database migration failed",
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+logger.info("🌱 Setting up temporary seeding endpoint");
+
+// Temporary seeding endpoint for database population
+app.post("/seed", async (req, res) => {
+  logger.info("Database seeding requested");
+  
+  try {
+    // Parse environment variables from request body if provided
+    const requestBody = req.body || {};
+    const userCount = requestBody.userCount || process.env.SEED_USER_COUNT || 300;
+    const emailDomain = requestBody.emailDomain || process.env.SEED_EMAIL_DOMAIN || "seed.local";
+    
+    logger.info("Seeding parameters", { userCount, emailDomain });
+    
+    // Set environment variables for seeding script
+    process.env.SEED_USER_COUNT = String(userCount);
+    process.env.SEED_EMAIL_DOMAIN = emailDomain;
+    
+    // Import and run seeding script
+    const { main: runSeeding } = await import("./scripts/seedUsers.js");
+    await runSeeding();
+    
+    logger.info("Database seeding completed successfully");
+    res.json({
+      status: "success",
+      message: "Database seeding completed successfully",
+      result: {
+        userCount: Number(userCount),
+        emailDomain,
+        credentialsFile: "data/.local-seed-users.md"
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error("Database seeding failed", error);
+    res.status(500).json({
+      status: "error", 
+      message: "Database seeding failed",
       error: error instanceof Error ? error.message : String(error),
       timestamp: new Date().toISOString(),
     });

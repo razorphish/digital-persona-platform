@@ -1243,6 +1243,81 @@ jobs:
             echo "⚠️ Migration failed but continuing with deployment"
           fi
 
+      - name: Seed Database with Test Data
+        if: ${{ contains(github.event.inputs.environment, 'dev') || contains(github.event.inputs.environment, 'qa') }}
+        run: |
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
+          ENVIRONMENT="${{ needs.detect-environment.outputs.environment }}"
+          
+          echo "🌱 Seeding database with test data..."
+          echo "📤 Function: $FUNCTION_NAME"
+          echo "🏷️ Environment: $ENVIRONMENT"
+          
+          # Only seed for dev and qa environments
+          if [[ "$ENVIRONMENT" =~ ^(dev|qa) ]]; then
+            echo "✅ Environment qualifies for seeding"
+            
+            # Determine seeding parameters based on environment
+            if [[ "$ENVIRONMENT" =~ ^dev ]]; then
+              USER_COUNT=100  # Smaller dataset for dev
+              EMAIL_DOMAIN="dev.seed.local"
+            elif [[ "$ENVIRONMENT" =~ ^qa ]]; then
+              USER_COUNT=300  # Full dataset for qa testing
+              EMAIL_DOMAIN="qa.seed.local"
+            fi
+            
+            echo "👥 Seeding $USER_COUNT users with domain $EMAIL_DOMAIN"
+            
+            # Create seeding payload for Lambda
+            cat > seeding-payload.json << EOF
+            {
+              "version": "2.0",
+              "routeKey": "POST /seed",
+              "rawPath": "/seed",
+              "rawQueryString": "",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "requestContext": {
+                "http": {
+                  "method": "POST",
+                  "path": "/seed",
+                  "protocol": "HTTP/1.1",
+                  "sourceIp": "127.0.0.1"
+                }
+              },
+              "body": "{\"userCount\": $USER_COUNT, \"emailDomain\": \"$EMAIL_DOMAIN\"}",
+              "isBase64Encoded": false
+            }
+            EOF
+            
+            # Invoke Lambda function to run seeding
+            echo "📤 Invoking seeding endpoint..."
+            aws lambda invoke \
+              --function-name $FUNCTION_NAME \
+              --cli-binary-format raw-in-base64-out \
+              --payload file://seeding-payload.json \
+              --region us-west-1 \
+              seeding-result.json
+              
+            # Check seeding result
+            echo "📋 Seeding result:"
+            cat seeding-result.json | jq
+            
+            # Check if seeding was successful
+            if cat seeding-result.json | jq -e '.statusCode == 200' > /dev/null; then
+              echo "✅ Database seeding completed successfully"
+              echo "👥 $USER_COUNT test users created with domain $EMAIL_DOMAIN"
+              echo "🔑 Use credentials: user1@$EMAIL_DOMAIN / Passw0rd!001"
+            else
+              echo "⚠️ Database seeding failed"
+              cat seeding-result.json | jq '.body // .errorMessage // .message'
+              echo "💡 This is not critical for deployment, continuing..."
+            fi
+          else
+            echo "⏭️ Skipping seeding for production environment: $ENVIRONMENT"
+          fi
+
       - name: Verify Lambda permissions after deployment
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
