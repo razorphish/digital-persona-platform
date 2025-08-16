@@ -16,7 +16,7 @@ aurora_min_capacity = 0.5
 aurora_max_capacity = 2.0
 
 lambda_memory_size = 512 # Standard for dev
-lambda_timeout     = 30
+lambda_timeout     = 120 # Increased for database seeding operations
 
 log_retention_days = 14 # 2 weeks for dev debugging
 
