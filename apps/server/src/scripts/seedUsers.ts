@@ -142,25 +142,45 @@ async function createUsers(
   count: number,
   emailDomain: string
 ): Promise<CreatedUser[]> {
+  console.log(`🚀 Starting createUsers function for ${count} users`);
+  
+  // Test database connection first
+  console.log(`🧪 Testing database connection...`);
+  try {
+    const testResult = await db.execute(sql`SELECT 1 as test`);
+    console.log(`✅ Database connection test successful:`, testResult);
+  } catch (error) {
+    console.error(`❌ Database connection test failed:`, error);
+    throw error;
+  }
+  
   const created: CreatedUser[] = [];
 
   for (let i = 1; i <= count; i++) {
+    console.log(`👤 Creating user ${i}/${count}`);
     const email = makeEmail(i, emailDomain);
     const name = makeName();
     const password = makePassword(i);
+    
+    console.log(`🔐 Hashing password for user ${i}`);
     const passwordHash = await bcrypt.hash(password, 12);
+    console.log(`✅ Password hashed for user ${i}`);
 
     // Skip if exists
+    console.log(`🔍 Checking if user ${i} exists: ${email}`);
     const existing = await db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
+    
     if (existing[0]) {
+      console.log(`♻️  User ${i} already exists, skipping`);
       created.push({ id: existing[0].id, email, name, password });
       continue;
     }
 
+    console.log(`💾 Inserting new user ${i} into database`);
     const [row] = await db
       .insert(users)
       .values({
@@ -177,6 +197,7 @@ async function createUsers(
       })
       .returning({ id: users.id });
 
+    console.log(`✅ User ${i} created successfully`);
     created.push({ id: row.id, email, name, password });
   }
 
