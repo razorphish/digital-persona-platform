@@ -804,10 +804,20 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 async function writeCredentialsFile(usersCreated: CreatedUser[]) {
-  // Resolve repository root (apps/server/src/scripts -> repoRoot). __dirname is not available in ESM.
-  const repoRoot = path.resolve(process.cwd(), "../..");
-  const outDir = path.join(repoRoot, "data");
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  // Use /tmp in Lambda environment, otherwise use repository root
+  const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT;
+  let outDir: string;
+  
+  if (isLambda) {
+    // Lambda environment - use /tmp directory
+    outDir = "/tmp";
+  } else {
+    // Local environment - use repository root
+    const repoRoot = path.resolve(process.cwd(), "../..");
+    outDir = path.join(repoRoot, "data");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  }
+  
   const outPath = path.join(outDir, ".local-seed-users.md");
 
   const lines: string[] = [];
