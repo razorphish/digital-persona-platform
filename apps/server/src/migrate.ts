@@ -299,14 +299,14 @@ export async function runMigrations() {
           AND column_name = 'is_public'
         `;
 
-        if (isPublicColumnCheck[0].count === 0) {
+        if (Number(isPublicColumnCheck[0].count) === 0) {
           console.log("🔄 Adding missing is_public column to personas table");
           try {
             await migrationConnection`
               ALTER TABLE personas ADD COLUMN is_public boolean DEFAULT false
             `;
             console.log("✅ Added is_public column successfully");
-            
+
             // Verify it was added
             const verifyColumn = await migrationConnection`
               SELECT COUNT(*) as count 
@@ -315,7 +315,9 @@ export async function runMigrations() {
               AND table_name = 'personas' 
               AND column_name = 'is_public'
             `;
-            console.log(`🔍 Verification: is_public column count = ${verifyColumn[0].count}`);
+            console.log(
+              `🔍 Verification: is_public column count = ${verifyColumn[0].count}`
+            );
           } catch (error) {
             console.error("❌ Failed to add is_public column:", error);
             throw error;
@@ -325,7 +327,9 @@ export async function runMigrations() {
         }
 
         if (socialTablesCheck[0].count < 6) {
-          console.log("🔄 Core schema exists but social media tables missing - creating social tables");
+          console.log(
+            "🔄 Core schema exists but social media tables missing - creating social tables"
+          );
           await createSocialTables(migrationConnection);
           console.log("✅ Social tables added successfully");
         } else {
@@ -340,7 +344,10 @@ export async function runMigrations() {
           ORDER BY table_name
         `;
 
-        console.log("📋 All tables:", tables.map((t: any) => t.table_name).join(", "));
+        console.log(
+          "📋 All tables:",
+          tables.map((t: any) => t.table_name).join(", ")
+        );
 
         return {
           success: true,

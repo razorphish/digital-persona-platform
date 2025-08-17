@@ -378,9 +378,9 @@ app.get("/debug-schema", async (req, res) => {
     const postgres = (await import("postgres")).default;
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error("DATABASE_URL not configured");
-    
+
     const db = postgres(connectionString);
-    
+
     const columns = await db`
       SELECT column_name, data_type 
       FROM information_schema.columns 
@@ -396,19 +396,19 @@ app.get("/debug-schema", async (req, res) => {
       AND table_name = 'personas' 
       AND column_name = 'is_public'
     `;
-    
+
     await db.end();
-    
-    logger.info("Schema debug completed", { 
-      columnCount: columns.length, 
-      isPublicCount: isPublicColumnCheck[0].count 
+
+    logger.info("Schema debug completed", {
+      columnCount: columns.length,
+      isPublicCount: isPublicColumnCheck[0].count,
     });
-    
+
     res.json({
       status: "success",
       columns: columns.map((c) => `${c.column_name}: ${c.data_type}`),
       isPublicColumnCount: isPublicColumnCheck[0].count,
-      migrationWouldAdd: isPublicColumnCheck[0].count === 0,
+      migrationWouldAdd: Number(isPublicColumnCheck[0].count) === 0,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
