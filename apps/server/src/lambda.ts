@@ -335,6 +335,7 @@ app.get("/", (req, res) => {
       drizzleMigrate: "/drizzle-migrate", // New endpoint for proper Drizzle migrations
       seed: "/seed", // Temporary endpoint for database seeding
       debugSchema: "/debug-schema", // Temporary endpoint for schema inspection
+      fixMigrations: "/fix-migrations", // Temporary endpoint to fix migration tracking
     },
     timestamp: new Date().toISOString(),
   });
@@ -446,6 +447,77 @@ app.get("/debug-schema", async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Schema check failed",
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+logger.info("🔧 Setting up temporary fix migrations endpoint");
+
+// Temporary fix migrations endpoint
+app.post("/fix-migrations", async (req, res) => {
+  logger.info("Fix migration tracking requested");
+
+  try {
+    const postgres = (await import("postgres")).default;
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error("DATABASE_URL not configured");
+
+    const db = postgres(connectionString);
+
+    // Create drizzle migrations table if it doesn't exist
+    await db`
+      CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
+        id SERIAL PRIMARY KEY,
+        hash text NOT NULL,
+        created_at bigint
+      )
+    `;
+
+    // Check existing migrations
+    const existingMigrations = await db`SELECT hash FROM "__drizzle_migrations"`;
+    const existingHashes = existingMigrations.map(m => m.hash);
+
+    // Migrations to mark as applied (since database is in correct state)
+    const migrationsToMark = [
+      "0000_pink_shockwave",
+      "0001_curvy_brood", 
+      "0002_equal_moonstone",
+      "0003_magical_namora",
+      "0004_clean_mad_thinker"
+    ];
+
+    // Insert missing migrations
+    let insertedCount = 0;
+    for (let i = 0; i < migrationsToMark.length; i++) {
+      const hash = migrationsToMark[i];
+      if (!existingHashes.includes(hash)) {
+        await db`
+          INSERT INTO "__drizzle_migrations" (hash, created_at) 
+          VALUES (${hash}, ${Date.now() - (migrationsToMark.length - i) * 60000})
+        `;
+        insertedCount++;
+      }
+    }
+
+    await db.end();
+
+    logger.info("Migration tracking fixed", { insertedCount, totalMigrations: migrationsToMark.length });
+
+    res.json({
+      status: "success",
+      message: "Migration tracking fixed",
+      existingMigrations: existingHashes.length,
+      migrationsAdded: insertedCount,
+      totalMigrations: migrationsToMark.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error("Migration tracking fix failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "Migration tracking fix failed",
       error: error.message,
       timestamp: new Date().toISOString(),
     });
