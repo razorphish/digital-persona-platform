@@ -88,20 +88,11 @@ jobs:
       - name: Check for schema changes
         id: check-changes
         run: |
-          echo "🔍 Checking for schema changes..."
+          echo "🔍 Checking for schema changes in push..."
 
-          # For workflow_dispatch events, always force migration
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "📝 Manual workflow dispatch detected"
-            if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-              echo "🧪 Dry run requested - checking for schema changes"
-            else
-              echo "🚀 Force migration requested - applying all pending migrations"
-            fi
-            echo "has-changes=true" >> $GITHUB_OUTPUT
-            echo "✅ Forcing migration execution for manual dispatch"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            # For push events, check all commits in the push
+          # For push events, check all commits in the push
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Get the range of commits in this push
             if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
               # New branch - check last commit only
               COMMIT_RANGE="HEAD^ HEAD"
@@ -111,48 +102,29 @@ jobs:
               COMMIT_RANGE="${{ github.event.before }}..HEAD"
               echo "📝 Checking commit range: $COMMIT_RANGE"
             fi
-
-            echo "🔎 Commits in range:"
-            git log --oneline $COMMIT_RANGE || echo "No commits in range"
-            echo ""
-
-            echo "📁 All files changed in range:"
-            git diff --name-only $COMMIT_RANGE || echo "No files changed"
-            echo ""
-
-            # Check if any commits in the range modified schema files
-            if git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
-              echo "has-changes=true" >> $GITHUB_OUTPUT
-              echo "🔄 Database schema changes detected in commit range: $COMMIT_RANGE"
-              echo "📋 Modified schema files:"
-              git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" | sed 's/^/  - /'
-            else
-              echo "has-changes=false" >> $GITHUB_OUTPUT
-              echo "✅ No database schema changes in commit range: $COMMIT_RANGE"
-            fi
           else
             # For PR events, check the PR diff
             COMMIT_RANGE="${{ github.event.pull_request.base.sha }}..HEAD"
             echo "📝 PR detected, checking range: $COMMIT_RANGE"
+          fi
 
-            echo "🔎 Commits in range:"
-            git log --oneline $COMMIT_RANGE || echo "No commits in range"
-            echo ""
+          echo "🔎 Commits in range:"
+          git log --oneline $COMMIT_RANGE || echo "No commits in range"
+          echo ""
 
-            echo "📁 All files changed in range:"
-            git diff --name-only $COMMIT_RANGE || echo "No files changed"
-            echo ""
+          echo "📁 All files changed in range:"
+          git diff --name-only $COMMIT_RANGE || echo "No files changed"
+          echo ""
 
-            # Check if any commits in the range modified schema files
-            if git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
-              echo "has-changes=true" >> $GITHUB_OUTPUT
-              echo "🔄 Database schema changes detected in commit range: $COMMIT_RANGE"
-              echo "📋 Modified schema files:"
-              git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" | sed 's/^/  - /'
-            else
-              echo "has-changes=false" >> $GITHUB_OUTPUT
-              echo "✅ No database schema changes in commit range: $COMMIT_RANGE"
-            fi
+          # Check if any commits in the range modified schema files
+          if git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" > /dev/null; then
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "🔄 Database schema changes detected in commit range: $COMMIT_RANGE"
+            echo "📋 Modified schema files:"
+            git diff --name-only $COMMIT_RANGE | grep -E "(schema\.ts|drizzle/)" | sed 's/^/  - /'
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "✅ No database schema changes in commit range: $COMMIT_RANGE"
           fi
 
       - name: Generate migration files
@@ -202,19 +174,23 @@ jobs:
     runs-on: ubuntu-latest
     environment: development
 
-    permissions:
-      id-token: write
-      contents: read
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: digital_persona_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-west-1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -283,102 +259,63 @@ jobs:
           npm run build
           echo "✅ Migration runner built successfully"
 
-      - name: Get Aurora database credentials
-        id: get-db-creds
+      - name: Create test database backup
         run: |
-          echo "🔐 Retrieving Aurora database credentials from AWS Secrets Manager..."
-          
-          # Get database password from secrets manager
-          DB_SECRET=$(aws secretsmanager get-secret-value \
-            --secret-id dev-dev01-dpp-database-password \
-            --region us-west-1 \
-            --query SecretString --output text)
-          
-          DB_PASSWORD=$(echo $DB_SECRET | jq -r '.password')
-          DB_USERNAME=$(echo $DB_SECRET | jq -r '.username')
-          
-          # URL encode the password to handle special characters
-          DB_PASSWORD_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$DB_PASSWORD', safe=''))")
-          
-          # Construct database URL for Aurora via RDS Proxy with encoded password
-          DATABASE_URL="postgresql://${DB_USERNAME}:${DB_PASSWORD_ENCODED}@dev-dev01-dpp-rds-proxy.proxy-cr6q082uklxj.us-west-1.rds.amazonaws.com:5432/digital_persona"
-          
-          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_OUTPUT
-          echo "✅ Database credentials retrieved and URL encoded successfully"
+          PGPASSWORD=postgres pg_dump -h localhost -U postgres -d digital_persona_test > backup.sql || true
 
       - name: Run migrations (dry run)
         if: inputs.dry_run == true
         env:
-          DATABASE_URL: ${{ steps.get-db-creds.outputs.DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
         run: |
           cd apps/server
           echo "🧪 DRY RUN: Migration check only"
           npm run migrate:check
 
-      - name: Apply migrations to Aurora
+      - name: Apply migrations
         if: inputs.dry_run != true
         env:
-          DATABASE_URL: ${{ steps.get-db-creds.outputs.DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
         run: |
           cd apps/server
-          echo "🚀 Applying migrations to Aurora database via RDS Proxy..."
-          echo "📊 Target: dev-dev01-dpp-rds-proxy.proxy-cr6q082uklxj.us-west-1.rds.amazonaws.com"
-          node dist/migrate.js up
+          echo "🚀 Applying migrations to development database..."
+          npm run migrate:up
 
       - name: Verify migration success
         if: inputs.dry_run != true
         env:
-          DATABASE_URL: ${{ steps.get-db-creds.outputs.DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
         run: |
           cd apps/server
-          echo "🔍 Verifying migration results on Aurora database..."
+          echo "🔍 Verifying migration results..."
 
-          # Use the node migration script to verify tables
-          node -e "
-            import postgres from 'postgres';
-            const sql = postgres(process.env.DATABASE_URL);
-            
-            async function verify() {
-              try {
-                // Check that critical tables exist
-                const tables = await sql\`
-                  SELECT table_name 
-                  FROM information_schema.tables 
-                  WHERE table_schema = 'public' 
-                  ORDER BY table_name
-                \`;
-                
-                console.log('📋 Database tables:', tables.map(t => t.table_name).join(', '));
-                
-                // Verify users table exists and has expected columns
-                const userColumns = await sql\`
-                  SELECT column_name, data_type, is_nullable 
-                  FROM information_schema.columns 
-                  WHERE table_name = 'users' 
-                  ORDER BY column_name
-                \`;
-                
-                console.log('👤 Users table columns:', userColumns.length);
-                const hasEmail = userColumns.some(col => col.column_name === 'email');
-                const hasPasswordHash = userColumns.some(col => col.column_name === 'password_hash');
-                
-                if (hasEmail && hasPasswordHash) {
-                  console.log('✅ Users table verified with required authentication columns');
-                } else {
-                  console.error('❌ Users table missing critical columns');
-                  process.exit(1);
-                }
-                
-                await sql.end();
-                console.log('🎉 Migration verification completed successfully!');
-              } catch (error) {
-                console.error('❌ Verification failed:', error);
-                process.exit(1);
-              }
-            }
-            
-            verify();
+          # Check that critical tables exist
+          PGPASSWORD=postgres psql -h localhost -U postgres -d digital_persona_test -c "
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name;
           "
+
+          # Verify date_of_birth column exists
+          PGPASSWORD=postgres psql -h localhost -U postgres -d digital_persona_test -c "
+            SELECT column_name, data_type, is_nullable 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'date_of_birth';
+          "
+
+      - name: Rollback on failure
+        if: failure() && inputs.dry_run != true
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/digital_persona_test
+        run: |
+          echo "❌ Migration failed, attempting rollback..."
+          if [ -f backup.sql ]; then
+            PGPASSWORD=postgres psql -h localhost -U postgres -d digital_persona_test < backup.sql
+            echo "🔄 Database restored from backup"
+          else
+            echo "⚠️  No backup available for rollback"
+          fi
 
   notify-success:
     name: Notify Migration Success

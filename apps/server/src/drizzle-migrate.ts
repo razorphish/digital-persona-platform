@@ -20,7 +20,7 @@ export async function runDrizzleMigrations() {
   }
 
   console.log("🔗 Connecting to database...");
-  
+
   // Create connection for migrations
   const migrationConnection = postgres(connectionString, { max: 1 });
   const db = drizzle(migrationConnection);
@@ -35,7 +35,7 @@ export async function runDrizzleMigrations() {
     // In Lambda, migrations should be bundled to /var/task/packages/database/drizzle
     // In local development, use relative path
     let migrationsFolder: string;
-    
+
     if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
       // Lambda environment - migrations are bundled to this location by build script
       migrationsFolder = "/var/task/packages/database/drizzle";
@@ -44,15 +44,18 @@ export async function runDrizzleMigrations() {
       // Local development
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = path.dirname(__filename);
-      migrationsFolder = path.join(__dirname, "../../../packages/database/drizzle");
+      migrationsFolder = path.join(
+        __dirname,
+        "../../../packages/database/drizzle"
+      );
       console.log("🔧 Using local migrations path:", migrationsFolder);
     }
 
     console.log("📋 Running Drizzle migrations...");
-    
+
     // Run all pending migrations
     await migrate(db, { migrationsFolder });
-    
+
     console.log("✅ All migrations completed successfully");
 
     // Verify critical tables exist

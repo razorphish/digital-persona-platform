@@ -611,6 +611,166 @@ The cleanup process removes **ALL** resources for the specified environment:
 - ✅ **Comprehensive Verification**: Checks remaining resources after cleanup
 - ✅ **Timeout Protection**: Prevents hanging with 10-15 minute timeouts
 
+## 🗄️ Database Migration System
+
+### Migration Overview
+
+The platform uses **Drizzle ORM** for production-safe database migrations with automatic deployment integration.
+
+### 🚀 Quick Migration Commands
+
+```bash
+# 1. Modify schema
+# Edit: packages/database/src/schema.ts
+
+# 2. Generate migration
+cd packages/database
+npx drizzle-kit generate:pg --config=drizzle.config.ts
+
+# 3. Deploy migration (automatic)
+git add . && git commit -m "feat: add new table"
+git push origin dev01
+# ↳ Triggers deployment → Lambda migration → Complete
+
+# 4. Manual migration (if needed)
+aws lambda invoke --function-name dev-dev01-dpp-api \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"version":"2.0","routeKey":"POST /drizzle-migrate","rawPath":"/drizzle-migrate","headers":{"content-type":"application/json"},"requestContext":{"http":{"method":"POST","path":"/drizzle-migrate"}},"body":"{}","isBase64Encoded":false}' \
+  --region us-west-1 migration-result.json && cat migration-result.json | jq
+```
+
+### 📋 Migration Workflow
+
+| Step                 | Action                    | Command                                   | Result                           |
+| -------------------- | ------------------------- | ----------------------------------------- | -------------------------------- |
+| **1. Schema Change** | Edit schema.ts            | `vim packages/database/src/schema.ts`     | Modified schema                  |
+| **2. Generate**      | Create migration file     | `npx drizzle-kit generate:pg`             | `0005_new_migration.sql`         |
+| **3. Review**        | Check generated SQL       | `cat packages/database/drizzle/0005*.sql` | Verify changes                   |
+| **4. Deploy**        | Push to trigger migration | `git push origin dev01`                   | Automatic deployment + migration |
+| **5. Verify**        | Check migration result    | Monitor workflow logs                     | ✅ Migration complete            |
+
+### 🔧 Migration Files Location
+
+```
+packages/database/drizzle/           ← Migration files
+├── 0000_pink_shockwave.sql        ← Initial schema
+├── 0001_curvy_brood.sql            ← Schema updates
+├── 0002_equal_moonstone.sql        ← More updates
+├── 0003_magical_namora.sql         ← Social tables
+├── 0004_clean_mad_thinker.sql      ← Latest changes
+├── 0005_your_new_migration.sql     ← Your next migration
+└── meta/                           ← Migration metadata
+    ├── _journal.json               ← Migration history
+    └── 000X_snapshot.json          ← Schema snapshots
+```
+
+### 🎯 Deployment Integration
+
+**Automatic Migration (Recommended):**
+
+- Every `git push` to dev01/main triggers deployment workflow
+- Workflow automatically runs migrations via Lambda
+- Production-safe with transaction rollback
+- No manual intervention required
+
+**Migration Endpoints:**
+
+- ✅ **`/drizzle-migrate`** - Drizzle incremental migrations (enabled)
+- 🔄 **`/migrate`** - Custom SQL migrations (disabled, legacy)
+
+### 🛡️ Migration Safety
+
+**Production Safeguards:**
+
+- ✅ **Incremental migrations** - Only applies new changes
+- ✅ **Transaction safety** - Rollback on errors
+- ✅ **Schema tracking** - Prevents duplicate migrations
+- ✅ **Non-destructive** - Won't drop existing data
+- ✅ **Lambda-based** - Consistent with production infrastructure
+
+### 📊 Common Migration Examples
+
+#### Adding a New Table
+
+```typescript
+// packages/database/src/schema.ts
+export const newTable = pgTable("new_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+```
+
+#### Adding a New Column
+
+```typescript
+// packages/database/src/schema.ts
+export const users = pgTable("users", {
+  // ... existing columns ...
+  newField: text("new_field"), // Add this line
+});
+```
+
+#### Adding Foreign Key Relationship
+
+```typescript
+// packages/database/src/schema.ts
+export const childTable = pgTable("child_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  parentId: uuid("parent_id").references(() => parentTable.id),
+});
+```
+
+### 🔧 Advanced Migration Commands
+
+```bash
+# Check current migration status
+cd packages/database
+npx drizzle-kit up:pg --config=drizzle.config.ts
+
+# Introspect existing database
+npx drizzle-kit introspect:pg --config=drizzle.config.ts
+
+# Generate migration with custom name
+npx drizzle-kit generate:pg --config=drizzle.config.ts --name=add_user_preferences
+
+# View migration diff
+git diff packages/database/drizzle/
+
+# Rollback (manual process - review and create reverse migration)
+# Note: Drizzle doesn't support automatic rollbacks
+# Create a new migration that reverses the changes
+```
+
+### 🚨 Troubleshooting Migrations
+
+#### Migration Failed During Deployment
+
+```bash
+# Check Lambda logs
+aws logs tail /aws/lambda/dev-dev01-dpp-api --since 10m
+
+# Check migration result
+aws lambda invoke --function-name dev-dev01-dpp-api \
+  --payload '{"routeKey":"POST /drizzle-migrate",...}' result.json
+cat result.json | jq
+```
+
+#### Schema Drift Detection
+
+```bash
+# If database state doesn't match migrations
+cd packages/database
+npx drizzle-kit push:pg --config=drizzle.config.ts
+```
+
+#### Manual Database Access
+
+```bash
+# Connect to dev database (if needed)
+psql "postgresql://user:pass@dev-dev01-dpp-rds-proxy.proxy-xxx.us-west-1.rds.amazonaws.com:5432/digital_persona"
+```
+
 ### Useful Commands
 
 ```bash
@@ -618,9 +778,9 @@ The cleanup process removes **ALL** resources for the specified environment:
 ./docker-start.sh dev --build      # Start development with rebuild
 ./docker-stop.sh dev               # Stop development environment
 
-# Database operations
+# Database operations (Legacy - use migration system above)
 cd apps/server
-npm run db:push        # Push schema changes
+npm run db:push        # Push schema changes (local only)
 npm run db:studio      # Open database studio
 
 # Frontend operations
