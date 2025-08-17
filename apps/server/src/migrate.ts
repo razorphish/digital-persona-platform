@@ -13,6 +13,238 @@ config({ path: "../../.env" });
  * - Ensures data integrity
  * Updated: Force migration trigger for dev01 environment
  */
+// Helper function to create social media tables
+async function createSocialTables(migrationConnection: any) {
+  console.log("🔗 Creating social media tables for seeding...");
+
+  // Social media tables required by seeding script
+  await migrationConnection`
+    CREATE TABLE IF NOT EXISTS "user_follows" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "follower_id" uuid NOT NULL,
+      "following_id" uuid NOT NULL,
+      "follow_reason" text,
+      "notify_on_new_persona" boolean DEFAULT true,
+      "notify_on_updates" boolean DEFAULT false,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `;
+
+  await migrationConnection`
+    CREATE TABLE IF NOT EXISTS "persona_likes" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid NOT NULL,
+      "persona_id" uuid NOT NULL,
+      "like_type" text DEFAULT 'like',
+      "discovered_via" text,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `;
+
+  await migrationConnection`
+    CREATE TABLE IF NOT EXISTS "user_connections" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "requester_id" uuid NOT NULL,
+      "target_persona_id" uuid NOT NULL,
+      "target_user_id" uuid NOT NULL,
+      "connection_type" text NOT NULL,
+      "status" text DEFAULT 'pending',
+      "subscription_tier" text,
+      "subscription_price" numeric(10, 2),
+      "subscription_start_date" timestamp,
+      "subscription_end_date" timestamp,
+      "is_subscription_active" boolean DEFAULT false,
+      "custom_permissions" jsonb,
+      "access_level" text DEFAULT 'basic',
+      "retain_historical_data" boolean DEFAULT true,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `;
+
+  await migrationConnection`
+    CREATE TABLE IF NOT EXISTS "persona_reviews" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid NOT NULL,
+      "persona_id" uuid NOT NULL,
+      "rating" integer NOT NULL,
+      "title" text,
+      "review_text" text,
+      "categories" jsonb DEFAULT '[]',
+      "pros" jsonb DEFAULT '[]',
+      "cons" jsonb DEFAULT '[]',
+      "interaction_duration" integer,
+      "subscription_tier" text,
+      "is_verified_purchase" boolean DEFAULT false,
+      "is_public" boolean DEFAULT true,
+      "is_helpful" integer DEFAULT 0,
+      "is_reported" boolean DEFAULT false,
+      "moderation_status" text DEFAULT 'pending',
+      "moderated_by" uuid,
+      "moderated_at" timestamp,
+      "moderation_reason" text,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `;
+
+  await migrationConnection`
+    CREATE TABLE IF NOT EXISTS "discovery_metrics" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "persona_id" uuid NOT NULL,
+      "views_last_24h" integer DEFAULT 0,
+      "views_last_7d" integer DEFAULT 0,
+      "views_last_30d" integer DEFAULT 0,
+      "likes_last_24h" integer DEFAULT 0,
+      "likes_last_7d" integer DEFAULT 0,
+      "likes_last_30d" integer DEFAULT 0,
+      "subscriptions_last_24h" integer DEFAULT 0,
+      "subscriptions_last_7d" integer DEFAULT 0,
+      "subscriptions_last_30d" integer DEFAULT 0,
+      "trending_score" numeric(10, 4) DEFAULT '0.0000',
+      "popularity_score" numeric(10, 4) DEFAULT '0.0000',
+      "quality_score" numeric(10, 4) DEFAULT '0.0000',
+      "engagement_score" numeric(10, 4) DEFAULT '0.0000',
+      "discovery_rank" integer DEFAULT 999999,
+      "category_rank" integer DEFAULT 999999,
+      "last_calculated" timestamp DEFAULT now(),
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `;
+
+  await migrationConnection`
+    CREATE TABLE IF NOT EXISTS "feed_items" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid NOT NULL,
+      "item_type" text NOT NULL,
+      "persona_id" uuid,
+      "creator_id" uuid,
+      "algorithm_source" text NOT NULL,
+      "relevance_score" numeric(3, 2) DEFAULT '0.50',
+      "feed_position" integer,
+      "is_promoted" boolean DEFAULT false,
+      "is_trending" boolean DEFAULT false,
+      "was_viewed" boolean DEFAULT false,
+      "was_clicked" boolean DEFAULT false,
+      "was_liked" boolean DEFAULT false,
+      "was_shared" boolean DEFAULT false,
+      "was_dismissed" boolean DEFAULT false,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `;
+
+  console.log("🔗 Adding foreign key constraints for social tables...");
+
+  // Foreign key constraints for social tables
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "user_follows" ADD CONSTRAINT "user_follows_follower_id_users_id_fk" FOREIGN KEY ("follower_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "user_follows" ADD CONSTRAINT "user_follows_following_id_users_id_fk" FOREIGN KEY ("following_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "persona_likes" ADD CONSTRAINT "persona_likes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "persona_likes" ADD CONSTRAINT "persona_likes_persona_id_personas_id_fk" FOREIGN KEY ("persona_id") REFERENCES "personas"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "user_connections" ADD CONSTRAINT "user_connections_requester_id_users_id_fk" FOREIGN KEY ("requester_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "user_connections" ADD CONSTRAINT "user_connections_target_persona_id_personas_id_fk" FOREIGN KEY ("target_persona_id") REFERENCES "personas"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "user_connections" ADD CONSTRAINT "user_connections_target_user_id_users_id_fk" FOREIGN KEY ("target_user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "persona_reviews" ADD CONSTRAINT "persona_reviews_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "persona_reviews" ADD CONSTRAINT "persona_reviews_persona_id_personas_id_fk" FOREIGN KEY ("persona_id") REFERENCES "personas"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "discovery_metrics" ADD CONSTRAINT "discovery_metrics_persona_id_personas_id_fk" FOREIGN KEY ("persona_id") REFERENCES "personas"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "feed_items" ADD CONSTRAINT "feed_items_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "feed_items" ADD CONSTRAINT "feed_items_persona_id_personas_id_fk" FOREIGN KEY ("persona_id") REFERENCES "personas"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+
+  await migrationConnection`
+    DO $$ BEGIN
+      ALTER TABLE "feed_items" ADD CONSTRAINT "feed_items_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;
+  `;
+}
+
 export async function runMigrations() {
   const connectionString = process.env.DATABASE_URL;
 
@@ -48,26 +280,58 @@ export async function runMigrations() {
       `;
 
       if (migrationCheck[0].count > 0) {
-        console.log("✅ Database schema already exists - skipping migration");
+        console.log("✅ Core database schema already exists");
 
-        // Verify schema completeness
-        const tables = await migrationConnection`
-          SELECT table_name 
+        // Check if social media tables exist
+        const socialTablesCheck = await migrationConnection`
+          SELECT COUNT(*) as count 
           FROM information_schema.tables 
           WHERE table_schema = 'public' 
-          ORDER BY table_name
+          AND table_name IN ('user_follows', 'persona_likes', 'feed_items', 'discovery_metrics', 'persona_reviews', 'user_connections')
         `;
 
-        console.log(
-          "📋 Existing tables:",
-          tables.map((t: any) => t.table_name).join(", ")
-        );
+        if (socialTablesCheck[0].count >= 6) {
+          console.log("✅ All social media tables exist - migration complete");
 
-        return {
-          success: true,
-          message: "Schema already exists",
-          tablesFound: tables.map((t: any) => t.table_name),
-        };
+          // Verify schema completeness
+          const tables = await migrationConnection`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name
+          `;
+
+          console.log(
+            "📋 Existing tables:",
+            tables.map((t: any) => t.table_name).join(", ")
+          );
+
+          return {
+            success: true,
+            message: "Complete schema already exists",
+            tablesFound: tables.map((t: any) => t.table_name),
+          };
+        } else {
+          console.log("🔄 Core schema exists but social media tables missing - creating social tables only");
+          // Skip core table creation, jump to social tables
+          await createSocialTables(migrationConnection);
+          
+          const tables = await migrationConnection`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name
+          `;
+          
+          console.log("✅ Social tables added successfully");
+          console.log("📋 All tables:", tables.map((t: any) => t.table_name).join(", "));
+          
+          return {
+            success: true,
+            message: "Social media tables added to existing schema",
+            tablesFound: tables.map((t: any) => t.table_name),
+          };
+        }
       }
     } catch (e) {
       console.log("📝 No existing schema found - proceeding with migration");
