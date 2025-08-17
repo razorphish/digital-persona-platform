@@ -301,10 +301,27 @@ export async function runMigrations() {
 
         if (isPublicColumnCheck[0].count === 0) {
           console.log("🔄 Adding missing is_public column to personas table");
-          await migrationConnection`
-            ALTER TABLE personas ADD COLUMN IF NOT EXISTS is_public boolean DEFAULT false
-          `;
-          console.log("✅ Added is_public column");
+          try {
+            await migrationConnection`
+              ALTER TABLE personas ADD COLUMN is_public boolean DEFAULT false
+            `;
+            console.log("✅ Added is_public column successfully");
+            
+            // Verify it was added
+            const verifyColumn = await migrationConnection`
+              SELECT COUNT(*) as count 
+              FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+              AND table_name = 'personas' 
+              AND column_name = 'is_public'
+            `;
+            console.log(`🔍 Verification: is_public column count = ${verifyColumn[0].count}`);
+          } catch (error) {
+            console.error("❌ Failed to add is_public column:", error);
+            throw error;
+          }
+        } else {
+          console.log("✅ is_public column already exists");
         }
 
         if (socialTablesCheck[0].count < 6) {
