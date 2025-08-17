@@ -333,6 +333,7 @@ app.get("/", (req, res) => {
       healthWithStage: "/v1/health",
       migrate: "/migrate", // Temporary endpoint for database initialization
       seed: "/seed", // Temporary endpoint for database seeding
+      debugSchema: "/debug-schema", // Temporary endpoint for schema inspection
     },
     timestamp: new Date().toISOString(),
   });
@@ -362,6 +363,45 @@ app.post("/migrate", async (req, res) => {
       status: "error",
       message: "Database migration failed",
       error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+logger.info("🔍 Setting up temporary debug endpoint");
+
+// Temporary debug endpoint for schema inspection
+app.get("/debug-schema", async (req, res) => {
+  logger.info("Schema debug requested");
+
+  try {
+    const postgres = (await import("postgres")).default;
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error("DATABASE_URL not configured");
+    
+    const db = postgres(connectionString);
+    
+    const columns = await db`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'personas' AND table_schema = 'public' 
+      ORDER BY column_name
+    `;
+    
+    await db.end();
+    
+    logger.info("Schema debug completed", { columnCount: columns.length });
+    res.json({
+      status: "success",
+      columns: columns.map(c => `${c.column_name}: ${c.data_type}`),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error("Schema debug failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "Schema check failed",
+      error: error.message,
       timestamp: new Date().toISOString(),
     });
   }
