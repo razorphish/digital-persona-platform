@@ -398,6 +398,7 @@ export async function runMigrations() {
         "content_filter" jsonb,
         "guard_rails" jsonb,
         "is_publicly_listed" boolean DEFAULT false,
+        "is_public" boolean DEFAULT false,
         "allow_connections" boolean DEFAULT true,
         "requires_subscription" boolean DEFAULT false,
         "subscription_price" numeric(10, 2),
