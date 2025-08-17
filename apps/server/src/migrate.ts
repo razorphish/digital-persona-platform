@@ -290,48 +290,46 @@ export async function runMigrations() {
           AND table_name IN ('user_follows', 'persona_likes', 'feed_items', 'discovery_metrics', 'persona_reviews', 'user_connections')
         `;
 
-        if (socialTablesCheck[0].count >= 6) {
-          console.log("✅ All social media tables exist - migration complete");
+        // Check if critical columns exist before declaring schema complete
+        const isPublicColumnCheck = await migrationConnection`
+          SELECT COUNT(*) as count 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'personas' 
+          AND column_name = 'is_public'
+        `;
 
-          // Verify schema completeness
-          const tables = await migrationConnection`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            ORDER BY table_name
+        if (isPublicColumnCheck[0].count === 0) {
+          console.log("🔄 Adding missing is_public column to personas table");
+          await migrationConnection`
+            ALTER TABLE personas ADD COLUMN IF NOT EXISTS is_public boolean DEFAULT false
           `;
-
-          console.log(
-            "📋 Existing tables:",
-            tables.map((t: any) => t.table_name).join(", ")
-          );
-
-          return {
-            success: true,
-            message: "Complete schema already exists",
-            tablesFound: tables.map((t: any) => t.table_name),
-          };
-        } else {
-          console.log("🔄 Core schema exists but social media tables missing - creating social tables only");
-          // Skip core table creation, jump to social tables
-          await createSocialTables(migrationConnection);
-          
-          const tables = await migrationConnection`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            ORDER BY table_name
-          `;
-          
-          console.log("✅ Social tables added successfully");
-          console.log("📋 All tables:", tables.map((t: any) => t.table_name).join(", "));
-          
-          return {
-            success: true,
-            message: "Social media tables added to existing schema",
-            tablesFound: tables.map((t: any) => t.table_name),
-          };
+          console.log("✅ Added is_public column");
         }
+
+        if (socialTablesCheck[0].count < 6) {
+          console.log("🔄 Core schema exists but social media tables missing - creating social tables");
+          await createSocialTables(migrationConnection);
+          console.log("✅ Social tables added successfully");
+        } else {
+          console.log("✅ All social media tables already exist");
+        }
+
+        // Verify final schema completeness
+        const tables = await migrationConnection`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          ORDER BY table_name
+        `;
+
+        console.log("📋 All tables:", tables.map((t: any) => t.table_name).join(", "));
+
+        return {
+          success: true,
+          message: "Schema validation and updates complete",
+          tablesFound: tables.map((t: any) => t.table_name),
+        };
       }
     } catch (e) {
       console.log("📝 No existing schema found - proceeding with migration");
