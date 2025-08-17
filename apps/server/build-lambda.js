@@ -119,8 +119,8 @@ try {
 
   // Copy migration files for database migrations
   console.log("📋 Copying migration files...");
-  const drizzleSourceDir = join(__dirname, "drizzle");
-  const drizzleDestDir = join(outDir, "drizzle");
+  const drizzleSourceDir = join(__dirname, "../../packages/database/drizzle");
+  const drizzleDestDir = join(outDir, "packages/database/drizzle");
 
   if (existsSync(drizzleSourceDir)) {
     // Create drizzle directory in output
@@ -155,7 +155,7 @@ try {
   console.log("📦 Files created:");
   console.log("  - index.js (bundled Lambda function)");
   console.log("  - package.json (Lambda package metadata)");
-  console.log("  - drizzle/ (migration files)");
+  console.log("  - packages/database/drizzle/ (migration files)");
 } catch (error) {
   console.error("❌ Build failed:", error);
   process.exit(1);

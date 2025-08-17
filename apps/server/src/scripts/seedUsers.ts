@@ -143,7 +143,7 @@ async function createUsers(
   emailDomain: string
 ): Promise<CreatedUser[]> {
   console.log(`🚀 Starting createUsers function for ${count} users`);
-  
+
   // Test database connection first
   console.log(`🧪 Testing database connection...`);
   try {
@@ -153,7 +153,7 @@ async function createUsers(
     console.error(`❌ Database connection test failed:`, error);
     throw error;
   }
-  
+
   const created: CreatedUser[] = [];
 
   for (let i = 1; i <= count; i++) {
@@ -161,7 +161,7 @@ async function createUsers(
     const email = makeEmail(i, emailDomain);
     const name = makeName();
     const password = makePassword(i);
-    
+
     // Check if user exists first to avoid unnecessary bcrypt operations
     console.log(`🔍 Checking if user ${i} exists: ${email}`);
     const existing = await db
@@ -169,16 +169,16 @@ async function createUsers(
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
-    
+
     if (existing[0]) {
       console.log(`♻️  User ${i} already exists, skipping bcrypt and insert`);
       created.push({ id: existing[0].id, email, name, password });
       continue;
     }
-    
+
     console.log(`🔐 Hashing password for user ${i}`);
     // Use fewer rounds for dev/qa environments to speed up seeding
-    const bcryptRounds = process.env.NODE_ENV === 'production' ? 12 : 8;
+    const bcryptRounds = process.env.NODE_ENV === "production" ? 12 : 8;
     const passwordHash = await bcrypt.hash(password, bcryptRounds);
     console.log(`✅ Password hashed for user ${i} (${bcryptRounds} rounds)`);
 
@@ -805,9 +805,10 @@ function shuffle<T>(arr: T[]): T[] {
 
 async function writeCredentialsFile(usersCreated: CreatedUser[]) {
   // Use /tmp in Lambda environment, otherwise use repository root
-  const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT;
+  const isLambda =
+    process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT;
   let outDir: string;
-  
+
   if (isLambda) {
     // Lambda environment - use /tmp directory
     outDir = "/tmp";
@@ -817,7 +818,7 @@ async function writeCredentialsFile(usersCreated: CreatedUser[]) {
     outDir = path.join(repoRoot, "data");
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
   }
-  
+
   const outPath = path.join(outDir, ".local-seed-users.md");
 
   const lines: string[] = [];

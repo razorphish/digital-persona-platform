@@ -1190,11 +1190,13 @@ jobs:
 
           update_lambda
 
-      - name: Run Database Migrations via Lambda
+      # Option 1: Custom SQL Migration (Current)
+      - name: Run Database Migrations via Lambda (Custom SQL)
+        if: false  # Disabled - switch to true to use custom migrations
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
 
-          echo "🗄️ Running database migrations via deployed Lambda..."
+          echo "🗄️ Running custom SQL migrations via deployed Lambda..."
           echo "📤 Function: $FUNCTION_NAME"
 
           # Create a migration payload for Lambda
@@ -1221,7 +1223,7 @@ jobs:
           EOF
 
           # Invoke Lambda function to run migrations
-          echo "📤 Invoking migration endpoint..."
+          echo "📤 Invoking custom migration endpoint..."
           aws lambda invoke \
             --function-name $FUNCTION_NAME \
             --cli-binary-format raw-in-base64-out \
@@ -1235,10 +1237,65 @@ jobs:
 
           # Check if migration was successful
           if cat migration-result.json | jq -e '.statusCode == 200' > /dev/null; then
-            echo "✅ Database migrations completed successfully"
+            echo "✅ Custom migrations completed successfully"
           else
-            echo "❌ Database migration failed"
+            echo "❌ Custom migration failed"
             cat migration-result.json | jq '.body // .errorMessage // .message'
+            # Don't fail the deployment if migration fails - just warn
+            echo "⚠️ Migration failed but continuing with deployment"
+          fi
+
+      # Option 2: Proper Drizzle Migrations (New)
+      - name: Run Database Migrations via Lambda (Drizzle)
+        if: true  # Enabled - switch to false to disable Drizzle migrations
+        run: |
+          FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
+
+          echo "🗄️ Running Drizzle migrations via deployed Lambda..."
+          echo "📤 Function: $FUNCTION_NAME"
+
+          # Create a Drizzle migration payload for Lambda
+          cat > drizzle-migration-payload.json << 'EOF'
+          {
+            "version": "2.0",
+            "routeKey": "POST /drizzle-migrate",
+            "rawPath": "/drizzle-migrate",
+            "rawQueryString": "",
+            "headers": {
+              "content-type": "application/json"
+            },
+            "requestContext": {
+              "http": {
+                "method": "POST",
+                "path": "/drizzle-migrate",
+                "protocol": "HTTP/1.1",
+                "sourceIp": "127.0.0.1"
+              }
+            },
+            "body": "{}",
+            "isBase64Encoded": false
+          }
+          EOF
+
+          # Invoke Lambda function to run Drizzle migrations
+          echo "📤 Invoking Drizzle migration endpoint..."
+          aws lambda invoke \
+            --function-name $FUNCTION_NAME \
+            --cli-binary-format raw-in-base64-out \
+            --payload file://drizzle-migration-payload.json \
+            --region us-west-1 \
+            drizzle-migration-result.json
+            
+          # Check migration result
+          echo "📋 Drizzle migration result:"
+          cat drizzle-migration-result.json | jq
+
+          # Check if migration was successful
+          if cat drizzle-migration-result.json | jq -e '.statusCode == 200' > /dev/null; then
+            echo "✅ Drizzle migrations completed successfully"
+          else
+            echo "❌ Drizzle migration failed"
+            cat drizzle-migration-result.json | jq '.body // .errorMessage // .message'
             # Don't fail the deployment if migration fails - just warn
             echo "⚠️ Migration failed but continuing with deployment"
           fi

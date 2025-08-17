@@ -331,7 +331,8 @@ app.get("/", (req, res) => {
       api: "/api/trpc",
       health: "/health",
       healthWithStage: "/v1/health",
-      migrate: "/migrate", // Temporary endpoint for database initialization
+      migrate: "/migrate", // Temporary endpoint for database initialization (custom SQL)
+      drizzleMigrate: "/drizzle-migrate", // New endpoint for proper Drizzle migrations
       seed: "/seed", // Temporary endpoint for database seeding
       debugSchema: "/debug-schema", // Temporary endpoint for schema inspection
     },
@@ -363,6 +364,35 @@ app.post("/migrate", async (req, res) => {
       status: "error",
       message: "Database migration failed",
       error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+logger.info("🔧 Setting up Drizzle migration endpoint");
+
+// New Drizzle-based migration endpoint
+app.post("/drizzle-migrate", async (req, res) => {
+  logger.info("Drizzle database migration requested");
+
+  try {
+    // Import and run Drizzle migrations
+    const { runDrizzleMigrations } = await import("./drizzle-migrate.js");
+    const result = await runDrizzleMigrations();
+
+    logger.info("Drizzle migration completed", result);
+    res.json({
+      status: "success",
+      message: "Drizzle migrations completed successfully",
+      result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error("Drizzle migration failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "Drizzle migration failed",
+      error: error.message,
       timestamp: new Date().toISOString(),
     });
   }

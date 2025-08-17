@@ -337,7 +337,7 @@ export async function runMigrations() {
           console.log("✅ Social tables added successfully");
         } else {
           console.log("✅ All social media tables already exist");
-          
+
           // Check for missing columns in existing feed_items table
           const viewedAtColumnCheck = await migrationConnection`
             SELECT COUNT(*) as count 
@@ -348,7 +348,9 @@ export async function runMigrations() {
           `;
 
           if (Number(viewedAtColumnCheck[0].count) === 0) {
-            console.log("🔄 Adding missing timestamp columns to feed_items table");
+            console.log(
+              "🔄 Adding missing timestamp columns to feed_items table"
+            );
             try {
               await migrationConnection`
                 ALTER TABLE feed_items 
@@ -358,7 +360,10 @@ export async function runMigrations() {
               `;
               console.log("✅ Added missing timestamp columns to feed_items");
             } catch (error) {
-              console.error("❌ Failed to add timestamp columns to feed_items:", error);
+              console.error(
+                "❌ Failed to add timestamp columns to feed_items:",
+                error
+              );
               throw error;
             }
           } else {
