@@ -1198,7 +1198,7 @@ jobs:
 
       # Option 1: Custom SQL Migration (Current)
       - name: Run Database Migrations via Lambda (Custom SQL)
-        if: false  # Disabled - switch to true to use custom migrations
+        if: false # Disabled - switch to true to use custom migrations
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
 
@@ -1253,7 +1253,7 @@ jobs:
 
       # Option 2: Proper Drizzle Migrations (New)
       - name: Run Database Migrations via Lambda (Drizzle)
-        if: true  # Enabled - switch to false to disable Drizzle migrations
+        if: true # Enabled - switch to false to disable Drizzle migrations
         run: |
           FUNCTION_NAME="${{ needs.detect-environment.outputs.function_name }}"
 

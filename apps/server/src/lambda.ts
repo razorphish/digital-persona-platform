@@ -476,16 +476,17 @@ app.post("/fix-migrations", async (req, res) => {
     `;
 
     // Check existing migrations
-    const existingMigrations = await db`SELECT hash FROM "__drizzle_migrations"`;
-    const existingHashes = existingMigrations.map(m => m.hash);
+    const existingMigrations =
+      await db`SELECT hash FROM "__drizzle_migrations"`;
+    const existingHashes = existingMigrations.map((m) => m.hash);
 
     // Migrations to mark as applied (since database is in correct state)
     const migrationsToMark = [
       "0000_pink_shockwave",
-      "0001_curvy_brood", 
+      "0001_curvy_brood",
       "0002_equal_moonstone",
       "0003_magical_namora",
-      "0004_clean_mad_thinker"
+      "0004_clean_mad_thinker",
     ];
 
     // Insert missing migrations
@@ -495,7 +496,9 @@ app.post("/fix-migrations", async (req, res) => {
       if (!existingHashes.includes(hash)) {
         await db`
           INSERT INTO "__drizzle_migrations" (hash, created_at) 
-          VALUES (${hash}, ${Date.now() - (migrationsToMark.length - i) * 60000})
+          VALUES (${hash}, ${
+          Date.now() - (migrationsToMark.length - i) * 60000
+        })
         `;
         insertedCount++;
       }
@@ -503,7 +506,10 @@ app.post("/fix-migrations", async (req, res) => {
 
     await db.end();
 
-    logger.info("Migration tracking fixed", { insertedCount, totalMigrations: migrationsToMark.length });
+    logger.info("Migration tracking fixed", {
+      insertedCount,
+      totalMigrations: migrationsToMark.length,
+    });
 
     res.json({
       status: "success",
