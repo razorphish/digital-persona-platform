@@ -132,6 +132,9 @@ async function createSocialTables(migrationConnection: any) {
       "was_liked" boolean DEFAULT false,
       "was_shared" boolean DEFAULT false,
       "was_dismissed" boolean DEFAULT false,
+      "viewed_at" timestamp,
+      "clicked_at" timestamp,
+      "dismissed_at" timestamp,
       "created_at" timestamp DEFAULT now() NOT NULL,
       "updated_at" timestamp DEFAULT now() NOT NULL
     );
@@ -334,6 +337,33 @@ export async function runMigrations() {
           console.log("✅ Social tables added successfully");
         } else {
           console.log("✅ All social media tables already exist");
+          
+          // Check for missing columns in existing feed_items table
+          const viewedAtColumnCheck = await migrationConnection`
+            SELECT COUNT(*) as count 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'feed_items' 
+            AND column_name = 'viewed_at'
+          `;
+
+          if (Number(viewedAtColumnCheck[0].count) === 0) {
+            console.log("🔄 Adding missing timestamp columns to feed_items table");
+            try {
+              await migrationConnection`
+                ALTER TABLE feed_items 
+                ADD COLUMN viewed_at timestamp,
+                ADD COLUMN clicked_at timestamp,
+                ADD COLUMN dismissed_at timestamp
+              `;
+              console.log("✅ Added missing timestamp columns to feed_items");
+            } catch (error) {
+              console.error("❌ Failed to add timestamp columns to feed_items:", error);
+              throw error;
+            }
+          } else {
+            console.log("✅ feed_items timestamp columns already exist");
+          }
         }
 
         // Verify final schema completeness
