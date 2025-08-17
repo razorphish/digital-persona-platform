@@ -387,13 +387,28 @@ app.get("/debug-schema", async (req, res) => {
       WHERE table_name = 'personas' AND table_schema = 'public' 
       ORDER BY column_name
     `;
+
+    // Test the exact query the migration uses
+    const isPublicColumnCheck = await db`
+      SELECT COUNT(*) as count 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = 'personas' 
+      AND column_name = 'is_public'
+    `;
     
     await db.end();
     
-    logger.info("Schema debug completed", { columnCount: columns.length });
+    logger.info("Schema debug completed", { 
+      columnCount: columns.length, 
+      isPublicCount: isPublicColumnCheck[0].count 
+    });
+    
     res.json({
       status: "success",
-      columns: columns.map(c => `${c.column_name}: ${c.data_type}`),
+      columns: columns.map((c) => `${c.column_name}: ${c.data_type}`),
+      isPublicColumnCount: isPublicColumnCheck[0].count,
+      migrationWouldAdd: isPublicColumnCheck[0].count === 0,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
