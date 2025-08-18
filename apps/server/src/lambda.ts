@@ -595,23 +595,24 @@ app.post("/fix-migrations", async (req, res) => {
             VALUES (${migrationName}, ${timestamp})
           `;
           insertedCount++;
-        }
+                }
 
-    await db.end();
+        await db.end();
 
-    logger.info("Migration tracking fixed", {
-      insertedCount,
-      totalMigrations: migrationsToMark.length,
-    });
+        logger.info("Migration tracking fixed", {
+          insertedCount,
+          totalMigrations: migrationFiles.length,
+        });
 
-    res.json({
-      status: "success",
-      message: "Migration tracking fixed",
-      existingMigrations: existingHashes.length,
-      migrationsAdded: insertedCount,
-      totalMigrations: migrationsToMark.length,
-      timestamp: new Date().toISOString(),
-    });
+            res.json({
+          status: "success",
+          message: "Migration tracking fixed",
+          migrationsCleared: true,
+          migrationsAdded: insertedCount,
+          totalMigrations: migrationFiles.length,
+          migrationFiles: migrationFiles,
+          timestamp: new Date().toISOString(),
+        });
   } catch (error: any) {
     logger.error("Migration tracking fix failed", error);
     res.status(500).json({
