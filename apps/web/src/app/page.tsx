@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "../components/ui/Button";
 import { Footer } from "../components/Footer";
 import { useAuth } from "../contexts/AuthContext";
@@ -11,46 +12,53 @@ export default function LandingPage() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, error, clearError, isAuthenticated } = useAuth();
+  const router = useRouter();
 
-  // If user is already authenticated, direct to dashboard
-  if (isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <img
-            src="/logo.svg"
-            alt="Hibiji"
-            className="h-12 w-auto mx-auto mb-6"
-          />
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Welcome back to Hibiji!
-          </h1>
-          <p className="text-gray-600 mb-6">You are already signed in.</p>
-          <Link href="/dashboard">
-            <Button size="lg">Go to Dashboard</Button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  // If user is already authenticated, redirect directly to dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [isAuthenticated, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!email || !password) {
-      return;
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
 
+    console.log("🔐 Login attempt started");
+
+    // Clear any previous errors
+    clearError();
+
+    // Client-side validation
+    if (!email || !password) {
+      console.log("❌ Form validation failed: empty fields");
+      return false;
+    }
+
+    if (!email.includes("@")) {
+      console.log("❌ Form validation failed: invalid email");
+      return false;
+    }
+
+    setIsSubmitting(true);
+
     try {
-      setIsSubmitting(true);
-      clearError();
+      console.log("🔐 Form submission: Starting login process...");
       await login(email, password);
-      // AuthMiddleware will automatically redirect to feed after successful login
+      console.log("✅ Form submission: Login successful");
+      // AuthMiddleware will automatically redirect to dashboard after successful login
     } catch (error) {
-      // Error is handled by AuthContext
+      console.error("❌ Form submission: Login failed:", error);
+      // Error is already handled by AuthContext and will be displayed
+      // The error state is managed by the AuthContext, so no additional handling needed here
     } finally {
       setIsSubmitting(false);
     }
+
+    return false;
   };
 
   return (
@@ -104,7 +112,12 @@ export default function LandingPage() {
             <h2 className="text-xl font-semibold text-gray-900 mb-4 text-center">
               Sign in to Hibiji
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4"
+              noValidate
+              autoComplete="off"
+            >
               <div>
                 <label
                   htmlFor="email"
@@ -117,11 +130,20 @@ export default function LandingPage() {
                   id="email"
                   name="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    // Clear error when user starts typing
+                    if (error) clearError();
+                  }}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                    error
+                      ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                      : "border-gray-300 focus:ring-indigo-500 focus:border-transparent"
+                  }`}
                   placeholder="Enter your email"
                   required
                   autoComplete="email"
+                  disabled={isSubmitting}
                 />
               </div>
               <div>
@@ -136,27 +158,83 @@ export default function LandingPage() {
                   id="password"
                   name="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    // Clear error when user starts typing
+                    if (error) clearError();
+                  }}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                    error
+                      ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                      : "border-gray-300 focus:ring-indigo-500 focus:border-transparent"
+                  }`}
                   placeholder="Enter your password"
                   required
                   autoComplete="current-password"
+                  disabled={isSubmitting}
                 />
               </div>
 
               {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-600">{error}</p>
+                <div className="p-4 bg-red-50 border border-red-300 rounded-md">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg
+                        className="h-5 w-5 text-red-400"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-800">
+                        Login Failed
+                      </h3>
+                      <div className="mt-1 text-sm text-red-700">{error}</div>
+                    </div>
+                  </div>
                 </div>
               )}
 
               <Button
-                type="submit"
+                type="button"
                 size="lg"
                 className="w-full"
-                disabled={isSubmitting || !email || !password}
+                disabled={isSubmitting || !email.trim() || !password}
+                onClick={handleSubmit}
               >
-                {isSubmitting ? "Signing in..." : "Sign In"}
+                {isSubmitting ? (
+                  <div className="flex items-center">
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    Signing in...
+                  </div>
+                ) : (
+                  "Sign In"
+                )}
               </Button>
             </form>
 

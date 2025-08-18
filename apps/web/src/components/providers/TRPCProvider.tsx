@@ -75,9 +75,11 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
       const status = error.data?.httpStatus;
       const isAuthError = status === 401 || status === 403;
 
-      // Don't handle auth errors if we're already on auth pages
+      // Don't handle auth errors if we're already on auth pages or login page
       // This prevents redirects during login/register attempts with invalid credentials
-      const isOnAuthPage = window.location.pathname.startsWith("/auth/");
+      const isOnAuthPage =
+        window.location.pathname.startsWith("/auth/") ||
+        window.location.pathname === "/";
       if (isOnAuthPage) {
         return;
       }
@@ -151,7 +153,8 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
               // Only clear tokens if we're not on an auth page and this isn't during initial load
               const isInitialLoad = performance.navigation?.type === 1; // PAGE_LOAD type
               const isOnAuthPage =
-                window.location.pathname.startsWith("/auth/");
+                window.location.pathname.startsWith("/auth/") ||
+                window.location.pathname === "/";
 
               console.log("401 Response context:", {
                 isInitialLoad,
@@ -166,7 +169,10 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
 
                 // Add a small delay to prevent race conditions
                 setTimeout(() => {
-                  if (!window.location.pathname.startsWith("/auth/")) {
+                  if (
+                    !window.location.pathname.startsWith("/auth/") &&
+                    window.location.pathname !== "/"
+                  ) {
                     window.location.href = "/";
                   }
                 }, 100);

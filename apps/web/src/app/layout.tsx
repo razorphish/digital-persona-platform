@@ -3,7 +3,6 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { TRPCProvider } from "../components/providers/TRPCProvider";
 import { AuthProvider } from "../contexts/AuthContext";
-import { AuthMiddleware } from "../components/auth/AuthMiddleware";
 import ConditionalNavigation from "../components/navigation/ConditionalNavigation";
 
 const inter = Inter({
@@ -40,7 +39,6 @@ export default function RootLayout({
       <body className={inter.className}>
         <TRPCProvider>
           <AuthProvider>
-            <AuthMiddleware />
             <ConditionalNavigation />
             {children}
           </AuthProvider>
