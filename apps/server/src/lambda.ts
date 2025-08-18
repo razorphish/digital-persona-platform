@@ -535,8 +535,8 @@ app.post("/fix-migrations", async (req, res) => {
 
     const db = postgres(connectionString);
 
-            // Create drizzle migrations table if it doesn't exist
-        await db`
+    // Create drizzle migrations table if it doesn't exist
+    await db`
           CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
             id SERIAL PRIMARY KEY,
             hash text NOT NULL,
@@ -544,75 +544,76 @@ app.post("/fix-migrations", async (req, res) => {
           )
         `;
 
-        // For this specific case, we need to clear existing migration tracking
-        // and use a different approach since our custom SQL migration already 
-        // applied the schema changes
-        await db`DELETE FROM "__drizzle_migrations"`;
+    // For this specific case, we need to clear existing migration tracking
+    // and use a different approach since our custom SQL migration already
+    // applied the schema changes
+    await db`DELETE FROM "__drizzle_migrations"`;
 
-        // Read migration files from the bundled directory
-        const fs = (await import("fs")).default;
-        const path = (await import("path")).default;
-        
-        let migrationsDir;
-        if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
-          // Lambda environment - migrations are bundled
-          migrationsDir = "/var/task/packages/database/drizzle";
-        } else {
-          // Local development
-          migrationsDir = path.join(process.cwd(), "packages/database/drizzle");
-        }
+    // Read migration files from the bundled directory
+    const fs = (await import("fs")).default;
+    const path = (await import("path")).default;
 
-        console.log("📁 Looking for migrations in:", migrationsDir);
-        
-        let migrationFiles = [];
-        try {
-          migrationFiles = fs.readdirSync(migrationsDir)
-            .filter(file => file.endsWith('.sql'))
-            .sort();
-          console.log("📋 Found migration files:", migrationFiles);
-        } catch (error) {
-          console.warn("⚠️ Could not read migration files, using fallback list");
-          // Fallback to known migrations
-          migrationFiles = [
-            "0000_pink_shockwave.sql",
-            "0001_curvy_brood.sql", 
-            "0002_equal_moonstone.sql",
-            "0003_magical_namora.sql",
-            "0004_clean_mad_thinker.sql"
-          ];
-        }
+    let migrationsDir;
+    if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      // Lambda environment - migrations are bundled
+      migrationsDir = "/var/task/packages/database/drizzle";
+    } else {
+      // Local development
+      migrationsDir = path.join(process.cwd(), "packages/database/drizzle");
+    }
 
-        // Insert all migrations as applied (since database is in correct state)
-        let insertedCount = 0;
-        for (let i = 0; i < migrationFiles.length; i++) {
-          const fileName = migrationFiles[i];
-          const migrationName = fileName.replace('.sql', '');
-          const timestamp = Date.now() - ((migrationFiles.length - i) * 60000);
-          
-          console.log(`📝 Marking migration as applied: ${migrationName}`);
-          await db`
+    console.log("📁 Looking for migrations in:", migrationsDir);
+
+    let migrationFiles = [];
+    try {
+      migrationFiles = fs
+        .readdirSync(migrationsDir)
+        .filter((file) => file.endsWith(".sql"))
+        .sort();
+      console.log("📋 Found migration files:", migrationFiles);
+    } catch (error) {
+      console.warn("⚠️ Could not read migration files, using fallback list");
+      // Fallback to known migrations
+      migrationFiles = [
+        "0000_pink_shockwave.sql",
+        "0001_curvy_brood.sql",
+        "0002_equal_moonstone.sql",
+        "0003_magical_namora.sql",
+        "0004_clean_mad_thinker.sql",
+      ];
+    }
+
+    // Insert all migrations as applied (since database is in correct state)
+    let insertedCount = 0;
+    for (let i = 0; i < migrationFiles.length; i++) {
+      const fileName = migrationFiles[i];
+      const migrationName = fileName.replace(".sql", "");
+      const timestamp = Date.now() - (migrationFiles.length - i) * 60000;
+
+      console.log(`📝 Marking migration as applied: ${migrationName}`);
+      await db`
             INSERT INTO "__drizzle_migrations" (hash, created_at)
             VALUES (${migrationName}, ${timestamp})
           `;
-          insertedCount++;
-                }
+      insertedCount++;
+    }
 
-        await db.end();
+    await db.end();
 
-        logger.info("Migration tracking fixed", {
-          insertedCount,
-          totalMigrations: migrationFiles.length,
-        });
+    logger.info("Migration tracking fixed", {
+      insertedCount,
+      totalMigrations: migrationFiles.length,
+    });
 
-            res.json({
-          status: "success",
-          message: "Migration tracking fixed",
-          migrationsCleared: true,
-          migrationsAdded: insertedCount,
-          totalMigrations: migrationFiles.length,
-          migrationFiles: migrationFiles,
-          timestamp: new Date().toISOString(),
-        });
+    res.json({
+      status: "success",
+      message: "Migration tracking fixed",
+      migrationsCleared: true,
+      migrationsAdded: insertedCount,
+      totalMigrations: migrationFiles.length,
+      migrationFiles: migrationFiles,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error: any) {
     logger.error("Migration tracking fix failed", error);
     res.status(500).json({
