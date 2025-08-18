@@ -535,43 +535,67 @@ app.post("/fix-migrations", async (req, res) => {
 
     const db = postgres(connectionString);
 
-    // Create drizzle migrations table if it doesn't exist
-    await db`
-      CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
-        id SERIAL PRIMARY KEY,
-        hash text NOT NULL,
-        created_at bigint
-      )
-    `;
-
-    // Check existing migrations
-    const existingMigrations =
-      await db`SELECT hash FROM "__drizzle_migrations"`;
-    const existingHashes = existingMigrations.map((m) => m.hash);
-
-    // Migrations to mark as applied (since database is in correct state)
-    const migrationsToMark = [
-      "0000_pink_shockwave",
-      "0001_curvy_brood",
-      "0002_equal_moonstone",
-      "0003_magical_namora",
-      "0004_clean_mad_thinker",
-    ];
-
-    // Insert missing migrations
-    let insertedCount = 0;
-    for (let i = 0; i < migrationsToMark.length; i++) {
-      const hash = migrationsToMark[i];
-      if (!existingHashes.includes(hash)) {
+            // Create drizzle migrations table if it doesn't exist
         await db`
-          INSERT INTO "__drizzle_migrations" (hash, created_at) 
-          VALUES (${hash}, ${
-          Date.now() - (migrationsToMark.length - i) * 60000
-        })
+          CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
+            id SERIAL PRIMARY KEY,
+            hash text NOT NULL,
+            created_at bigint
+          )
         `;
-        insertedCount++;
-      }
-    }
+
+        // For this specific case, we need to clear existing migration tracking
+        // and use a different approach since our custom SQL migration already 
+        // applied the schema changes
+        await db`DELETE FROM "__drizzle_migrations"`;
+
+        // Read migration files from the bundled directory
+        const fs = (await import("fs")).default;
+        const path = (await import("path")).default;
+        
+        let migrationsDir;
+        if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+          // Lambda environment - migrations are bundled
+          migrationsDir = "/var/task/packages/database/drizzle";
+        } else {
+          // Local development
+          migrationsDir = path.join(process.cwd(), "packages/database/drizzle");
+        }
+
+        console.log("📁 Looking for migrations in:", migrationsDir);
+        
+        let migrationFiles = [];
+        try {
+          migrationFiles = fs.readdirSync(migrationsDir)
+            .filter(file => file.endsWith('.sql'))
+            .sort();
+          console.log("📋 Found migration files:", migrationFiles);
+        } catch (error) {
+          console.warn("⚠️ Could not read migration files, using fallback list");
+          // Fallback to known migrations
+          migrationFiles = [
+            "0000_pink_shockwave.sql",
+            "0001_curvy_brood.sql", 
+            "0002_equal_moonstone.sql",
+            "0003_magical_namora.sql",
+            "0004_clean_mad_thinker.sql"
+          ];
+        }
+
+        // Insert all migrations as applied (since database is in correct state)
+        let insertedCount = 0;
+        for (let i = 0; i < migrationFiles.length; i++) {
+          const fileName = migrationFiles[i];
+          const migrationName = fileName.replace('.sql', '');
+          const timestamp = Date.now() - ((migrationFiles.length - i) * 60000);
+          
+          console.log(`📝 Marking migration as applied: ${migrationName}`);
+          await db`
+            INSERT INTO "__drizzle_migrations" (hash, created_at)
+            VALUES (${migrationName}, ${timestamp})
+          `;
+          insertedCount++;
+        }
 
     await db.end();
 
