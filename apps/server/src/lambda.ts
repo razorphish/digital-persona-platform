@@ -498,12 +498,13 @@ app.get("/debug-user", async (req, res) => {
         exists: testUser.length > 0,
         email: testUser.length > 0 ? testUser[0].email : null,
         hasPassword: testUser.length > 0 ? !!testUser[0].password_hash : false,
-        passwordLength: testUser.length > 0 ? testUser[0].password_hash?.length : 0,
+        passwordLength:
+          testUser.length > 0 ? testUser[0].password_hash?.length : 0,
         createdAt: testUser.length > 0 ? testUser[0].created_at : null,
       },
       seedUsers: {
         totalCount: Number(seedUserCount[0].count),
-        sampleEmails: sampleUsers.map(u => u.email),
+        sampleEmails: sampleUsers.map((u) => u.email),
       },
       timestamp: new Date().toISOString(),
     };
