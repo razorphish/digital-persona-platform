@@ -336,6 +336,7 @@ app.get("/", (req, res) => {
       seed: "/seed", // Temporary endpoint for database seeding
       debugSchema: "/debug-schema", // Temporary endpoint for schema inspection
       fixMigrations: "/fix-migrations", // Temporary endpoint to fix migration tracking
+      debugUser: "/debug-user", // Temporary endpoint to check user credentials
     },
     timestamp: new Date().toISOString(),
   });
@@ -447,6 +448,73 @@ app.get("/debug-schema", async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Schema check failed",
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+logger.info("🔍 Setting up temporary debug user endpoint");
+
+// Temporary debug user endpoint
+app.get("/debug-user", async (req, res) => {
+  logger.info("Debug user requested");
+
+  try {
+    const postgres = (await import("postgres")).default;
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error("DATABASE_URL not configured");
+
+    const db = postgres(connectionString);
+
+    // Check if user1@seed.local exists
+    const testUser = await db`
+      SELECT id, email, password_hash, created_at 
+      FROM users 
+      WHERE email = 'user1@seed.local'
+    `;
+
+    // Count total users with seed domain
+    const seedUserCount = await db`
+      SELECT COUNT(*) as count 
+      FROM users 
+      WHERE email LIKE '%@seed.local' OR email LIKE '%@dev.seed.local'
+    `;
+
+    // Get first few seed users for verification
+    const sampleUsers = await db`
+      SELECT email, created_at 
+      FROM users 
+      WHERE email LIKE '%@seed.local' OR email LIKE '%@dev.seed.local'
+      ORDER BY created_at 
+      LIMIT 5
+    `;
+
+    await db.end();
+
+    const result = {
+      status: "success",
+      targetUser: {
+        exists: testUser.length > 0,
+        email: testUser.length > 0 ? testUser[0].email : null,
+        hasPassword: testUser.length > 0 ? !!testUser[0].password_hash : false,
+        passwordLength: testUser.length > 0 ? testUser[0].password_hash?.length : 0,
+        createdAt: testUser.length > 0 ? testUser[0].created_at : null,
+      },
+      seedUsers: {
+        totalCount: Number(seedUserCount[0].count),
+        sampleEmails: sampleUsers.map(u => u.email),
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    logger.info("User debug completed", result);
+    res.json(result);
+  } catch (error: any) {
+    logger.error("User debug failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "User debug failed",
       error: error.message,
       timestamp: new Date().toISOString(),
     });
