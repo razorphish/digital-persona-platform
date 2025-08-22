@@ -527,6 +527,54 @@ app.get("/debug-user", async (req, res) => {
 
 logger.info("🌱 Setting up temporary seeding endpoint");
 
+// Check if database is already seeded endpoint
+app.get("/check-seeded", async (req, res) => {
+  logger.info("Database seed status check requested");
+
+  try {
+    const postgres = (await import("postgres")).default;
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error("DATABASE_URL not configured");
+
+    const db = postgres(connectionString);
+
+    // Check for seed users by looking for the specific seed domain pattern
+    const seedUserCount = await db`
+      SELECT COUNT(*) as count
+      FROM users
+      WHERE email LIKE '%@dev.seed.local' OR email LIKE '%@qa.seed.local'
+    `;
+
+    const totalSeedUsers = Number(seedUserCount[0].count);
+    const isSeeded = totalSeedUsers > 0;
+
+    await db.end();
+
+    logger.info("Database seed status checked", {
+      totalSeedUsers,
+      isSeeded,
+    });
+
+    res.json({
+      status: "success",
+      isSeeded,
+      totalSeedUsers,
+      message: isSeeded 
+        ? `Database is already seeded with ${totalSeedUsers} seed users`
+        : "Database is not seeded yet",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error("Database seed status check failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "Database seed status check failed",
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 // Temporary seeding endpoint for database population
 app.post("/seed", async (req, res) => {
   logger.info("Database seeding requested");

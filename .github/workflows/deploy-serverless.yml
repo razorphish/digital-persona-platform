@@ -1320,6 +1320,48 @@ jobs:
           if [[ "$ENVIRONMENT" =~ ^(dev|qa) ]]; then
             echo "✅ Environment qualifies for seeding"
             
+            # First, check if database is already seeded
+            echo "🔍 Checking if database is already seeded..."
+            cat > check-seeded-payload.json << 'EOF'
+          {
+            "version": "2.0",
+            "routeKey": "GET /check-seeded",
+            "rawPath": "/check-seeded",
+            "rawQueryString": "",
+            "headers": {
+              "content-type": "application/json"
+            },
+            "requestContext": {
+              "http": {
+                "method": "GET",
+                "path": "/check-seeded",
+                "protocol": "HTTP/1.1",
+                "sourceIp": "127.0.0.1"
+              }
+            },
+            "body": "{}",
+            "isBase64Encoded": false
+          }
+          EOF
+            
+            aws lambda invoke \
+              --function-name $FUNCTION_NAME \
+              --cli-binary-format raw-in-base64-out \
+              --payload file://check-seeded-payload.json \
+              --region us-west-1 \
+              check-seeded-result.json
+              
+            echo "📋 Seed status check result:"
+            cat check-seeded-result.json | jq
+            
+            # Check if database is already seeded
+            if cat check-seeded-result.json | jq -e '.body' | jq -r | jq -e '.isSeeded == true' > /dev/null; then
+              TOTAL_USERS=$(cat check-seeded-result.json | jq -e '.body' | jq -r | jq -r '.totalSeedUsers')
+              echo "✅ Database is already seeded with $TOTAL_USERS users"
+              echo "⏭️  Skipping seeding step - users already exist"
+            else
+              echo "🌱 Database is not seeded yet - proceeding with seeding"
+            
             # Determine seeding parameters based on environment
             if [[ "$ENVIRONMENT" =~ ^dev ]]; then
               USER_COUNT=100  # Smaller dataset for dev
@@ -1372,12 +1414,13 @@ jobs:
             if cat seeding-result.json | jq -e '.statusCode == 200' > /dev/null; then
               echo "✅ Database seeding completed successfully"
               echo "👥 $USER_COUNT test users created with domain $EMAIL_DOMAIN"
-              echo "🔑 Use credentials: user1@$EMAIL_DOMAIN / Passw0rd!001"
+              echo "🔑 Use credentials: user001@$EMAIL_DOMAIN / Passw0rd!001"
             else
               echo "⚠️ Database seeding failed"
               cat seeding-result.json | jq '.body // .errorMessage // .message'
               echo "💡 This is not critical for deployment, continuing..."
             fi
+            fi  # End of "database is not seeded yet" block
           else
             echo "⏭️ Skipping seeding for production environment: $ENVIRONMENT"
           fi
