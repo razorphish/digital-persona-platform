@@ -139,10 +139,12 @@ export function AuthMiddleware() {
       // Validate token payload integrity - be very lenient
       try {
         const userData = AuthUtils.getUserFromToken(tokens.accessToken);
-        
+
         // Only logout if token is completely invalid AND we can't extract any data
         if (!userData || (!userData.id && !userData.sub && !userData.email)) {
-          console.warn("Completely invalid token payload detected, logging out");
+          console.warn(
+            "Completely invalid token payload detected, logging out"
+          );
           logout();
           return;
         }

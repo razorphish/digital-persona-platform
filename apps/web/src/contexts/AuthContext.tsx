@@ -52,51 +52,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logoutMutation = trpc.auth.logout.useMutation();
 
   // Industry-standard secure logout function
-  const logout = useCallback(async (skipServerLogout = false) => {
-    console.log("🚪 logout: Starting secure logout process...");
-    
-    try {
-      // 1. Attempt server-side logout first (if available and not skipped)
-      if (!skipServerLogout) {
-        try {
-          const tokens = AuthUtils.getTokens();
-          if (tokens?.accessToken) {
-            console.log("🔌 logout: Attempting server-side logout...");
-            await logoutMutation.mutateAsync();
-          }
-        } catch (serverError) {
-          console.warn("⚠️ logout: Server-side logout failed, continuing with client-side logout:", serverError);
-          // Continue with client-side logout even if server logout fails
-        }
-      }
+  const logout = useCallback(
+    async (skipServerLogout = false) => {
+      console.log("🚪 logout: Starting secure logout process...");
 
-      // 2. Clear all client-side authentication data (industry standard)
-      AuthUtils.clearTokens();
-      
-      // 3. Clear all user state and cached data
-      setUser(null);
-      setError(null);
-      setIsLoading(false);
-      
-      // 4. Clear any cached API data (if using query cache)
-      // This would clear tRPC cache if needed in the future
-      
-      console.log("✅ logout: Secure logout completed, redirecting to home");
-      
-      // 5. Redirect to public page
-      router.push("/");
-      
-    } catch (error) {
-      console.error("❌ logout: Error during logout process:", error);
-      
-      // Emergency logout - clear everything even if there are errors
-      AuthUtils.clearTokens();
-      setUser(null);
-      setError(null);
-      setIsLoading(false);
-      router.push("/");
-    }
-  }, [router, logoutMutation]);
+      try {
+        // 1. Attempt server-side logout first (if available and not skipped)
+        if (!skipServerLogout) {
+          try {
+            const tokens = AuthUtils.getTokens();
+            if (tokens?.accessToken) {
+              console.log("🔌 logout: Attempting server-side logout...");
+              await logoutMutation.mutateAsync();
+            }
+          } catch (serverError) {
+            console.warn(
+              "⚠️ logout: Server-side logout failed, continuing with client-side logout:",
+              serverError
+            );
+            // Continue with client-side logout even if server logout fails
+          }
+        }
+
+        // 2. Clear all client-side authentication data (industry standard)
+        AuthUtils.clearTokens();
+
+        // 3. Clear all user state and cached data
+        setUser(null);
+        setError(null);
+        setIsLoading(false);
+
+        // 4. Clear any cached API data (if using query cache)
+        // This would clear tRPC cache if needed in the future
+
+        console.log("✅ logout: Secure logout completed, redirecting to home");
+
+        // 5. Redirect to public page
+        router.push("/");
+      } catch (error) {
+        console.error("❌ logout: Error during logout process:", error);
+
+        // Emergency logout - clear everything even if there are errors
+        AuthUtils.clearTokens();
+        setUser(null);
+        setError(null);
+        setIsLoading(false);
+        router.push("/");
+      }
+    },
+    [router, logoutMutation]
+  );
 
   // Enhanced authentication checking with better error handling
   const checkAuthState = useCallback(() => {
@@ -235,10 +240,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Only logout if token is significantly expired (more than 5 minutes)
             if (timeSinceExpiry > 300) {
-              console.warn("Token significantly expired during periodic check, logging out");
+              console.warn(
+                "Token significantly expired during periodic check, logging out"
+              );
               logout();
             } else {
-              console.log("Token recently expired, allowing grace period in periodic check");
+              console.log(
+                "Token recently expired, allowing grace period in periodic check"
+              );
             }
           }
         } catch (error) {
@@ -277,14 +286,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // Set up logout broadcast listener for cross-tab security
-    const cleanupBroadcastListener = AuthUtils.setupLogoutBroadcastListener(() => {
-      console.log("🔄 Logout broadcast received, logging out current tab");
-      // Skip server logout since it was already done in the originating tab
-      logout(true);
-    });
+    const cleanupBroadcastListener = AuthUtils.setupLogoutBroadcastListener(
+      () => {
+        console.log("🔄 Logout broadcast received, logging out current tab");
+        // Skip server logout since it was already done in the originating tab
+        logout(true);
+      }
+    );
 
     window.addEventListener("storage", handleStorageChange);
-    
+
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       if (cleanupBroadcastListener) cleanupBroadcastListener();
