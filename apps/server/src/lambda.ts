@@ -525,6 +525,70 @@ app.get("/debug-user", async (req, res) => {
   // Note: Temporary fix-migrations endpoint removed - no longer needed
   // Migration sync completed successfully, Drizzle is now the standard
 
+logger.info("🔍 Setting up temporary feed debug endpoint");
+
+// Check feed data endpoint
+app.get("/debug-feed", async (req, res) => {
+  logger.info("Feed debug requested");
+
+  try {
+    const postgres = (await import("postgres")).default;
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error("DATABASE_URL not configured");
+
+    const db = postgres(connectionString);
+
+    // Check feed_items table
+    const feedItemsCount = await db`
+      SELECT COUNT(*) as count FROM feed_items
+    `;
+
+    // Check sample feed items
+    const sampleFeedItems = await db`
+      SELECT id, user_id, item_type, persona_id, creator_id, algorithm_source, created_at
+      FROM feed_items
+      ORDER BY created_at DESC
+      LIMIT 5
+    `;
+
+    // Check personas count
+    const personasCount = await db`
+      SELECT COUNT(*) as count FROM personas
+    `;
+
+    // Check users count
+    const usersCount = await db`
+      SELECT COUNT(*) as count FROM users
+    `;
+
+    await db.end();
+
+    const result = {
+      status: "success",
+      feedItems: {
+        total: Number(feedItemsCount[0].count),
+        sample: sampleFeedItems,
+      },
+      relatedData: {
+        personas: Number(personasCount[0].count),
+        users: Number(usersCount[0].count),
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    logger.info("Feed debug completed", result);
+    res.json(result);
+  } catch (error: any) {
+    logger.error("Feed debug failed", error);
+    res.status(500).json({
+      status: "error",
+      message: "Feed debug failed",
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 logger.info("🌱 Setting up temporary seeding endpoint");
 
 // Check if database is already seeded endpoint
