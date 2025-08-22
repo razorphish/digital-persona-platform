@@ -527,67 +527,7 @@ app.get("/debug-user", async (req, res) => {
 
 // Debug endpoints removed - feed data investigation completed
 
-logger.info("🔍 Setting up feed debug endpoint");
-
-// Debug feed endpoint for investigating deployment issues
-app.get("/debug-feed-issue", async (req, res) => {
-  logger.info("Feed issue debug requested");
-
-  try {
-    const postgres = (await import("postgres")).default;
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) throw new Error("DATABASE_URL not configured");
-
-    const db = postgres(connectionString);
-
-    // Check feed_items table
-    const feedItemsCount = await db`
-      SELECT COUNT(*) as count FROM feed_items
-    `;
-
-    // Check if specific user has feed items
-    const userEmail = 'user001@dev.seed.local';
-    const userFeedItems = await db`
-      SELECT f.id, f.item_type, f.algorithm_source, p.name as persona_name
-      FROM feed_items f
-      LEFT JOIN personas p ON f.persona_id = p.id
-      WHERE f.user_id = (
-        SELECT id FROM users WHERE email = ${userEmail} LIMIT 1
-      )
-      LIMIT 5
-    `;
-
-    // Check if user exists
-    const userCheck = await db`
-      SELECT id, email FROM users WHERE email = ${userEmail} LIMIT 1
-    `;
-
-    await db.end();
-
-    const result = {
-      status: "success",
-      database: {
-        totalFeedItems: Number(feedItemsCount[0].count),
-        userExists: userCheck.length > 0,
-        userEmail: userEmail,
-        userFeedItems: userFeedItems.length,
-        sampleItems: userFeedItems,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    logger.info("Feed issue debug completed", result);
-    res.json(result);
-  } catch (error: any) {
-    logger.error("Feed issue debug failed", error);
-    res.status(500).json({
-      status: "error",
-      message: "Feed issue debug failed",
-      error: error.message,
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
+// Debug endpoints removed - backend API confirmed working correctly
 
 logger.info("🌱 Setting up temporary seeding endpoint");
 

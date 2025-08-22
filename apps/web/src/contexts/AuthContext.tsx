@@ -206,12 +206,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Initializing auth state on mount");
         checkAuthState();
       }
-    }, 100);
+    }, 250); // Increased delay to ensure stable hydration
 
     return () => clearTimeout(timer);
   }, [isInitialized, checkAuthState]); // Include dependencies to prevent stale closures
 
-  // Periodic token validation (every 5 minutes)
+  // Periodic token validation (every 10 minutes) - reduced frequency to prevent race conditions
   useEffect(() => {
     // Only start periodic validation after initialization
     if (!isInitialized) return;
@@ -220,15 +220,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user) {
         console.log("Periodic token validation check");
         const tokens = AuthUtils.getTokens();
-        if (
-          !tokens?.accessToken ||
-          AuthUtils.isTokenExpired(tokens.accessToken)
-        ) {
-          console.warn("Token expired during session, logging out");
+        if (!tokens?.accessToken) {
+          console.warn("No token found during periodic check, logging out");
           logout();
+          return;
+        }
+
+        // Be more lenient with expiration checks in periodic validation
+        try {
+          if (AuthUtils.isTokenExpired(tokens.accessToken)) {
+            const tokenData = AuthUtils.getUserFromToken(tokens.accessToken);
+            const currentTime = Date.now() / 1000;
+            const timeSinceExpiry = currentTime - (tokenData as any)?.exp;
+
+            // Only logout if token is significantly expired (more than 5 minutes)
+            if (timeSinceExpiry > 300) {
+              console.warn("Token significantly expired during periodic check, logging out");
+              logout();
+            } else {
+              console.log("Token recently expired, allowing grace period in periodic check");
+            }
+          }
+        } catch (error) {
+          console.error("Error during periodic token validation:", error);
+          // Don't logout on validation errors during periodic checks
         }
       }
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 10 * 60 * 1000); // 10 minutes - reduced frequency
 
     return () => clearInterval(interval);
   }, [user, logout, isInitialized]);
