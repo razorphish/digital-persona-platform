@@ -14,17 +14,21 @@ export default function LandingPage() {
   const { login, error, clearError, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  // TEMPORARILY DISABLED: If user is already authenticated, redirect directly to dashboard
+    // If user is already authenticated, redirect to dashboard
   useEffect(() => {
-    console.log("🏠 Landing page auth check - DISABLED FOR DEBUGGING:", {
+    console.log("🏠 Landing page auth check:", {
       isAuthenticated,
       timestamp: new Date().toISOString(),
     });
     
-    // DISABLED TO DEBUG REDIRECT LOOP
-    // if (isAuthenticated) {
-    //   router.replace("/dashboard");
-    // }
+    // Only redirect if we're actually on the landing page and user is authenticated
+    // Add a small delay to prevent race conditions with AuthContext initialization
+    if (isAuthenticated) {
+      console.log("✅ User authenticated, redirecting to dashboard");
+      setTimeout(() => {
+        router.replace("/dashboard");
+      }, 100); // Small delay to ensure stable auth state
+    }
   }, [isAuthenticated, router]);
 
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
