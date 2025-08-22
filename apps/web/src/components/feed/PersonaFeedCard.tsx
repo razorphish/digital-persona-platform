@@ -78,11 +78,13 @@ export default function PersonaFeedCard({
     return () => clearTimeout(t);
   }, [inView, fetchReady, viewportIndex]);
 
-  // Check if backend is available before making any tRPC calls
-  const backendAvailable = Boolean(
-    trpc.socialEngagement &&
-      typeof trpc.socialEngagement.getPersonaEngagement === "function"
-  );
+  // Determine if we should use backend (deployed environments) or mock (local dev only)
+  const isLocalDevelopment = process.env.NODE_ENV === 'development' && 
+    (typeof window !== 'undefined' && 
+     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
+  
+  // Always try backend in deployed environments
+  const backendAvailable = !isLocalDevelopment;
 
   // Helper function to validate UUID format
   const isValidUuid = (id: string | undefined | null): id is string => {

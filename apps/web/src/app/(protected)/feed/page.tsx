@@ -33,101 +33,106 @@ interface FeedItem {
 function FeedPageContent() {
   const { user } = useAuth();
 
-  // Check if backend is available before making any tRPC calls
-  const backendAvailable = Boolean(
-    trpc.feed &&
-      trpc.discovery &&
-      typeof trpc.feed.getFeed === "function" &&
-      typeof trpc.discovery.getTrendingPersonas === "function"
-  );
+  // Determine if we should use mock data (only for local development)
+  const isLocalDevelopment =
+    process.env.NODE_ENV === "development" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1");
 
-  // Mock data defined at the top for immediate access
-  const mockFeedItems: FeedItem[] = [
-    {
-      id: "1",
-      itemType: "trending_persona",
-      persona: {
-        id: "persona-1",
-        name: "Emma Chen",
-        description:
-          "AI startup founder sharing insights about entrepreneurship and tech innovation",
-        avatar: null,
-        category: "business",
-        isPublic: true,
-        subscriptionPrice: "9.99",
+  // Always assume backend is available in deployed environments (dev01, qa, staging, prod)
+  // Only use mock data fallback for true local development
+  const backendAvailable = !isLocalDevelopment;
+
+  // Mock data defined at the top for local development fallback only
+  const mockFeedItems: FeedItem[] = useMemo(
+    () => [
+      {
+        id: "1",
+        itemType: "trending_persona",
+        persona: {
+          id: "persona-1",
+          name: "Emma Chen",
+          description:
+            "AI startup founder sharing insights about entrepreneurship and tech innovation",
+          avatar: null,
+          category: "business",
+          isPublic: true,
+          subscriptionPrice: "9.99",
+        },
+        creator: {
+          id: "creator-1",
+          name: "Emma Chen",
+          avatar: null,
+        },
+        relevanceScore: 0.95,
+        algorithmSource: "trending",
+        isPromoted: false,
+        isTrending: true,
+        metadata: {
+          reason: ["High engagement", "Trending in Business"],
+          tags: ["business", "startups", "ai"],
+          engagementData: { likes: 1250, views: 8900, subscribers: 890 },
+        },
       },
-      creator: {
-        id: "creator-1",
-        name: "Emma Chen",
-        avatar: null,
+      {
+        id: "2",
+        itemType: "persona_recommendation",
+        persona: {
+          id: "persona-2",
+          name: "Marcus Rodriguez",
+          description:
+            "Fitness coach and nutritionist helping people build healthy habits that last",
+          avatar: null,
+          category: "fitness",
+          isPublic: true,
+          subscriptionPrice: "14.99",
+        },
+        creator: {
+          id: "creator-2",
+          name: "Marcus Rodriguez",
+          avatar: null,
+        },
+        relevanceScore: 0.87,
+        algorithmSource: "personalized",
+        isPromoted: false,
+        isTrending: false,
+        metadata: {
+          reason: ["Matches your interests", "Highly rated"],
+          tags: ["fitness", "nutrition", "wellness"],
+          engagementData: { likes: 750, views: 4200, subscribers: 456 },
+        },
       },
-      relevanceScore: 0.95,
-      algorithmSource: "trending",
-      isPromoted: false,
-      isTrending: true,
-      metadata: {
-        reason: ["High engagement", "Trending in Business"],
-        tags: ["business", "startups", "ai"],
-        engagementData: { likes: 1250, views: 8900, subscribers: 890 },
+      {
+        id: "3",
+        itemType: "creator_update",
+        persona: {
+          id: "persona-3",
+          name: "Luna Park",
+          description:
+            "Digital artist creating stunning visual experiences and teaching creative techniques",
+          avatar: null,
+          category: "art",
+          isPublic: true,
+          subscriptionPrice: "12.99",
+        },
+        creator: {
+          id: "creator-3",
+          name: "Luna Park",
+          avatar: null,
+        },
+        relevanceScore: 0.82,
+        algorithmSource: "social_graph",
+        isPromoted: false,
+        isTrending: false,
+        metadata: {
+          reason: ["Following this creator", "New content available"],
+          tags: ["art", "digital", "creative"],
+          engagementData: { likes: 2100, views: 12500, subscribers: 1200 },
+        },
       },
-    },
-    {
-      id: "2",
-      itemType: "persona_recommendation",
-      persona: {
-        id: "persona-2",
-        name: "Marcus Rodriguez",
-        description:
-          "Fitness coach and nutritionist helping people build healthy habits that last",
-        avatar: null,
-        category: "fitness",
-        isPublic: true,
-        subscriptionPrice: "14.99",
-      },
-      creator: {
-        id: "creator-2",
-        name: "Marcus Rodriguez",
-        avatar: null,
-      },
-      relevanceScore: 0.87,
-      algorithmSource: "personalized",
-      isPromoted: false,
-      isTrending: false,
-      metadata: {
-        reason: ["Matches your interests", "Highly rated"],
-        tags: ["fitness", "nutrition", "wellness"],
-        engagementData: { likes: 750, views: 4200, subscribers: 456 },
-      },
-    },
-    {
-      id: "3",
-      itemType: "creator_update",
-      persona: {
-        id: "persona-3",
-        name: "Luna Park",
-        description:
-          "Digital artist creating stunning visual experiences and teaching creative techniques",
-        avatar: null,
-        category: "art",
-        isPublic: true,
-        subscriptionPrice: "12.99",
-      },
-      creator: {
-        id: "creator-3",
-        name: "Luna Park",
-        avatar: null,
-      },
-      relevanceScore: 0.82,
-      algorithmSource: "social_graph",
-      isPromoted: false,
-      isTrending: false,
-      metadata: {
-        reason: ["Following this creator", "New content available"],
-        tags: ["art", "digital", "creative"],
-        engagementData: { likes: 2100, views: 12500, subscribers: 1200 },
-      },
-    },
-  ];
+    ],
+    []
+  );
 
   const mockTrendingPersonas = useMemo(
     () => [
@@ -171,26 +176,49 @@ function FeedPageContent() {
     []
   );
 
-  // Always start with mock data to ensure immediate rendering
-  const [feedItems, setFeedItems] = useState<FeedItem[]>(mockFeedItems);
-  const [isLoading, setIsLoading] = useState(false); // Start with false since we have mock data
+  // Initialize state based on environment
+  const [feedItems, setFeedItems] = useState<FeedItem[]>(
+    isLocalDevelopment ? mockFeedItems : []
+  );
+  const [isLoading, setIsLoading] = useState(!isLocalDevelopment); // Loading for deployed environments
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [mockDataLoaded, setMockDataLoaded] = useState(true); // Already loaded since we start with it
+  const [mockDataLoaded, setMockDataLoaded] = useState(isLocalDevelopment); // Only for local dev
 
-  // Only use tRPC queries if backend is available, otherwise use null data
+  // Always try to fetch data in deployed environments, only skip for local dev without backend
   const feedQuery = backendAvailable
-    ? trpc.feed.getFeed.useQuery({
-        limit: 50,
-      })
+    ? trpc.feed.getFeed.useQuery(
+        {
+          limit: 50,
+        },
+        {
+          retry: (failureCount, error) => {
+            // Don't retry if we're in local dev and getting connection errors
+            if (isLocalDevelopment && failureCount >= 1) {
+              return false;
+            }
+            return failureCount < 3;
+          },
+        }
+      )
     : null;
 
   const trendingQuery = backendAvailable
-    ? trpc.discovery.getTrendingPersonas.useQuery({
-        timeframe: "24h" as const,
-        limit: 10,
-      })
+    ? trpc.discovery.getTrendingPersonas.useQuery(
+        {
+          timeframe: "24h" as const,
+          limit: 10,
+        },
+        {
+          retry: (failureCount, error) => {
+            if (isLocalDevelopment && failureCount >= 1) {
+              return false;
+            }
+            return failureCount < 3;
+          },
+        }
+      )
     : null;
 
   // Extract data with fallbacks
@@ -207,28 +235,43 @@ function FeedPageContent() {
     trendingQuery?.error ||
     (!backendAvailable ? new Error("Backend disabled") : null);
 
-  // tRPC mutations - only create if backend is available
-  const generateFeedMutation = backendAvailable
-    ? trpc.feed.generateFeed.useMutation({
-        onSuccess: () => {
-          refetchFeed();
-          setIsRefreshing(false);
-        },
-        onError: (error) => {
-          console.error("Error generating feed:", error);
-          setIsRefreshing(false);
-        },
-      })
-    : {
-        mutate: () => {
-          console.log("Generate feed endpoint disabled - using mock data");
-          setTimeout(() => {
-            setFeedItems([...mockFeedItems]);
-            setIsRefreshing(false);
-          }, 500);
-        },
-        isLoading: false,
-      };
+  // tRPC mutations - create for deployed environments, mock for local dev without backend
+  const generateFeedMutation = useMemo(
+    () =>
+      backendAvailable
+        ? trpc.feed.generateFeed.useMutation({
+            onSuccess: (newFeed) => {
+              console.log(
+                "✅ Feed generated successfully:",
+                newFeed?.length,
+                "items"
+              );
+              const currentRefetch = feedQuery?.refetch || (() => {});
+              currentRefetch();
+              setIsRefreshing(false);
+            },
+            onError: (error) => {
+              console.error("❌ Error generating feed:", error);
+              if (isLocalDevelopment) {
+                // Fallback to mock data in local dev
+                console.log("⚠️ Falling back to mock data in local dev");
+                setFeedItems([...mockFeedItems]);
+              }
+              setIsRefreshing(false);
+            },
+          })
+        : {
+            mutate: () => {
+              console.log("🧪 Generate feed endpoint disabled - using mock data");
+              setTimeout(() => {
+                setFeedItems([...mockFeedItems]);
+                setIsRefreshing(false);
+              }, 500);
+            },
+            isLoading: false,
+          },
+    [backendAvailable, isLocalDevelopment, mockFeedItems, feedQuery]
+  );
 
   const loadMockData = () => {
     setFeedItems([...mockFeedItems]); // Create new array to trigger re-render
@@ -262,36 +305,79 @@ function FeedPageContent() {
     mockTrendingPersonas,
   ]);
 
-  // Only try to load real data if backend is available
-  useEffect(() => {
-    if (backendAvailable && feed) {
-      // Backend available and has data, replace mock data
-      setFeedItems(feed);
-      setIsLoading(false);
-    } else if (backendAvailable && !feedLoading && !feed) {
-      // Backend available but no data yet, try to generate feed
-      setIsLoading(true);
-      handleRefreshFeed();
-    }
-    // If backend not available, we already have mock data loaded
-  }, [backendAvailable, feed, feedLoading]);
+
 
   const handleRefreshFeed = useCallback(async () => {
+    console.log("🔄 Refreshing feed...");
     setIsRefreshing(true);
 
     if (backendAvailable) {
-      generateFeedMutation.mutate({
-        refreshExisting: true,
-        categories: selectedCategory ? [selectedCategory] : undefined,
-      });
+      try {
+        generateFeedMutation.mutate({
+          refreshExisting: true,
+          categories: selectedCategory ? [selectedCategory] : undefined,
+        });
+      } catch (error) {
+        console.error("❌ Failed to refresh feed:", error);
+        setIsRefreshing(false);
+      }
     } else {
-      // Just reload mock data
+      // Local dev without backend - reload mock data
+      console.log("🧪 Refreshing mock data for local development");
       setTimeout(() => {
-        setFeedItems([...mockFeedItems]); // Create new array to trigger re-render
+        setFeedItems([...mockFeedItems]);
         setIsRefreshing(false);
       }, 500);
     }
   }, [backendAvailable, generateFeedMutation, selectedCategory, mockFeedItems]);
+
+  // Handle data loading based on environment and backend response
+  useEffect(() => {
+    if (backendAvailable && feed && feed.length > 0) {
+      // Backend available and has data, use real data
+      console.log("📰 Using real feed data:", feed.length, "items");
+      setFeedItems(feed);
+      setIsLoading(false);
+    } else if (backendAvailable && !feedLoading && feedQuery?.error) {
+      // Backend available but got an error - only fall back to mock in local dev
+      if (isLocalDevelopment) {
+        console.log(
+          "⚠️ Feed API error in local dev, falling back to mock data"
+        );
+        setFeedItems(mockFeedItems);
+        setIsLoading(false);
+      } else {
+        console.error(
+          "❌ Feed API error in deployed environment:",
+          feedQuery.error
+        );
+        // Keep loading state to show error to user
+        setIsLoading(false);
+      }
+    } else if (
+      backendAvailable &&
+      !feedLoading &&
+      (!feed || feed.length === 0)
+    ) {
+      // Backend available but no data, try to generate feed
+      console.log("🔄 No feed data found, generating new feed...");
+      setIsLoading(true);
+      handleRefreshFeed();
+    } else if (!backendAvailable) {
+      // Local development without backend - use mock data
+      console.log("🧪 Using mock data for local development");
+      setFeedItems(mockFeedItems);
+      setIsLoading(false);
+    }
+  }, [
+    backendAvailable,
+    feed,
+    feedLoading,
+    feedQuery?.error,
+    isLocalDevelopment,
+    mockFeedItems,
+    handleRefreshFeed,
+  ]);
 
   const handleFeedInteraction = async (
     feedItemId: string,
@@ -312,7 +398,47 @@ function FeedPageContent() {
     });
   };
 
-  // Only show loading if backend is available and actually loading
+  // Show error state for deployed environments when API fails
+  if (backendAvailable && feedQuery?.error && !isLocalDevelopment) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <div className="flex justify-center mb-4">
+              <svg
+                className="h-12 w-12 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-red-800 mb-2">
+              Unable to Load Feed
+            </h3>
+            <p className="text-red-600 mb-4">
+              There was an error loading your personalized feed. Please try
+              refreshing the page.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading if backend is available and actually loading
   if (backendAvailable && (isLoading || feedLoading)) {
     return (
       <div className="min-h-screen bg-gray-50">
