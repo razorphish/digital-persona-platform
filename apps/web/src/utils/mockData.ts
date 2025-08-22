@@ -160,9 +160,9 @@ export const mockPersonaEngagement = {
 
 // Mock tRPC responses for testing
 export const mockTRPCResponses = {
-  'feed.getFeed': { data: mockFeedItems },
-  'discovery.getTrendingPersonas': { data: mockTrendingPersonas },
-  'socialEngagement.getPersonaEngagement': { data: mockPersonaEngagement },
-  'socialEngagement.isLiked': { data: { isLiked: false } },
-  'socialEngagement.isFollowing': { data: { isFollowing: false } },
+  "feed.getFeed": { data: mockFeedItems },
+  "discovery.getTrendingPersonas": { data: mockTrendingPersonas },
+  "socialEngagement.getPersonaEngagement": { data: mockPersonaEngagement },
+  "socialEngagement.isLiked": { data: { isLiked: false } },
+  "socialEngagement.isFollowing": { data: { isFollowing: false } },
 };
