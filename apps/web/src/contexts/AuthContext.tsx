@@ -35,14 +35,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
 
-  // Debug logging for state changes
+  // Debug logging for state changes - ENHANCED FOR DEBUGGING
   useEffect(() => {
-    console.log("AuthProvider state change:", {
+    console.log("🔥 AuthProvider state change:", {
       hasUser: !!user,
+      userEmail: user?.email,
       isLoading,
       isInitialized,
       isAuthenticated: !!user,
       timestamp: new Date().toISOString(),
+      stackTrace: new Error().stack?.split('\n').slice(0, 5),
     });
   }, [user, isLoading, isInitialized]);
 
@@ -221,43 +223,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Only start periodic validation after initialization
     if (!isInitialized) return;
 
-    const interval = setInterval(() => {
-      if (user) {
-        console.log("Periodic token validation check");
-        const tokens = AuthUtils.getTokens();
-        if (!tokens?.accessToken) {
-          console.warn("No token found during periodic check, logging out");
-          logout();
-          return;
-        }
+    console.log("🕐 Periodic token validation - DISABLED FOR DEBUGGING");
+    // DISABLED TO DEBUG REDIRECT LOOP
+    // const interval = setInterval(() => {
+    //   if (user) {
+    //     console.log("Periodic token validation check");
+    //     const tokens = AuthUtils.getTokens();
+    //     if (!tokens?.accessToken) {
+    //       console.warn("No token found during periodic check, logging out");
+    //       logout();
+    //       return;
+    //     }
 
-        // Be more lenient with expiration checks in periodic validation
-        try {
-          if (AuthUtils.isTokenExpired(tokens.accessToken)) {
-            const tokenData = AuthUtils.getUserFromToken(tokens.accessToken);
-            const currentTime = Date.now() / 1000;
-            const timeSinceExpiry = currentTime - (tokenData as any)?.exp;
+    //     // Be more lenient with expiration checks in periodic validation
+    //     try {
+    //       if (AuthUtils.isTokenExpired(tokens.accessToken)) {
+    //         const tokenData = AuthUtils.getUserFromToken(tokens.accessToken);
+    //         const currentTime = Date.now() / 1000;
+    //         const timeSinceExpiry = currentTime - (tokenData as any)?.exp;
 
-            // Only logout if token is significantly expired (more than 5 minutes)
-            if (timeSinceExpiry > 300) {
-              console.warn(
-                "Token significantly expired during periodic check, logging out"
-              );
-              logout();
-            } else {
-              console.log(
-                "Token recently expired, allowing grace period in periodic check"
-              );
-            }
-          }
-        } catch (error) {
-          console.error("Error during periodic token validation:", error);
-          // Don't logout on validation errors during periodic checks
-        }
-      }
-    }, 10 * 60 * 1000); // 10 minutes - reduced frequency
+    //         // Only logout if token is significantly expired (more than 5 minutes)
+    //         if (timeSinceExpiry > 300) {
+    //           console.warn(
+    //             "Token significantly expired during periodic check, logging out"
+    //           );
+    //           logout();
+    //         } else {
+    //           console.log(
+    //             "Token recently expired, allowing grace period in periodic check"
+    //           );
+    //         }
+    //       }
+    //     } catch (error) {
+    //       console.error("Error during periodic token validation:", error);
+    //       // Don't logout on validation errors during periodic checks
+    //     }
+    //   }
+    // }, 10 * 60 * 1000); // 10 minutes - reduced frequency
 
-    return () => clearInterval(interval);
+    // return () => clearInterval(interval);
   }, [user, logout, isInitialized]);
 
   // Listen for storage changes and logout broadcasts (cross-tab security)

@@ -17,8 +17,8 @@ export function AuthMiddleware() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Add debug logging
-  console.log("AuthMiddleware check:", {
+  // EMERGENCY: Temporarily disable AuthMiddleware to debug redirect loop
+  console.log("AuthMiddleware: DISABLED for debugging redirect loop", {
     pathname,
     isLoading,
     isAuthenticated,
@@ -26,6 +26,9 @@ export function AuthMiddleware() {
     hasUser: !!user,
     currentTime: new Date().toISOString(),
   });
+
+  // Return early to disable all AuthMiddleware logic
+  return null;
 
   // Define protected routes that require authentication (memoized for performance)
   const protectedRoutes = useMemo(
