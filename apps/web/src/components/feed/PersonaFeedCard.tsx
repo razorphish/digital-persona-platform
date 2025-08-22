@@ -78,13 +78,7 @@ export default function PersonaFeedCard({
     return () => clearTimeout(t);
   }, [inView, fetchReady, viewportIndex]);
 
-  // Determine if we should use backend (deployed environments) or mock (local dev only)
-  const isLocalDevelopment = process.env.NODE_ENV === 'development' && 
-    (typeof window !== 'undefined' && 
-     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
-  
-  // Always try backend in deployed environments
-  const backendAvailable = !isLocalDevelopment;
+  // Always use backend - no mock data in production code
 
   // Helper function to validate UUID format
   const isValidUuid = (id: string | undefined | null): id is string => {
@@ -95,8 +89,7 @@ export default function PersonaFeedCard({
   };
 
   // Compute flags for conditional fetching; always call hooks with enabled to satisfy rules of hooks
-  const shouldFetchPersona =
-    backendAvailable && isValidUuid(persona?.id) && fetchReady;
+  const shouldFetchPersona = isValidUuid(persona?.id) && fetchReady;
 
   const personaEngagementQuery =
     trpc.socialEngagement.getPersonaEngagement.useQuery(
@@ -110,8 +103,7 @@ export default function PersonaFeedCard({
   );
 
   const validCreatorId = creator?.id || persona?.userId;
-  const shouldFetchFollow =
-    backendAvailable && isValidUuid(validCreatorId) && fetchReady;
+  const shouldFetchFollow = isValidUuid(validCreatorId) && fetchReady;
 
   const followStatusQuery = trpc.socialEngagement.isFollowing.useQuery(
     { creatorId: validCreatorId as string },
@@ -132,38 +124,19 @@ export default function PersonaFeedCard({
     [followStatusQuery.data]
   );
 
-  // tRPC mutations with fallbacks for when endpoints are disabled
-  const toggleLikeMutation = backendAvailable
-    ? trpc.socialEngagement.toggleLike.useMutation({
-        onSuccess: (result) => {
-          setIsLiked(result.isLiked);
-          setLikeCount(result.likeCount);
-        },
-      })
-    : {
-        mutate: () => {
-          // Mock toggle like behavior
-          setIsLiked(!isLiked);
-          setLikeCount(likeCount + (isLiked ? -1 : 1));
-          console.log("Toggle like endpoint disabled - using mock behavior");
-        },
-        isLoading: false,
-      };
+  // tRPC mutations
+  const toggleLikeMutation = trpc.socialEngagement.toggleLike.useMutation({
+    onSuccess: (result) => {
+      setIsLiked(result.isLiked);
+      setLikeCount(result.likeCount);
+    },
+  });
 
-  const toggleFollowMutation = backendAvailable
-    ? trpc.socialEngagement.toggleFollow.useMutation({
-        onSuccess: (result) => {
-          setIsFollowing(result.isFollowing);
-        },
-      })
-    : {
-        mutate: () => {
-          // Mock toggle follow behavior
-          setIsFollowing(!isFollowing);
-          console.log("Toggle follow endpoint disabled - using mock behavior");
-        },
-        isLoading: false,
-      };
+  const toggleFollowMutation = trpc.socialEngagement.toggleFollow.useMutation({
+    onSuccess: (result) => {
+      setIsFollowing(result.isFollowing);
+    },
+  });
 
   // Initialize state from data (either from tRPC or mock data)
   useEffect(() => {
