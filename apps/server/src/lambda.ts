@@ -525,7 +525,7 @@ app.get("/debug-user", async (req, res) => {
 // Note: Temporary fix-migrations endpoint removed - no longer needed
 // Migration sync completed successfully, Drizzle is now the standard
 
-  // Debug endpoints removed - feed data investigation completed
+// Debug endpoints removed - feed data investigation completed
 
 logger.info("🌱 Setting up temporary seeding endpoint");
 

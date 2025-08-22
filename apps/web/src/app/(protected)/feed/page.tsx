@@ -130,13 +130,26 @@ function FeedPageContent() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
             <div className="flex justify-center mb-4">
-              <svg className="h-12 w-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              <svg
+                className="h-12 w-12 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-red-800 mb-2">Unable to Load Feed</h3>
+            <h3 className="text-lg font-medium text-red-800 mb-2">
+              Unable to Load Feed
+            </h3>
             <p className="text-red-600 mb-4">
-              There was an error loading your personalized feed. Please try refreshing the page.
+              There was an error loading your personalized feed. Please try
+              refreshing the page.
             </p>
             <button
               onClick={() => window.location.reload()}
@@ -174,7 +187,10 @@ function FeedPageContent() {
             {/* Main Feed Skeleton */}
             <div className="lg:col-span-3 space-y-6">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white border border-gray-200 rounded-lg p-6 animate-pulse">
+                <div
+                  key={i}
+                  className="bg-white border border-gray-200 rounded-lg p-6 animate-pulse"
+                >
                   <div className="flex items-center space-x-3 mb-4">
                     <div className="h-12 w-12 bg-gray-200 rounded-full"></div>
                     <div className="space-y-2">
@@ -291,13 +307,26 @@ function FeedPageContent() {
             {feedItems.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
                 <div className="flex justify-center mb-4">
-                  <svg className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  <svg
+                    className="h-12 w-12 text-gray-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                    />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No feed items yet</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  No feed items yet
+                </h3>
                 <p className="text-gray-600 mb-4">
-                  We're generating your personalized feed. This may take a moment.
+                  We're generating your personalized feed. This may take a
+                  moment.
                 </p>
                 <button
                   onClick={handleRefreshFeed}
