@@ -522,8 +522,8 @@ app.get("/debug-user", async (req, res) => {
   }
 });
 
-  // Note: Temporary fix-migrations endpoint removed - no longer needed
-  // Migration sync completed successfully, Drizzle is now the standard
+// Note: Temporary fix-migrations endpoint removed - no longer needed
+// Migration sync completed successfully, Drizzle is now the standard
 
 logger.info("🔍 Setting up temporary feed debug endpoint");
 
@@ -551,6 +551,19 @@ app.get("/debug-feed", async (req, res) => {
       LIMIT 5
     `;
 
+    // Check feed items for first seed user
+    const firstUserFeedItems = await db`
+      SELECT f.id, f.item_type, f.algorithm_source, f.relevance_score, p.name as persona_name, u.name as creator_name
+      FROM feed_items f
+      LEFT JOIN personas p ON f.persona_id = p.id
+      LEFT JOIN users u ON f.creator_id = u.id
+      WHERE f.user_id = (
+        SELECT id FROM users WHERE email = 'user001@dev.seed.local' LIMIT 1
+      )
+      ORDER BY f.feed_position
+      LIMIT 10
+    `;
+
     // Check personas count
     const personasCount = await db`
       SELECT COUNT(*) as count FROM personas
@@ -568,6 +581,7 @@ app.get("/debug-feed", async (req, res) => {
       feedItems: {
         total: Number(feedItemsCount[0].count),
         sample: sampleFeedItems,
+        forFirstUser: firstUserFeedItems,
       },
       relatedData: {
         personas: Number(personasCount[0].count),
@@ -623,7 +637,7 @@ app.get("/check-seeded", async (req, res) => {
       status: "success",
       isSeeded,
       totalSeedUsers,
-      message: isSeeded 
+      message: isSeeded
         ? `Database is already seeded with ${totalSeedUsers} seed users`
         : "Database is not seeded yet",
       timestamp: new Date().toISOString(),
