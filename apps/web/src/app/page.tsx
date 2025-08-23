@@ -14,52 +14,14 @@ export default function LandingPage() {
   const { login, error, clearError, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  // Add page refresh detection
+    // Redirect authenticated users to dashboard
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      console.error("🚨 PAGE REFRESH DETECTED!", {
-        timestamp: new Date().toISOString(),
-        reason: "beforeunload event triggered",
-        isAuthenticated,
-      });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log("👁️ Page became visible - possible refresh or navigation", {
-          timestamp: new Date().toISOString(),
-          isAuthenticated,
-        });
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isAuthenticated]);
-
-    // Re-enable redirect after successful cache busting verification
-  useEffect(() => {
-    console.log("🔍 REFRESH ISSUE DEBUG - DEPLOYMENT VERIFIED", {
-      isAuthenticated,
-      timestamp: new Date().toISOString(),
-      deploymentTest: "refresh-issue-debug-v3",
-      deploymentTime: "2025-08-23 01:44:03 UTC",
-      cacheTest: "aggressive-debug-mode",
-    });
-    
-    // TEMPORARILY DISABLE REDIRECT AGAIN - DEBUG REFRESH ISSUE
     if (isAuthenticated) {
-      console.log("🚨 REDIRECT DISABLED - TESTING IF REFRESH STILL HAPPENS WITHOUT REDIRECTS");
-      // const redirectTimer = setTimeout(() => {
-      //   console.log("🚀 Executing redirect to dashboard");
-      //   router.replace("/dashboard");
-      // }, 500);
-      // return () => clearTimeout(redirectTimer);
+      const redirectTimer = setTimeout(() => {
+        router.replace("/dashboard");
+      }, 500); // Conservative delay to prevent race conditions
+      
+      return () => clearTimeout(redirectTimer);
     }
   }, [isAuthenticated, router]);
 
