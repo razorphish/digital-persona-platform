@@ -824,7 +824,7 @@ export class FeedAlgorithmService {
           }
         })
         .from(personas)
-        .leftJoin(users, eq(personas.creatorId, users.id))
+        .leftJoin(users, eq(personas.userId, users.id))
         .where(eq(personas.isPublic, true))
         .limit(limit)
         .orderBy(sql`RANDOM()`);
