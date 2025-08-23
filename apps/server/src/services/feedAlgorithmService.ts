@@ -42,6 +42,7 @@ interface FeedGenerationOptions {
   refreshExisting?: boolean;
   categories?: string[];
   excludePersonaIds?: string[];
+  quickMode?: boolean; // Skip complex algorithms for faster generation
 }
 
 export interface FeedMetrics {
@@ -83,6 +84,7 @@ export class FeedAlgorithmService {
         refreshExisting = false,
         categories,
         excludePersonaIds = [],
+        quickMode = false,
       } = options;
 
       // Get user preferences
@@ -91,6 +93,14 @@ export class FeedAlgorithmService {
       // Clear existing feed if refreshing
       if (refreshExisting) {
         await this.clearUserFeed(userId);
+      }
+
+      // Quick mode: Generate basic feed items fast
+      if (quickMode) {
+        console.log("🚀 Quick mode: Generating basic feed items");
+        const quickItems = await this.getBasicFeedItems(userId, Math.min(limit, 10));
+        await this.storeFeedItems(userId, quickItems);
+        return quickItems;
       }
 
       // Generate feed items from different sources
@@ -150,6 +160,30 @@ export class FeedAlgorithmService {
     offset: number = 0
   ): Promise<FeedItem[]> {
     try {
+      console.log(`🔍 Getting feed for user ${userId}, limit ${limit}, offset ${offset}`);
+      const startTime = Date.now();
+      
+      // Cap limit to prevent timeout
+      const safeLimit = Math.min(limit, 20);
+      
+      // First check if user has any feed items
+      const feedCount = await this.db
+        .select({ count: sql`count(*)` })
+        .from(feedItems)
+        .where(eq(feedItems.userId, userId));
+      
+      const currentCount = Number(feedCount[0]?.count || 0);
+      console.log(`📊 User has ${currentCount} existing feed items`);
+      
+      // If no feed items exist, generate them quickly
+      if (currentCount === 0) {
+        console.log("🚀 No feed items found, generating quick feed...");
+        await this.generatePersonalizedFeed(userId, { 
+          limit: 10,
+          quickMode: true 
+        });
+      }
+      
       const feedData = await this.db
         .select({
           feedItem: feedItems,
@@ -161,8 +195,11 @@ export class FeedAlgorithmService {
         .leftJoin(users, eq(feedItems.creatorId, users.id))
         .where(eq(feedItems.userId, userId))
         .orderBy(feedItems.feedPosition)
-        .limit(limit)
+        .limit(safeLimit)
         .offset(offset);
+      
+      const queryTime = Date.now() - startTime;
+      console.log(`⏱️ Feed query took ${queryTime}ms, returned ${feedData.length} items`);
 
       return feedData.map((item) => ({
         id: item.feedItem.id,
@@ -763,6 +800,57 @@ export class FeedAlgorithmService {
       }
     } catch (error) {
       console.error("Error updating preferences from interaction:", error);
+    }
+  }
+
+  /**
+   * Get basic feed items quickly (for timeout prevention)
+   */
+  private async getBasicFeedItems(userId: string, limit: number): Promise<FeedItem[]> {
+    try {
+      console.log(`🔥 Generating ${limit} basic feed items for user ${userId}`);
+      
+      // Get some public personas quickly  
+      const personaResults = await this.db
+        .select({
+          id: personas.id,
+          name: personas.name,
+          category: personas.category,
+          isPublic: personas.isPublic,
+          creator: {
+            id: users.id,
+            name: users.name,
+            email: users.email,
+          }
+        })
+        .from(personas)
+        .leftJoin(users, eq(personas.creatorId, users.id))
+        .where(eq(personas.isPublic, true))
+        .limit(limit)
+        .orderBy(sql`RANDOM()`);
+
+      return personaResults.map((p, index) => ({
+        id: `basic-${userId}-${index}`,
+        itemType: "persona_recommendation" as any,
+        persona: {
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          isPublic: p.isPublic,
+        },
+        creator: p.creator,
+        relevanceScore: 0.5,
+        algorithmSource: "basic_generation",
+        isPromoted: false,
+        isTrending: false,
+        metadata: {
+          reason: ["basic_feed_item"],
+          tags: [],
+        }
+      }));
+    } catch (error) {
+      console.error("Error generating basic feed items:", error);
+      return [];
     }
   }
 }
