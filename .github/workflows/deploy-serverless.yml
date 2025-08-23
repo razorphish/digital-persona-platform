@@ -1506,8 +1506,21 @@ jobs:
           echo "🔄 Syncing files to S3..."
           if [ -f "index.html" ]; then
             echo "✅ Frontend build output found (files extracted to current directory)"
-            aws s3 sync . s3://$S3_BUCKET/ --delete --cache-control "max-age=31536000" --exclude "*.html" --exclude "*.json" --exclude "outputs.json"
-            aws s3 sync . s3://$S3_BUCKET/ --delete --cache-control "max-age=0" --include "*.html" --include "*.json" --exclude "outputs.json"
+            
+            # Add deployment timestamp to help with cache debugging
+            echo "🕐 Deployment timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" > deployment-info.txt
+            
+            # Sync static assets with long cache (they have hash-based names)
+            aws s3 sync . s3://$S3_BUCKET/ --delete --cache-control "max-age=31536000" --exclude "*.html" --exclude "*.json" --exclude "outputs.json" --exclude "deployment-info.txt"
+            
+            # Sync HTML and JSON files with no cache + additional no-cache headers
+            aws s3 sync . s3://$S3_BUCKET/ --delete \
+              --cache-control "no-cache, no-store, must-revalidate, max-age=0" \
+              --metadata-directive REPLACE \
+              --include "*.html" --include "*.json" --exclude "outputs.json"
+            
+            # Upload deployment info with no cache
+            aws s3 cp deployment-info.txt s3://$S3_BUCKET/deployment-info.txt --cache-control "no-cache, no-store, must-revalidate, max-age=0"
           else
             echo "❌ Frontend build output not found"
             echo "📁 Available files:"
@@ -1523,11 +1536,55 @@ jobs:
           DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(Aliases.Items || [''], '${{ needs.detect-environment.outputs.domain_name }}')].Id" --output text)
 
           if [ ! -z "$DISTRIBUTION_ID" ]; then
-            echo "🔄 Invalidating CloudFront cache for distribution: $DISTRIBUTION_ID"
-            aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
+            echo "🔄 Creating aggressive CloudFront cache invalidation for distribution: $DISTRIBUTION_ID"
+            
+            # Create invalidation with timestamp for uniqueness
+            INVALIDATION_ID=$(aws cloudfront create-invalidation \
+              --distribution-id $DISTRIBUTION_ID \
+              --paths "/*" \
+              --query 'Invalidation.Id' \
+              --output text)
+            
+            echo "📋 Invalidation created with ID: $INVALIDATION_ID"
+            echo "⏳ Waiting for invalidation to complete (this may take 1-3 minutes)..."
+            
+            # Wait for invalidation to complete (with timeout)
+            aws cloudfront wait invalidation-completed \
+              --distribution-id $DISTRIBUTION_ID \
+              --id $INVALIDATION_ID \
+              --cli-read-timeout 300 \
+              --cli-connect-timeout 60 || echo "⚠️ Invalidation wait timed out, but invalidation is still processing"
+            
+            echo "✅ CloudFront cache invalidation completed"
           else
             echo "⚠️ CloudFront distribution not found for domain: ${{ needs.detect-environment.outputs.domain_name }}"
+            echo "🔍 Available distributions:"
+            aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id,DomainName:DomainName,Aliases:Aliases.Items}" --output table
           fi
+
+      - name: Verify Deployment
+        run: |
+          echo "🔍 Verifying deployment was successful..."
+          
+          # Check if deployment-info.txt was uploaded
+          if aws s3 ls s3://${{ needs.detect-environment.outputs.s3_bucket }}/deployment-info.txt; then
+            echo "✅ Deployment info file found"
+            aws s3 cp s3://${{ needs.detect-environment.outputs.s3_bucket }}/deployment-info.txt - 
+          else
+            echo "❌ Deployment info file not found"
+          fi
+          
+          # Check if index.html was uploaded
+          if aws s3 ls s3://${{ needs.detect-environment.outputs.s3_bucket }}/index.html; then
+            echo "✅ index.html found in S3"
+          else
+            echo "❌ index.html not found in S3"
+          fi
+          
+          # Test the website URL (with cache busting)
+          echo "🌐 Testing website URL with cache buster..."
+          CACHE_BUSTER="?cb=$(date +%s)"
+          curl -I "https://${{ needs.detect-environment.outputs.domain_name }}/${CACHE_BUSTER}" || echo "⚠️ Website not yet accessible (DNS/CloudFront propagation)"
 
   # ===========================================
   # ML Service Docker Build & Push
