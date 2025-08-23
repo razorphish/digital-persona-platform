@@ -14,14 +14,15 @@ export default function LandingPage() {
   const { login, error, clearError, isAuthenticated } = useAuth();
   const router = useRouter();
 
-    // EMERGENCY: Completely disable ALL redirects to debug refresh issue
+    // TEST: Cache busting verification - redirects still disabled for testing
   useEffect(() => {
-    console.log("🚨 EMERGENCY: ALL REDIRECTS DISABLED", {
+    console.log("🧪 CACHE BUSTING TEST - REDIRECTS DISABLED", {
       isAuthenticated,
       timestamp: new Date().toISOString(),
+      deploymentTest: "cache-busting-verification-v2",
     });
     
-    // COMPLETELY DISABLED - DEBUG REFRESH ISSUE
+    // STILL DISABLED - TESTING CACHE BUSTING FIRST
     // if (isAuthenticated) {
     //   console.log("✅ User authenticated, redirecting to dashboard");
     //   setTimeout(() => {
