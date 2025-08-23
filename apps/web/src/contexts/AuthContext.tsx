@@ -33,7 +33,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const router = useRouter();
+
+  // Fix hydration mismatch by ensuring we're on client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Debug logging for state changes
   useEffect(() => {
@@ -206,21 +212,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check for existing authentication on mount (only once after hydration)
   useEffect(() => {
+    // Only initialize after client-side hydration is complete
+    if (!isClient) return;
+
     // Add a small delay to ensure client-side hydration is complete
     const timer = setTimeout(() => {
       if (!isInitialized) {
-        console.log("Initializing auth state on mount");
+        console.log("Initializing auth state on mount (client-side only)");
         checkAuthState();
       }
     }, 250); // Increased delay to ensure stable hydration
 
     return () => clearTimeout(timer);
-  }, [isInitialized, checkAuthState]); // Include dependencies to prevent stale closures
+  }, [isClient, isInitialized, checkAuthState]); // Include isClient dependency
 
   // Periodic token validation (every 10 minutes) - reduced frequency to prevent race conditions
   useEffect(() => {
-    // Only start periodic validation after initialization
-    if (!isInitialized) return;
+    // Only start periodic validation after initialization and on client side
+    if (!isInitialized || !isClient) return;
 
     // Re-enable periodic token validation with conservative frequency (30 minutes)
     const interval = setInterval(() => {
@@ -411,8 +420,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextType = {
     user,
     isLoading,
-    isAuthenticated: !!user,
-    isInitialized,
+    isAuthenticated: isClient && !!user, // Prevent hydration mismatch
+    isInitialized: isClient && isInitialized, // Prevent hydration mismatch
     login,
     register,
     logout,
