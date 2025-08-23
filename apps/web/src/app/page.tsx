@@ -11,22 +11,44 @@ export default function LandingPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const { login, error, clearError, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  // Version identifier for cache debugging
-  console.log("🔧 PAGE VERSION: refresh-fix-v4 - " + new Date().toISOString());
-
-    // Redirect authenticated users to dashboard
+  // Fix hydration mismatch by ensuring component is only interactive after mount
   useEffect(() => {
-    if (isAuthenticated) {
+    setIsMounted(true);
+    console.log(
+      "🔧 PAGE VERSION: refresh-fix-v5 - Component mounted on client"
+    );
+  }, []);
+
+  // Prevent any auth-related rendering until component is fully mounted
+  const safeIsAuthenticated = isMounted && isAuthenticated;
+
+  // Redirect authenticated users to dashboard (only after mount)
+  useEffect(() => {
+    if (safeIsAuthenticated) {
       const redirectTimer = setTimeout(() => {
+        console.log("🚀 Redirecting to dashboard (hydration-safe)");
         router.replace("/dashboard");
       }, 500); // Conservative delay to prevent race conditions
-      
+
       return () => clearTimeout(redirectTimer);
     }
-  }, [isAuthenticated, router]);
+  }, [safeIsAuthenticated, router]);
+
+  // Show loading until hydration is complete to prevent mismatch
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) {
