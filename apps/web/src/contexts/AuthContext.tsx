@@ -233,29 +233,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Very lenient expiration checks - only logout if significantly expired
-        try {
-          if (AuthUtils.isTokenExpired(tokens.accessToken)) {
-            const tokenData = AuthUtils.getUserFromToken(tokens.accessToken);
-            const currentTime = Date.now() / 1000;
-            const timeSinceExpiry = currentTime - (tokenData as any)?.exp;
+        // EMERGENCY: Disable token expiration checks to debug refresh issue
+        console.log("🚨 Token validation DISABLED for debugging");
+        // try {
+        //   if (AuthUtils.isTokenExpired(tokens.accessToken)) {
+        //     const tokenData = AuthUtils.getUserFromToken(tokens.accessToken);
+        //     const currentTime = Date.now() / 1000;
+        //     const timeSinceExpiry = currentTime - (tokenData as any)?.exp;
 
-            // Only logout if token is expired by more than 10 minutes
-            if (timeSinceExpiry > 600) {
-              console.warn(
-                "Token significantly expired during periodic check (>10min), logging out"
-              );
-              logout();
-            } else {
-              console.log(
-                "Token recently expired, allowing grace period in periodic check"
-              );
-            }
-          }
-        } catch (error) {
-          console.error("Error during periodic token validation:", error);
-          // Don't logout on validation errors during periodic checks
-        }
+        //     // Only logout if token is expired by more than 10 minutes
+        //     if (timeSinceExpiry > 600) {
+        //       console.warn(
+        //         "Token significantly expired during periodic check (>10min), logging out"
+        //       );
+        //       logout();
+        //     } else {
+        //       console.log(
+        //         "Token recently expired, allowing grace period in periodic check"
+        //       );
+        //     }
+        //   }
+        // } catch (error) {
+        //   console.error("Error during periodic token validation:", error);
+        //   // Don't logout on validation errors during periodic checks
+        // }
       }
     }, 30 * 60 * 1000); // 30 minutes - very conservative frequency
 

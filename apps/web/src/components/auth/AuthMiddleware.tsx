@@ -5,21 +5,23 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * Simplified authentication middleware that ONLY protects routes
- * Does NOT handle redirects for authenticated users to prevent loops
+ * EMERGENCY: Completely disabled AuthMiddleware to debug refresh issue
  */
 export function AuthMiddleware() {
   const { isLoading, isAuthenticated, isInitialized } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  console.log("AuthMiddleware: SIMPLIFIED - route protection only", {
+  console.log("🚨 AuthMiddleware: COMPLETELY DISABLED FOR DEBUGGING", {
     pathname,
     isLoading,
     isAuthenticated,
     isInitialized,
     currentTime: new Date().toISOString(),
   });
+
+  // EMERGENCY: Return early - disable ALL AuthMiddleware logic
+  return null;
 
   // Define protected routes that require authentication
   const protectedRoutes = useMemo(

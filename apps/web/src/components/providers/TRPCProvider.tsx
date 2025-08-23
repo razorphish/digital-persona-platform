@@ -84,15 +84,19 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Handle authentication/authorization errors for authenticated sessions only
+      // EMERGENCY: Disable auth error redirects to debug refresh issue
       if (isAuthError) {
-        console.warn("Session expired or invalid. Redirecting to login.");
+        console.error("🚨 AUTH ERROR DETECTED BUT REDIRECT DISABLED:", {
+          status,
+          error,
+          pathname: window.location.pathname,
+        });
 
         // Clear corrupted/invalid tokens
         AuthUtils.clearTokens();
 
-        // Redirect to login page
-        window.location.href = "/";
+        // DISABLED TO DEBUG REFRESH ISSUE
+        // window.location.href = "/";
       }
     }
   };
