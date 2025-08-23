@@ -163,10 +163,39 @@ export class FeedAlgorithmService {
       console.log(`🔍 Getting feed for user ${userId}, limit ${limit}, offset ${offset}`);
       const startTime = Date.now();
       
-      // Cap limit to prevent timeout
-      const safeLimit = Math.min(limit, 20);
+      // AGGRESSIVE timeout protection - cap to 10 items max
+      const safeLimit = Math.min(limit, 10);
       
-      // First check if user has any feed items
+      // Set a 5-second timeout for the entire operation
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Feed query timeout after 5 seconds')), 5000);
+      });
+      
+      const feedPromise = this.getFeedWithFallback(userId, safeLimit, offset);
+      
+      const result = await Promise.race([feedPromise, timeoutPromise]);
+      
+      const queryTime = Date.now() - startTime;
+      console.log(`⏱️ Feed query took ${queryTime}ms, returned ${result.length} items`);
+
+      return result;
+    } catch (error) {
+      console.error("Error getting user feed:", error);
+      // Return basic feed items as fallback
+      return await this.getBasicFeedItems(userId, Math.min(limit, 5));
+    }
+  }
+
+  /**
+   * Get feed with fallback strategy for performance
+   */
+  private async getFeedWithFallback(
+    userId: string,
+    limit: number,
+    offset: number
+  ): Promise<FeedItem[]> {
+    try {
+      // First check if user has any feed items (fast count query)
       const feedCount = await this.db
         .select({ count: sql`count(*)` })
         .from(feedItems)
@@ -175,15 +204,13 @@ export class FeedAlgorithmService {
       const currentCount = Number(feedCount[0]?.count || 0);
       console.log(`📊 User has ${currentCount} existing feed items`);
       
-      // If no feed items exist, generate them quickly
+      // If no feed items exist, generate basic ones immediately
       if (currentCount === 0) {
-        console.log("🚀 No feed items found, generating quick feed...");
-        await this.generatePersonalizedFeed(userId, { 
-          limit: 10,
-          quickMode: true 
-        });
+        console.log("🚀 No feed items found, generating basic feed...");
+        return await this.getBasicFeedItems(userId, limit);
       }
       
+      // Get existing feed items with optimized query
       const feedData = await this.db
         .select({
           feedItem: feedItems,
@@ -195,12 +222,9 @@ export class FeedAlgorithmService {
         .leftJoin(users, eq(feedItems.creatorId, users.id))
         .where(eq(feedItems.userId, userId))
         .orderBy(feedItems.feedPosition)
-        .limit(safeLimit)
+        .limit(limit)
         .offset(offset);
       
-      const queryTime = Date.now() - startTime;
-      console.log(`⏱️ Feed query took ${queryTime}ms, returned ${feedData.length} items`);
-
       return feedData.map((item) => ({
         id: item.feedItem.id,
         itemType: item.feedItem.itemType as any,
@@ -217,8 +241,9 @@ export class FeedAlgorithmService {
         },
       }));
     } catch (error) {
-      console.error("Error getting user feed:", error);
-      return [];
+      console.error("Error in getFeedWithFallback:", error);
+      // Final fallback to basic items
+      return await this.getBasicFeedItems(userId, limit);
     }
   }
 
@@ -805,32 +830,43 @@ export class FeedAlgorithmService {
 
   /**
    * Get basic feed items quickly (for timeout prevention)
+   * ULTRA-FAST: Uses simple query with minimal joins
    */
   private async getBasicFeedItems(userId: string, limit: number): Promise<FeedItem[]> {
     try {
       console.log(`🔥 Generating ${limit} basic feed items for user ${userId}`);
       
-      // Get some public personas quickly  
+      // ULTRA-FAST: Get personas without joins first, then get creators separately
       const personaResults = await this.db
         .select({
           id: personas.id,
           name: personas.name,
           category: personas.category,
           isPublic: personas.isPublic,
-          creator: {
-            id: users.id,
-            name: users.name,
-            email: users.email,
-          }
+          userId: personas.userId,
         })
         .from(personas)
-        .leftJoin(users, eq(personas.userId, users.id))
         .where(eq(personas.isPublic, true))
-        .limit(limit)
+        .limit(Math.min(limit, 10)) // Cap at 10 for speed
         .orderBy(sql`RANDOM()`);
 
+      // Get creators in a separate fast query
+      const creatorIds = personaResults.map(p => p.userId).filter(Boolean);
+      const creators = creatorIds.length > 0 ? await this.db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+        })
+        .from(users)
+        .where(inArray(users.id, creatorIds))
+        : [];
+
+      // Create a creator lookup map
+      const creatorMap = new Map(creators.map(c => [c.id, c]));
+
       return personaResults.map((p, index) => ({
-        id: `basic-${userId}-${index}`,
+        id: `basic-${userId}-${Date.now()}-${index}`,
         itemType: "persona_recommendation" as any,
         persona: {
           id: p.id,
@@ -838,7 +874,7 @@ export class FeedAlgorithmService {
           category: p.category,
           isPublic: p.isPublic,
         },
-        creator: p.creator,
+        creator: creatorMap.get(p.userId) || { id: p.userId, name: "Unknown", email: "" },
         relevanceScore: 0.5,
         algorithmSource: "basic_generation",
         isPromoted: false,
@@ -850,6 +886,7 @@ export class FeedAlgorithmService {
       }));
     } catch (error) {
       console.error("Error generating basic feed items:", error);
+      // Return empty array instead of crashing
       return [];
     }
   }

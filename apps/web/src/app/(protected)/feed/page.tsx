@@ -40,14 +40,22 @@ function FeedPageContent() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  // tRPC queries for real data
+  // tRPC queries for real data - OPTIMIZED for performance
   const feedQuery = trpc.feed.getFeed.useQuery({
-    limit: 50,
+    limit: 10, // Reduced from 50 to 10 for faster loading
+  }, {
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: 1, // Only retry once on failure
+    retryDelay: 1000, // 1 second retry delay
   });
 
   const trendingQuery = trpc.discovery.getTrendingPersonas.useQuery({
     timeframe: "24h" as const,
-    limit: 10,
+    limit: 5, // Reduced from 10 to 5
+  }, {
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    retry: 1,
+    retryDelay: 1000,
   });
 
   // Extract data
@@ -89,7 +97,7 @@ function FeedPageContent() {
     }
   }, [generateFeedMutation, selectedCategory]);
 
-  // Handle data loading
+  // Handle data loading with better error recovery
   useEffect(() => {
     if (feed && feed.length > 0) {
       console.log("📰 Using real feed data:", feed.length, "items");
@@ -98,12 +106,15 @@ function FeedPageContent() {
     } else if (!feedLoading && feedError) {
       console.error("❌ Feed API error:", feedError);
       setIsLoading(false);
+      
+      // Show error but don't auto-refresh to prevent loops
+      console.log("🚫 Not auto-refreshing due to API error - user can manually refresh");
     } else if (!feedLoading && (!feed || feed.length === 0)) {
-      console.log("🔄 No feed data found, generating new feed...");
-      setIsLoading(true);
-      handleRefreshFeed();
+      console.log("🔄 No feed data found, will show empty state");
+      setIsLoading(false);
+      // Don't auto-generate to prevent timeout loops
     }
-  }, [feed, feedLoading, feedError, handleRefreshFeed]);
+  }, [feed, feedLoading, feedError]);
 
   const handleFeedInteraction = async (
     feedItemId: string,
@@ -156,6 +167,46 @@ function FeedPageContent() {
               className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
             >
               Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show empty state when no feed items and not loading
+  if (!feedLoading && !isLoading && (!feedItems || feedItems.length === 0) && !feedError) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+            <div className="flex justify-center mb-4">
+              <svg
+                className="h-12 w-12 text-blue-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3v8m0 0V9a2 2 0 012-2h2M9 7v10"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-blue-800 mb-2">
+              Your Feed is Empty
+            </h3>
+            <p className="text-blue-600 mb-4">
+              Let's get you started with some personalized content!
+            </p>
+            <button
+              onClick={handleRefreshFeed}
+              disabled={isRefreshing}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {isRefreshing ? "Generating..." : "Generate My Feed"}
             </button>
           </div>
         </div>
