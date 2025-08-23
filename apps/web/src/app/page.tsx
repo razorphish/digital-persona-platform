@@ -14,6 +14,9 @@ export default function LandingPage() {
   const { login, error, clearError, isAuthenticated } = useAuth();
   const router = useRouter();
 
+  // Version identifier for cache debugging
+  console.log("🔧 PAGE VERSION: refresh-fix-v4 - " + new Date().toISOString());
+
     // Redirect authenticated users to dashboard
   useEffect(() => {
     if (isAuthenticated) {

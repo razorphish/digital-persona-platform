@@ -27,6 +27,12 @@ export const metadata: Metadata = {
     shortcut: "/favicon.svg",
     apple: "/favicon.svg",
   },
+  other: {
+    // Aggressive cache busting for refresh issue debugging
+    'cache-control': 'no-cache, no-store, must-revalidate, max-age=0',
+    'pragma': 'no-cache',
+    'expires': '0',
+  },
 };
 
 export default function RootLayout({
