@@ -5,14 +5,14 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * EMERGENCY: Completely disabled AuthMiddleware to debug refresh issue
+ * Re-enabled AuthMiddleware with conservative route protection only
  */
 export function AuthMiddleware() {
   const { isLoading, isAuthenticated, isInitialized } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  console.log("🚨 AuthMiddleware: COMPLETELY DISABLED FOR DEBUGGING", {
+  console.log("✅ AuthMiddleware: RE-ENABLED - Conservative route protection", {
     pathname,
     isLoading,
     isAuthenticated,
@@ -20,14 +20,11 @@ export function AuthMiddleware() {
     currentTime: new Date().toISOString(),
   });
 
-  // EMERGENCY: Return early - disable ALL AuthMiddleware logic
-  return null;
-
-  // Define protected routes that require authentication
+    // Define protected routes that require authentication
   const protectedRoutes = useMemo(
     () => [
       "/feed",
-      "/dashboard",
+      "/dashboard", 
       "/files",
       "/social",
       "/analytics",
@@ -41,7 +38,7 @@ export function AuthMiddleware() {
     []
   );
 
-  // SIMPLIFIED: Only protect routes, don't handle authenticated user redirects
+  // Conservative route protection - ONLY protect routes, no other redirects
   useEffect(() => {
     // Skip during loading or before initialization
     if (isLoading || !isInitialized) {
@@ -53,19 +50,25 @@ export function AuthMiddleware() {
       pathname.startsWith(route)
     );
 
-    console.log("AuthMiddleware: Route protection check:", {
+    console.log("AuthMiddleware: Conservative route protection check:", {
       pathname,
       isProtectedRoute,
       isAuthenticated,
     });
 
     // ONLY handle protected routes - redirect unauthenticated users to login
+    // Add delay to prevent race conditions with auth state changes
     if (isProtectedRoute && !isAuthenticated) {
       console.warn(
-        `🛡️ Protected route access denied: ${pathname} - redirecting to login`
+        `🛡️ Protected route access denied: ${pathname} - redirecting to login in 200ms`
       );
-      router.replace("/");
-      return;
+      
+      const protectionTimer = setTimeout(() => {
+        console.log("🚨 Executing protection redirect to login");
+        router.replace("/");
+      }, 200); // Small delay to prevent race conditions
+      
+      return () => clearTimeout(protectionTimer);
     }
 
     // Do NOT handle authenticated user redirects here - let pages handle their own logic

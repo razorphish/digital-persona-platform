@@ -14,21 +14,25 @@ export default function LandingPage() {
   const { login, error, clearError, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  // TEST: Cache busting verification - redirects still disabled for testing
+    // Re-enable redirect after successful cache busting verification
   useEffect(() => {
-    console.log("🧪 CACHE BUSTING TEST - REDIRECTS DISABLED", {
+    console.log("✅ CACHE BUSTING VERIFIED - RE-ENABLING REDIRECTS", {
       isAuthenticated,
       timestamp: new Date().toISOString(),
-      deploymentTest: "cache-busting-verification-v2",
+      deploymentTest: "cache-busting-verified-redirects-enabled",
     });
-
-    // STILL DISABLED - TESTING CACHE BUSTING FIRST
-    // if (isAuthenticated) {
-    //   console.log("✅ User authenticated, redirecting to dashboard");
-    //   setTimeout(() => {
-    //     router.replace("/dashboard");
-    //   }, 100);
-    // }
+    
+    // Re-enable redirect with conservative delay to prevent race conditions
+    if (isAuthenticated) {
+      console.log("🎯 User authenticated, redirecting to dashboard in 500ms");
+      const redirectTimer = setTimeout(() => {
+        console.log("🚀 Executing redirect to dashboard");
+        router.replace("/dashboard");
+      }, 500); // Longer delay to ensure stable state
+      
+      // Cleanup timer if component unmounts
+      return () => clearTimeout(redirectTimer);
+    }
   }, [isAuthenticated, router]);
 
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {

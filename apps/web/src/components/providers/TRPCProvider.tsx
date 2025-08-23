@@ -84,9 +84,9 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // EMERGENCY: Disable auth error redirects to debug refresh issue
+      // Re-enable conservative auth error handling
       if (isAuthError) {
-        console.error("🚨 AUTH ERROR DETECTED BUT REDIRECT DISABLED:", {
+        console.warn("🔒 Auth error detected - handling conservatively:", {
           status,
           error,
           pathname: window.location.pathname,
@@ -95,8 +95,11 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         // Clear corrupted/invalid tokens
         AuthUtils.clearTokens();
 
-        // DISABLED TO DEBUG REFRESH ISSUE
-        // window.location.href = "/";
+        // Conservative redirect with delay to prevent loops
+        console.log("🔄 Redirecting to login in 1 second due to auth error");
+        setTimeout(() => {
+          window.location.href = "/";
+        }, 1000); // 1 second delay to prevent rapid redirects
       }
     }
   };
