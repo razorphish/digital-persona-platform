@@ -9,14 +9,12 @@ export default function NotFound() {
   const router = useRouter();
 
   useEffect(() => {
-    // Handle trailing slash redirects for static export
-    if (pathname && !pathname.endsWith("/") && pathname !== "/") {
-      const withTrailingSlash = pathname + "/";
-      console.log(`Redirecting from ${pathname} to ${withTrailingSlash}`);
-      router.replace(withTrailingSlash);
-      return;
-    }
-  }, [pathname, router]);
+    // Log 404 for debugging but don't auto-redirect to prevent loops
+    console.log(`404 Not Found: ${pathname}`);
+
+    // Optionally redirect to home after a delay for better UX
+    // Uncomment if needed: setTimeout(() => router.push('/'), 5000);
+  }, [pathname]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">

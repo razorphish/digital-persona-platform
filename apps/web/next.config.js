@@ -4,7 +4,7 @@ const nextConfig = {
   output: process.env.NEXT_BUILD_EXPORT === "true" ? "export" : "standalone",
   // Add unoptimized images for static export
   ...(process.env.NEXT_BUILD_EXPORT === "true" && {
-    trailingSlash: false,
+    trailingSlash: true,
     images: {
       unoptimized: true,
     },
