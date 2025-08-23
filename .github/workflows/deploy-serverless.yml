@@ -1565,7 +1565,7 @@ jobs:
       - name: Verify Deployment
         run: |
           echo "🔍 Verifying deployment was successful..."
-          
+
           # Check if deployment-info.txt was uploaded
           if aws s3 ls s3://${{ needs.detect-environment.outputs.s3_bucket }}/deployment-info.txt; then
             echo "✅ Deployment info file found"
@@ -1573,14 +1573,14 @@ jobs:
           else
             echo "❌ Deployment info file not found"
           fi
-          
+
           # Check if index.html was uploaded
           if aws s3 ls s3://${{ needs.detect-environment.outputs.s3_bucket }}/index.html; then
             echo "✅ index.html found in S3"
           else
             echo "❌ index.html not found in S3"
           fi
-          
+
           # Test the website URL (with cache busting)
           echo "🌐 Testing website URL with cache buster..."
           CACHE_BUSTER="?cb=$(date +%s)"
