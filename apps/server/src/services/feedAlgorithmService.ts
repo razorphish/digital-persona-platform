@@ -231,8 +231,8 @@ export class FeedAlgorithmService {
         .offset(offset);
 
       // Get persona and creator data in separate optimized queries (if needed)
-      const personaIds = feedData.map(item => item.personaId).filter(Boolean);
-      const creatorIds = feedData.map(item => item.creatorId).filter(Boolean);
+      const personaIds = feedData.map(item => item.personaId).filter((id): id is string => Boolean(id));
+      const creatorIds = feedData.map(item => item.creatorId).filter((id): id is string => Boolean(id));
       
       // Batch fetch personas and creators (only if we have IDs)
       const [personasData, creatorsData] = await Promise.all([
@@ -259,8 +259,8 @@ export class FeedAlgorithmService {
       ]);
 
       // Create lookup maps for fast access
-      const personaMap = new Map(personasData.map(p => [p.id, p]));
-      const creatorMap = new Map(creatorsData.map(c => [c.id, c]));
+      const personaMap = new Map(personasData.map(p => [p.id, p] as const));
+      const creatorMap = new Map(creatorsData.map(c => [c.id, c] as const));
       
       return feedData.map((item) => ({
         id: item.id,
