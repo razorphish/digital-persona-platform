@@ -210,30 +210,67 @@ export class FeedAlgorithmService {
         return await this.getBasicFeedItems(userId, limit);
       }
       
-      // Get existing feed items with optimized query
+      // ULTRA-OPTIMIZED query: Select only needed fields, no unnecessary JOINs
       const feedData = await this.db
         .select({
-          feedItem: feedItems,
-          persona: personas,
-          creator: users,
+          // Feed item essentials only
+          id: feedItems.id,
+          itemType: feedItems.itemType,
+          personaId: feedItems.personaId,
+          creatorId: feedItems.creatorId,
+          algorithmSource: feedItems.algorithmSource,
+          relevanceScore: feedItems.relevanceScore,
+          isPromoted: feedItems.isPromoted,
+          isTrending: feedItems.isTrending,
+          feedPosition: feedItems.feedPosition,
         })
         .from(feedItems)
-        .leftJoin(personas, eq(feedItems.personaId, personas.id))
-        .leftJoin(users, eq(feedItems.creatorId, users.id))
         .where(eq(feedItems.userId, userId))
         .orderBy(feedItems.feedPosition)
         .limit(limit)
         .offset(offset);
+
+      // Get persona and creator data in separate optimized queries (if needed)
+      const personaIds = feedData.map(item => item.personaId).filter(Boolean);
+      const creatorIds = feedData.map(item => item.creatorId).filter(Boolean);
+      
+      // Batch fetch personas and creators (only if we have IDs)
+      const [personasData, creatorsData] = await Promise.all([
+        personaIds.length > 0 ? this.db
+          .select({
+            id: personas.id,
+            name: personas.name,
+            description: personas.description,
+            avatar: personas.avatar,
+            privacyLevel: personas.privacyLevel,
+          })
+          .from(personas)
+          .where(inArray(personas.id, personaIds))
+        : [],
+        creatorIds.length > 0 ? this.db
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+          })
+          .from(users)
+          .where(inArray(users.id, creatorIds))
+        : []
+      ]);
+
+      // Create lookup maps for fast access
+      const personaMap = new Map(personasData.map(p => [p.id, p]));
+      const creatorMap = new Map(creatorsData.map(c => [c.id, c]));
       
       return feedData.map((item) => ({
-        id: item.feedItem.id,
-        itemType: item.feedItem.itemType as any,
-        persona: item.persona,
-        creator: item.creator,
-        relevanceScore: parseFloat(item.feedItem.relevanceScore || "0.5"),
-        algorithmSource: item.feedItem.algorithmSource,
-        isPromoted: item.feedItem.isPromoted || false,
-        isTrending: item.feedItem.isTrending || false,
+        id: item.id,
+        itemType: item.itemType as any,
+        persona: item.personaId ? personaMap.get(item.personaId) || null : null,
+        creator: item.creatorId ? creatorMap.get(item.creatorId) || null : null,
+        relevanceScore: parseFloat(item.relevanceScore || "0.5"),
+        algorithmSource: item.algorithmSource,
+        isPromoted: item.isPromoted || false,
+        isTrending: item.isTrending || false,
         metadata: {
           reason: ["personalized"],
           tags: [],
