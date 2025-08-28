@@ -1,68 +1,61 @@
 # Digital Persona Platform
 
-<!-- CI/CD Pipeline Status - Updated after comprehensive fixes -->
+**🚀 Modern Social Media Platform** ✅  
+_Built with Next.js 14, tRPC, and AWS Serverless_
 
-**🚀 CI/CD Pipeline Status: FULLY OPERATIONAL** ✅  
-_Last validated: January 18, 2025 - FINAL VALIDATION_
-
-A modern full-stack AI-powered digital persona platform built with Next.js, tRPC, and Express. Create and manage AI-powered personas with advanced chat capabilities, file management, social media integration, and enterprise-grade authentication.
+A modern full-stack social media platform for creating and managing digital personas. Features include real-time feeds, file uploads, creator monetization, and enterprise-grade authentication with auto-scaling serverless infrastructure.
 
 ## 🏗️ Architecture
 
-| Service               | Status        | Port | Description                                    |
-| --------------------- | ------------- | ---- | ---------------------------------------------- |
-| **Next.js Frontend**  | ✅ **Active** | 4000 | React SPA with tRPC client, file management UI |
-| **tRPC Backend**      | ✅ **Active** | 4001 | Express API server with JWT auth, PostgreSQL   |
-| **PostgreSQL**        | ✅ **Active** | 5432 | Primary database for users, personas, files    |
-| **Python ML Service** | 🔧 Optional   | 8001 | AI/ML capabilities and processing              |
+| Service               | Status        | Port | Description                                      |
+| --------------------- | ------------- | ---- | ------------------------------------------------ |
+| **Next.js Frontend**  | ✅ **Active** | 3000 | React SPA with feed, personas, creator dashboard |
+| **Node.js Backend**   | ✅ **Active** | 4001 | tRPC API server with JWT auth, Drizzle ORM       |
+| **PostgreSQL**        | ✅ **Active** | 5432 | Primary database with optimized feed indexes     |
+| **Python ML Service** | 🔧 Optional   | 8001 | AI/ML capabilities and computer vision           |
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- **Docker & Docker Compose** (recommended for full stack)
-- **Node.js 18+** and npm (for local development)
-- **PostgreSQL** (via Docker or local install)
+- **Docker** (for PostgreSQL database)
+- **Node.js 18+** and npm
+- **AWS CLI** (for production deployment)
 
-## 🐳 Docker Setup (Recommended)
+## 💻 Local Development
 
-### Full Application with Docker
-
-Run the entire platform in containers with a single command:
+### 1. Start Database
 
 ```bash
-# Development environment with hot reload
-./docker-start.sh dev
+# Start PostgreSQL with Docker
+docker-compose up postgres -d
 
-# Production environment
-./docker-start.sh prod
-
-# Development with rebuild and logs
-./docker-start.sh dev --build --logs
-
-# Stop all services
-./docker-stop.sh dev
+# Verify database is running
+docker ps
 ```
 
-**Docker Access Points:**
-
-- 🌐 **Frontend**: http://localhost:3100
-- 🔧 **Backend API**: http://localhost:3101
-- 📚 **API Health**: http://localhost:3101/health
-
-### Docker Services
+### 2. Install Dependencies
 
 ```bash
-# Check service status
-docker-compose -f docker-compose.dev.yml ps
-
-# View logs
-docker-compose -f docker-compose.dev.yml logs -f
-
-# Individual service logs
-docker logs dpp-frontend-dev
-docker logs dpp-backend-dev
+# Install all packages
+npm install
 ```
+
+### 3. Start Development Servers
+
+```bash
+# Terminal 1: Backend
+cd apps/server && npm run dev
+
+# Terminal 2: Frontend  
+cd apps/web && npm run dev
+```
+
+### 4. Access Applications
+
+- 🌐 **Frontend**: http://localhost:3000
+- 🔧 **Backend**: http://localhost:4001/health
+- 🗄️ **Database**: PostgreSQL on localhost:5432
 
 ## 🚀 Serverless Deployment
 
@@ -423,30 +416,30 @@ npm run dev
 
 ## 🎯 Key Features
 
-### ✅ Recently Implemented & Enhanced
+### ✅ Current Features
 
-- **🔐 Enterprise Authentication System**:
-  - JWT-based auth with automatic token validation
-  - Periodic token refresh and cross-tab synchronization
-  - Protected routes with automatic redirect to login
+- **📱 Social Media Platform**:
+  - Personalized feed with optimized performance 
+  - Digital persona creation and management
+  - Creator dashboard with monetization tools
+  - User safety controls and content moderation
+- **🔐 Authentication & Security**:
+  - JWT-based authentication with automatic token validation
+  - Protected routes with middleware
   - Industry-standard security practices
-- **🛡️ Protected Pages**: Dashboard, File Management, Chat, Social, Analytics, Personas
-- **📁 Advanced File Management**: Upload, view, manage files with comprehensive stats
-- **🏗️ Full Docker Support**: Complete containerized development and production setup
-- **🎯 SPA Deployment**: Static build generation for S3 + CloudFront deployment
-- **🐛 Debug Configuration**: VS Code debugging with automatic port cleanup
-- **🔧 Error Resolution**: Fixed authentication race conditions and UI bugs
-
-### 🔧 Core Capabilities
-
-- **👤 User Management**: Registration, login, JWT authentication with automatic redirects
-- **🤖 Digital Personas**: Create and manage AI-powered persona profiles (coming soon)
-- **📤 File Upload & Management**: Direct S3 uploads with metadata tracking
-- **📊 Real-time Stats**: File counts, sizes, and usage analytics
-- **🔗 tRPC API**: Type-safe client-server communication
-- **🗄️ Database Integration**: PostgreSQL with Drizzle ORM
-- **🎨 Social Media Integration**: Connect and analyze social media presence (coming soon)
-- **📈 Analytics & Insights**: Personality analysis and behavior tracking (coming soon)
+- **📁 File Management**: 
+  - Direct S3 uploads with presigned URLs
+  - Media processing and optimization
+  - File analytics and management
+- **💰 Creator Economy**:
+  - Subscription management with Stripe integration
+  - Earnings tracking and payout management
+  - Performance analytics and insights
+- **🏗️ Production-Ready Infrastructure**:
+  - Serverless AWS deployment (Lambda + RDS)
+  - Optimized database with performance indexes
+  - SSL certificates and custom domains
+  - Auto-scaling with cost optimization
 
 ## 🛡️ Authentication & Security
 
@@ -488,33 +481,31 @@ All authenticated pages automatically redirect to login when:
 ```
 digital-persona-platform/
 ├── apps/
-│   ├── web/                    # Next.js Frontend (SPA)
-│   │   ├── src/app/           # App router pages
-│   │   ├── src/components/    # React components & AuthGuard
-│   │   ├── src/contexts/      # Authentication context
-│   │   └── src/services/      # API services
-│   └── server/                # tRPC Express Backend
-│       ├── src/router.ts      # API endpoints
-│       ├── src/index.ts       # Server entry point
-│       └── src/utils/         # S3 and utilities
+│   ├── web/                    # Next.js Frontend
+│   │   ├── src/app/           # App router pages (feed, personas, auth)
+│   │   ├── src/components/    # React components (feed, creator, auth)
+│   │   ├── src/contexts/      # Authentication & state management
+│   │   └── src/lib/          # tRPC client & utilities
+│   └── server/                # Node.js tRPC Backend
+│       ├── src/services/      # Feed algorithm, analytics, moderation
+│       ├── src/routers/       # tRPC API endpoints
+│       └── src/utils/         # S3, database utilities
 ├── packages/
-│   ├── database/              # Drizzle schema and config
-│   └── shared/                # Shared types and utilities
-├── .vscode/                   # VS Code debug configurations
-├── scripts/                   # Development tools and AWS environment cleanup
-├── docs/                      # Comprehensive documentation
-├── docker-compose*.yml        # Docker configurations
-├── docker-start.sh           # Docker startup script
-└── terraform/                 # AWS infrastructure
+│   ├── database/              # Drizzle ORM schema & migrations
+│   └── shared/                # Shared types between frontend/backend
+├── terraform/                 # AWS infrastructure (Lambda, RDS, S3)
+├── scripts/                   # Deployment & environment management
+└── python-ml-service/         # Optional ML service for AI features
 ```
 
 ## 🗃️ Database Schema
 
-- **users**: User accounts with email, password hash, timestamps
-- **personas**: Digital personas linked to users
-- **media_files**: File metadata with S3 keys, upload status
-- **conversations & messages**: Chat system (future implementation)
-- **social_connections**: Social media integrations (future)
+- **users**: User accounts with email, password hash, creator status
+- **personas**: Digital personas with categories, public/private status
+- **feed_items**: Personalized feed with algorithm scoring (optimized indexes)
+- **subscriptions**: Creator monetization and user subscriptions
+- **media_files**: File metadata with S3 keys and upload status
+- **social_connections**: Social media integrations and analytics
 
 ## 📊 File Management
 
