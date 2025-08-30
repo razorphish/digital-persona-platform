@@ -36,6 +36,13 @@
       "when": 1754337097227,
       "tag": "0004_clean_mad_thinker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1756582111177,
+      "tag": "0005_shocking_meteorite",
+      "breakpoints": true
     }
   ]
 }

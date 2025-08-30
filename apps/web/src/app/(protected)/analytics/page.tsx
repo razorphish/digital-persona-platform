@@ -17,76 +17,86 @@ interface AnalyticsData {
   demographics: any;
   benchmarks: any;
   behavior: any;
+  insights: any;
 }
 
 function AnalyticsPageContent() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [timeRange, setTimeRange] = useState("30d");
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(
-    null
+
+  // tRPC queries for real analytics data
+  const {
+    data: creatorAnalytics,
+    isLoading: creatorLoading,
+    error: creatorError,
+  } = trpc.analytics.getCreatorAnalytics.useQuery(
+    { timeRange: timeRange as any },
+    { refetchInterval: 300000 } // Refetch every 5 minutes
   );
-  const [isLoading, setIsLoading] = useState(false); // No loading needed for static mock data
 
-  // Backend analytics router doesn't exist yet, so use mock data
-  const backendAvailable = false;
+  const {
+    data: revenueForecasting,
+    isLoading: forecastingLoading,
+    error: forecastingError,
+  } = trpc.analytics.getRevenueForecasting.useQuery(
+    { timeRange: timeRange as any },
+    { refetchInterval: 300000 }
+  );
 
-  // Mock analytics data for when backend is unavailable
-  const mockAnalyticsData = {
-    overview: {
-      totalRevenue: 15420,
-      activeSubscribers: 1234,
-      monthlyGrowth: 12.5,
-      engagementRate: 85.2,
-    },
-    forecasting: {
-      projectedRevenue: [18000, 19500, 21000, 22800, 24500, 26400],
-      confidenceInterval: [0.8, 0.85, 0.82, 0.88, 0.86, 0.84],
-    },
-    demographics: {
-      ageGroups: [
-        { age: "18-24", percentage: 25 },
-        { age: "25-34", percentage: 35 },
-        { age: "35-44", percentage: 22 },
-        { age: "45+", percentage: 18 },
-      ],
-    },
-    benchmarks: {
-      industryAverage: 65,
-      yourPerformance: 85,
-      topPerformers: 92,
-    },
-    behavior: {
-      sessionDuration: 12.5,
-      bounceRate: 25,
-      conversionRate: 8.2,
-    },
-  };
+  const {
+    data: subscriberDemographics,
+    isLoading: subscriberLoading,
+    error: subscriberError,
+  } = trpc.analytics.getSubscriberDemographics.useQuery(
+    { timeRange: timeRange as any },
+    { refetchInterval: 300000 }
+  );
 
-  // Use static mock data directly - no need for complex state management
-  const creatorAnalytics = mockAnalyticsData.overview;
-  const revenueForecasting = mockAnalyticsData.forecasting;
-  const subscriberInsights = mockAnalyticsData.demographics;
-  const performanceBenchmarks = mockAnalyticsData.benchmarks;
-  const userBehavior = mockAnalyticsData.behavior;
+  const {
+    data: performanceBenchmarks,
+    isLoading: benchmarksLoading,
+    error: benchmarksError,
+  } = trpc.analytics.getPerformanceBenchmarks.useQuery(
+    { timeRange: timeRange as any },
+    { refetchInterval: 300000 }
+  );
 
-  // Set analytics data directly from mock data
-  const analyticsDataFinal = {
-    overview: creatorAnalytics,
-    forecasting: revenueForecasting,
-    demographics: subscriberInsights,
-    benchmarks: performanceBenchmarks,
-    behavior: userBehavior,
-  };
+  const {
+    data: userBehavior,
+    isLoading: behaviorLoading,
+    error: behaviorError,
+  } = trpc.analytics.getUserBehaviorAnalytics.useQuery(
+    { timeRange: timeRange as any },
+    { refetchInterval: 300000 }
+  );
 
-  // No loading states needed for static data
-  const creatorLoading = false;
-  const forecastingLoading = false;
-  const subscriberLoading = false;
-  const benchmarksLoading = false;
-  const behaviorLoading = false;
+  const {
+    data: businessIntelligence,
+    isLoading: insightsLoading,
+    error: insightsError,
+  } = trpc.analytics.getBusinessIntelligence.useQuery(
+    { timeRange: timeRange as any },
+    { refetchInterval: 300000 }
+  );
 
-  const isDataLoading = false; // No loading for static mock data
+  // Check if any data is loading
+  const isDataLoading =
+    creatorLoading ||
+    forecastingLoading ||
+    subscriberLoading ||
+    benchmarksLoading ||
+    behaviorLoading ||
+    insightsLoading;
+
+  // Check if there are any errors
+  const hasErrors =
+    creatorError ||
+    forecastingError ||
+    subscriberError ||
+    benchmarksError ||
+    behaviorError ||
+    insightsError;
 
   const tabs = [
     { id: "overview", name: "Overview", icon: "📊" },
@@ -150,6 +160,46 @@ function AnalyticsPageContent() {
     );
   }
 
+  // Show error state if any query failed
+  if (hasErrors) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <div className="flex justify-center mb-4">
+              <svg
+                className="h-12 w-12 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-red-800 mb-2">
+              Unable to Load Analytics
+            </h3>
+            <p className="text-red-600 mb-4">
+              There was an error loading your analytics data. Please try
+              refreshing the page.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation provided globally by layout */}
@@ -200,109 +250,60 @@ function AnalyticsPageContent() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Tab Navigation */}
-          <div className="flex space-x-8 overflow-x-auto">
+      {/* Tab Navigation */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-1 py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                   activeTab === tab.id
                     ? "border-indigo-500 text-indigo-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
-                <span>{tab.icon}</span>
-                <span>{tab.name}</span>
+                <span className="mr-2">{tab.icon}</span>
+                {tab.name}
               </button>
             ))}
-          </div>
+          </nav>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === "overview" && (
-          <AnalyticsOverview
-            data={analyticsDataFinal.overview}
-            timeRange={timeRange}
-          />
+          <AnalyticsOverview data={creatorAnalytics} timeRange={timeRange} />
         )}
-
         {activeTab === "revenue" && (
-          <RevenueForecasting
-            data={analyticsDataFinal.forecasting}
-            timeRange={timeRange}
-          />
+          <RevenueForecasting data={revenueForecasting} timeRange={timeRange} />
         )}
-
         {activeTab === "audience" && (
           <SubscriberDemographics
-            data={analyticsDataFinal.demographics}
+            data={subscriberDemographics}
             timeRange={timeRange}
           />
         )}
-
         {activeTab === "performance" && (
           <PerformanceBenchmarks
-            data={analyticsDataFinal.benchmarks}
+            data={performanceBenchmarks}
             timeRange={timeRange}
           />
         )}
-
         {activeTab === "behavior" && (
-          <UserBehaviorAnalytics
-            data={analyticsDataFinal.behavior}
-            timeRange={timeRange}
-          />
+          <UserBehaviorAnalytics data={userBehavior} timeRange={timeRange} />
         )}
-
         {activeTab === "insights" && (
           <BusinessIntelligence
-            data={analyticsDataFinal}
+            data={businessIntelligence}
             timeRange={timeRange}
           />
         )}
-      </div>
-
-      {/* Quick Stats Footer */}
-      <div className="bg-white border-t border-gray-200 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-indigo-600">
-                {analyticsData?.overview?.totalSubscribers?.toLocaleString() ||
-                  "0"}
-              </div>
-              <div className="text-sm text-gray-600">Total Subscribers</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
-                $
-                {analyticsData?.overview?.monthlyRecurringRevenue?.toLocaleString() ||
-                  "0"}
-              </div>
-              <div className="text-sm text-gray-600">Monthly Revenue</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
-                {analyticsData?.overview?.averageRating?.toFixed(1) || "0.0"} ⭐
-              </div>
-              <div className="text-sm text-gray-600">Average Rating</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
-                {analyticsData?.benchmarks?.metrics?.engagement?.percentile ||
-                  "50"}
-                th
-              </div>
-              <div className="text-sm text-gray-600">
-                Performance Percentile
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

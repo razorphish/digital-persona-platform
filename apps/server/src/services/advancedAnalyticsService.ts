@@ -60,7 +60,7 @@ interface UserAnalyticsData {
   };
 }
 
-interface CreatorAnalyticsData {
+export interface CreatorAnalyticsData {
   overview: {
     totalRevenue: number;
     monthlyRecurringRevenue: number;
@@ -86,7 +86,7 @@ interface CreatorAnalyticsData {
   };
 }
 
-interface RevenueForecasting {
+export interface RevenueForecasting {
   forecasts: Array<{
     period: string;
     forecastedRevenue: number;
@@ -105,7 +105,7 @@ interface RevenueForecasting {
   };
 }
 
-interface PerformanceBenchmarks {
+export interface PerformanceBenchmarks {
   category: string;
   userTier: "new" | "emerging" | "established" | "top_performer";
   metrics: {

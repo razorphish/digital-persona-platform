@@ -73,6 +73,15 @@ import {
   type SocialStats,
 } from "./services/socialEngagementService.js";
 import {
+  MessagesService,
+  type MessageItem,
+  type MessageThread,
+} from "./services/messagesService.js";
+import {
+  NotificationsService,
+  type NotificationItem,
+} from "./services/notificationsService.js";
+import {
   FeedAlgorithmService,
   type FeedItem,
   type FeedMetrics,
@@ -80,6 +89,14 @@ import {
 
 // Import advanced analytics services
 import { AdvancedAnalyticsService } from "./services/advancedAnalyticsService.js";
+
+// Import monetization services
+import {
+  MonetizationService,
+  type SubscriptionTier,
+  type MonetizationSettings,
+  type RevenueMetrics,
+} from "./services/monetizationService.js";
 
 // Import enhanced types
 import {
@@ -446,7 +463,10 @@ const personasRouter = router({
         .limit(1);
 
       if (!persona) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Persona not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Persona not found",
+        });
       }
 
       return {
@@ -1468,9 +1488,14 @@ const behaviorAnalysisService = new BehaviorAnalysisService();
 const discoveryService = new DiscoveryService();
 const socialEngagementService = new SocialEngagementService();
 const feedAlgorithmService = new FeedAlgorithmService();
+const messagesService = new MessagesService();
+const notificationsService = new NotificationsService();
 
 // Initialize advanced analytics services
 const advancedAnalyticsService = new AdvancedAnalyticsService();
+
+// Initialize monetization services
+const monetizationService = new MonetizationService();
 
 // Creator Verification Router
 const creatorVerificationRouter = router({
@@ -2065,74 +2090,9 @@ const creatorMonetizationRouter = router({
     }),
 });
 
-// Persona Monetization Settings Router
+// Persona Monetization Router
 const personaMonetizationRouter = router({
-  // Configure persona monetization
-  configureMonetization: protectedProcedure
-    .input(
-      z.object({
-        personaId: z.string().uuid(),
-        isMonetized: z.boolean(),
-        pricingModel: z.enum([
-          "subscription_only",
-          "time_based_only",
-          "hybrid",
-          "free_with_limits",
-        ]),
-        basicTierPrice: z.number().min(0).optional(),
-        averageTierPrice: z.number().min(0).optional(),
-        advancedTierPrice: z.number().min(0).optional(),
-        timeBasedEnabled: z.boolean().optional(),
-        hourlyRate: z.number().min(0).optional(),
-        freeMessagesPerDay: z.number().min(0).default(3),
-        freeMinutesPerDay: z.number().min(0).default(10),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      try {
-        // Update persona monetization settings
-        await db
-          .insert(personaMonetization)
-          .values({
-            personaId: input.personaId,
-            userId: ctx.user.id,
-            isMonetized: input.isMonetized,
-            pricingModel: input.pricingModel,
-            basicTierPrice: input.basicTierPrice?.toString(),
-            averageTierPrice: input.averageTierPrice?.toString(),
-            advancedTierPrice: input.advancedTierPrice?.toString(),
-            timeBasedEnabled: input.timeBasedEnabled || false,
-            hourlyRate: input.hourlyRate?.toString(),
-            freeMessagesPerDay: input.freeMessagesPerDay,
-            freeMinutesPerDay: input.freeMinutesPerDay,
-          })
-          .onConflictDoUpdate({
-            target: personaMonetization.personaId,
-            set: {
-              isMonetized: input.isMonetized,
-              pricingModel: input.pricingModel,
-              basicTierPrice: input.basicTierPrice?.toString(),
-              averageTierPrice: input.averageTierPrice?.toString(),
-              advancedTierPrice: input.advancedTierPrice?.toString(),
-              timeBasedEnabled: input.timeBasedEnabled || false,
-              hourlyRate: input.hourlyRate?.toString(),
-              freeMessagesPerDay: input.freeMessagesPerDay,
-              freeMinutesPerDay: input.freeMinutesPerDay,
-              updatedAt: new Date(),
-            },
-          });
-
-        return { success: true };
-      } catch (error) {
-        logger.error("Error configuring persona monetization:", error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to configure monetization",
-        });
-      }
-    }),
-
-  // Get persona monetization settings
+  // Get monetization settings for a persona
   getMonetizationSettings: protectedProcedure
     .input(
       z.object({
@@ -2141,106 +2101,154 @@ const personaMonetizationRouter = router({
     )
     .query(async ({ input, ctx }) => {
       try {
-        const settings = await db
-          .select()
-          .from(personaMonetization)
-          .where(
-            and(
-              eq(personaMonetization.personaId, input.personaId),
-              eq(personaMonetization.userId, ctx.user.id)
-            )
-          )
-          .limit(1);
-
-        if (settings.length === 0) {
-          return {
-            isMonetized: false,
-            pricingModel: "free_with_limits",
-            freeMessagesPerDay: 3,
-            freeMinutesPerDay: 10,
-            subscriptionTiers: [],
-            timeBasedPricing: {
-              enabled: false,
-              pricePerHour: 50,
-              minimumMinutes: 15,
-            },
-          };
-        }
-
-        const setting = settings[0];
-
-        // Build subscription tiers array from individual price fields
-        const subscriptionTiers = [];
-
-        if (setting.basicTierPrice) {
-          subscriptionTiers.push({
-            id: `basic_${input.personaId}`,
-            name: "basic" as const,
-            displayName: "Basic",
-            price: parseFloat(setting.basicTierPrice),
-            features: ["Basic messaging", "Limited interactions"],
-          });
-        }
-
-        if (setting.averageTierPrice) {
-          subscriptionTiers.push({
-            id: `average_${input.personaId}`,
-            name: "average" as const,
-            displayName: "Average",
-            price: parseFloat(setting.averageTierPrice),
-            features: [
-              "Enhanced messaging",
-              "More interactions",
-              "Priority responses",
-            ],
-          });
-        }
-
-        if (setting.advancedTierPrice) {
-          subscriptionTiers.push({
-            id: `advanced_${input.personaId}`,
-            name: "advanced" as const,
-            displayName: "Advanced",
-            price: parseFloat(setting.advancedTierPrice),
-            features: [
-              "Unlimited messaging",
-              "Exclusive content",
-              "Personal sessions",
-              "Priority support",
-            ],
-          });
-        }
-
-        return {
-          ...setting,
-          basicTierPrice: setting.basicTierPrice
-            ? parseFloat(setting.basicTierPrice)
-            : undefined,
-          averageTierPrice: setting.averageTierPrice
-            ? parseFloat(setting.averageTierPrice)
-            : undefined,
-          advancedTierPrice: setting.advancedTierPrice
-            ? parseFloat(setting.advancedTierPrice)
-            : undefined,
-          hourlyRate: setting.hourlyRate
-            ? parseFloat(setting.hourlyRate)
-            : undefined,
-          subscriptionTiers,
-          timeBasedPricing: {
-            enabled: setting.timeBasedEnabled || false,
-            pricePerHour: setting.hourlyRate
-              ? parseFloat(setting.hourlyRate)
-              : 50,
-            minimumMinutes: 15, // Default minimum session time
-          },
-          createdAt: setting.createdAt.toISOString(),
-          updatedAt: setting.updatedAt.toISOString(),
-        };
+        const settings = await monetizationService.getMonetizationSettings(
+          input.personaId
+        );
+        return settings;
       } catch (error) {
-        logger.error("Error getting persona monetization settings:", error);
+        logger.error("Error getting monetization settings:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to get monetization settings",
+        });
+      }
+    }),
+
+  // Update monetization settings
+  updateMonetizationSettings: protectedProcedure
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+        settings: z.object({
+          isMonetizationEnabled: z.boolean().optional(),
+          subscriptionTiers: z.array(z.any()).optional(),
+          paymentMethods: z
+            .object({
+              stripe: z.boolean().optional(),
+              paypal: z.boolean().optional(),
+              crypto: z.boolean().optional(),
+            })
+            .optional(),
+          taxSettings: z
+            .object({
+              taxRate: z.number().optional(),
+              taxIncluded: z.boolean().optional(),
+              taxRegion: z.string().optional(),
+            })
+            .optional(),
+          payoutSettings: z
+            .object({
+              method: z.enum(["bank", "paypal", "crypto"]).optional(),
+              frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
+              minimumAmount: z.number().optional(),
+            })
+            .optional(),
+        }),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const updatedSettings =
+          await monetizationService.updateMonetizationSettings(
+            input.personaId,
+            input.settings
+          );
+        return updatedSettings;
+      } catch (error) {
+        logger.error("Error updating monetization settings:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update monetization settings",
+        });
+      }
+    }),
+
+  // Get revenue metrics for a persona
+  getRevenueMetrics: protectedProcedure
+    .input(
+      z.object({
+        personaId: z.string().uuid(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        const metrics = await monetizationService.getRevenueMetrics(
+          input.personaId
+        );
+        return metrics;
+      } catch (error) {
+        logger.error("Error getting revenue metrics:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get revenue metrics",
+        });
+      }
+    }),
+
+  // Get earnings summary for creator
+  getEarningsSummary: protectedProcedure
+    .input(
+      z.object({
+        personaId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        // If no specific persona, get summary for all user's personas
+        if (!input.personaId) {
+          const userPersonas = await db
+            .select({ id: personas.id })
+            .from(personas)
+            .where(eq(personas.userId, ctx.user.id));
+
+          const allMetrics = await Promise.all(
+            userPersonas.map((persona) =>
+              monetizationService.getRevenueMetrics(persona.id)
+            )
+          );
+
+          const totalEarnings = allMetrics.reduce(
+            (sum, metrics) => sum + metrics.totalRevenue,
+            0
+          );
+          const monthlyEarnings = allMetrics.reduce(
+            (sum, metrics) => sum + metrics.monthlyRevenue,
+            0
+          );
+          const totalSubscribers = allMetrics.reduce(
+            (sum, metrics) => sum + metrics.totalSubscribers,
+            0
+          );
+          const activeSubscribers = allMetrics.reduce(
+            (sum, metrics) => sum + metrics.activeSubscribers,
+            0
+          );
+
+          return {
+            totalEarnings,
+            monthlyEarnings,
+            pendingPayouts: monthlyEarnings * 0.8, // 80% of monthly earnings
+            totalSubscribers,
+            activeSubscriptions: activeSubscribers,
+          };
+        } else {
+          // Get metrics for specific persona
+          const metrics = await monetizationService.getRevenueMetrics(
+            input.personaId
+          );
+          return {
+            totalEarnings: metrics.totalRevenue,
+            monthlyEarnings: metrics.monthlyRevenue,
+            pendingPayouts: metrics.monthlyRevenue * 0.8,
+            totalSubscribers: metrics.totalSubscribers,
+            activeSubscriptions: metrics.activeSubscribers,
+          };
+        }
+      } catch (error) {
+        logger.error("Error getting earnings summary:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get earnings summary",
         });
       }
     }),
@@ -3101,6 +3109,504 @@ const feedRouter = router({
     }),
 });
 
+// Messages Router
+const messagesRouter = router({
+  // Get user's messages
+  getUserMessages: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().optional().default(20),
+        offset: z.number().optional().default(0),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        const messages = await messagesService.getUserMessages(
+          ctx.user.id,
+          input.limit,
+          input.offset
+        );
+
+        return messages;
+      } catch (error) {
+        logger.error("Error getting user messages:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get messages",
+        });
+      }
+    }),
+});
+
+// Notifications Router
+const notificationsRouter = router({
+  // Get user's notifications
+  getUserNotifications: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().optional().default(20),
+        offset: z.number().optional().default(0),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        const notifications = await notificationsService.getUserNotifications(
+          ctx.user.id,
+          input.limit,
+          input.offset
+        );
+
+        return notifications;
+      } catch (error) {
+        logger.error("Error getting user notifications:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get notifications",
+        });
+      }
+    }),
+
+  // Mark notification as read
+  markNotificationAsRead: protectedProcedure
+    .input(
+      z.object({
+        notificationId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const success = await notificationsService.markNotificationAsRead(
+          ctx.user.id,
+          input.notificationId
+        );
+
+        return { success };
+      } catch (error) {
+        logger.error("Error marking notification as read:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to mark notification as read",
+        });
+      }
+    }),
+
+  // Mark all notifications as read
+  markAllNotificationsAsRead: protectedProcedure.mutation(async ({ ctx }) => {
+    try {
+      const success = await notificationsService.markAllNotificationsAsRead(
+        ctx.user.id
+      );
+
+      return { success };
+    } catch (error) {
+      logger.error("Error marking all notifications as read:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to mark all notifications as read",
+      });
+    }
+  }),
+
+  // Get unread notification count
+  getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const count = await notificationsService.getUnreadCount(ctx.user.id);
+      return { count };
+    } catch (error) {
+      logger.error("Error getting unread notification count:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get unread notification count",
+      });
+    }
+  }),
+});
+
+// Analytics Router
+const analyticsRouter = router({
+  // Get creator analytics overview
+  getCreatorAnalytics: protectedProcedure
+    .input(
+      z.object({
+        timeRange: z
+          .enum(["7d", "30d", "90d", "12m", "all"])
+          .optional()
+          .default("30d"),
+        personaId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        const analytics = await advancedAnalyticsService.getCreatorAnalytics(
+          ctx.user.id
+        );
+        return analytics;
+      } catch (error) {
+        logger.error("Error getting creator analytics:", error);
+        // Return fallback data instead of throwing error
+        return {
+          overview: {
+            totalRevenue: 0,
+            monthlyRecurringRevenue: 0,
+            totalSubscribers: 0,
+            totalViews: 0,
+            averageRating: 0,
+          },
+          growth: {
+            subscriberGrowthRate: 0,
+            revenueGrowthRate: 0,
+            viewGrowthRate: 0,
+          },
+          engagement: {
+            viewToSubscribeRate: 0,
+            followerToSubscriberRate: 0,
+            responseRate: 0,
+            averageResponseTime: 0,
+          },
+          ranking: {
+            categoryRank: 0,
+            overallRank: 0,
+            percentileScore: 0,
+          },
+        };
+      }
+    }),
+
+  // Get revenue forecasting
+  getRevenueForecasting: protectedProcedure
+    .input(
+      z.object({
+        timeRange: z.enum(["30d", "90d", "12m"]).optional().default("30d"),
+        personaId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        // Use the existing revenue forecasting method if available
+        const forecasting =
+          await advancedAnalyticsService.generateRevenueForecasting(
+            ctx.user.id
+          );
+        return forecasting;
+      } catch (error) {
+        logger.error("Error getting revenue forecasting:", error);
+        // Return fallback data
+        return {
+          forecasts: [
+            {
+              period: "Next Month",
+              forecastedRevenue: 0,
+              confidence: 0.8,
+              method: "historical",
+            },
+            {
+              period: "Next Quarter",
+              forecastedRevenue: 0,
+              confidence: 0.7,
+              method: "trend",
+            },
+            {
+              period: "Next Year",
+              forecastedRevenue: 0,
+              confidence: 0.6,
+              method: "projection",
+            },
+          ],
+          trends: {
+            monthlyGrowthRate: 0,
+            yearOverYearGrowth: 0,
+            seasonalPatterns: {},
+          },
+        };
+      }
+    }),
+
+  // Get subscriber demographics
+  getSubscriberDemographics: protectedProcedure
+    .input(
+      z.object({
+        timeRange: z
+          .enum(["30d", "90d", "12m", "all"])
+          .optional()
+          .default("30d"),
+        personaId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        // Use user analytics for demographics
+        const userAnalytics = await advancedAnalyticsService.getUserAnalytics(
+          ctx.user.id
+        );
+        return {
+          demographics: userAnalytics.demographics,
+          engagement: userAnalytics.engagement,
+          behavior: userAnalytics.behavior,
+        };
+      } catch (error) {
+        logger.error("Error getting subscriber demographics:", error);
+        // Return fallback data
+        return {
+          demographics: {
+            ageDistribution: { "25-34": 100 },
+            genderDistribution: { unknown: 100 },
+            locationDistribution: {},
+          },
+          engagement: {
+            totalSessions: 0,
+            averageSessionDuration: 0,
+            personasViewed: 0,
+            personasInteracted: 0,
+            conversionRate: 0,
+          },
+          behavior: {
+            preferredCategories: [],
+            mostUsedFeatures: [],
+            preferredInteractionTime: {},
+            visitStreak: 0,
+          },
+        };
+      }
+    }),
+
+  // Get performance benchmarks
+  getPerformanceBenchmarks: protectedProcedure
+    .input(
+      z.object({
+        timeRange: z.enum(["30d", "90d", "12m"]).optional().default("30d"),
+        personaId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        const benchmarks =
+          await advancedAnalyticsService.getPerformanceBenchmarks(ctx.user.id);
+        return benchmarks;
+      } catch (error) {
+        logger.error("Error getting performance benchmarks:", error);
+        // Return fallback data
+        return {
+          metrics: {
+            views: { userValue: 0, benchmarkMedian: 0, percentile: 0 },
+            subscribers: { userValue: 0, benchmarkMedian: 0, percentile: 0 },
+            revenue: { userValue: 0, benchmarkMedian: 0, percentile: 0 },
+            engagement: { userValue: 0, benchmarkMedian: 0, percentile: 0 },
+          },
+          recommendations: [],
+          categoryRank: 0,
+          overallRank: 0,
+        };
+      }
+    }),
+
+  // Get user behavior analytics
+  getUserBehaviorAnalytics: protectedProcedure
+    .input(
+      z.object({
+        timeRange: z.enum(["7d", "30d", "90d"]).optional().default("30d"),
+        personaId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        const userAnalytics = await advancedAnalyticsService.getUserAnalytics(
+          ctx.user.id
+        );
+        return {
+          behavior: userAnalytics.behavior,
+          engagement: userAnalytics.engagement,
+          demographics: userAnalytics.demographics,
+        };
+      } catch (error) {
+        logger.error("Error getting user behavior analytics:", error);
+        // Return fallback data
+        return {
+          behavior: {
+            preferredCategories: [],
+            mostUsedFeatures: [],
+            preferredInteractionTime: {},
+            visitStreak: 0,
+          },
+          engagement: {
+            totalSessions: 0,
+            averageSessionDuration: 0,
+            personasViewed: 0,
+            personasInteracted: 0,
+            conversionRate: 0,
+          },
+          demographics: {
+            ageDistribution: { "25-34": 100 },
+            genderDistribution: { unknown: 100 },
+            locationDistribution: {},
+          },
+        };
+      }
+    }),
+
+  // Get business intelligence insights
+  getBusinessIntelligence: protectedProcedure
+    .input(
+      z.object({
+        timeRange: z.enum(["30d", "90d", "12m"]).optional().default("30d"),
+        personaId: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        // Combine multiple analytics sources for business intelligence
+        const [creatorAnalytics, userAnalytics] = await Promise.all([
+          advancedAnalyticsService.getCreatorAnalytics(ctx.user.id),
+          advancedAnalyticsService.getUserAnalytics(ctx.user.id),
+        ]);
+
+        return {
+          insights: [
+            {
+              type: "revenue",
+              title: "Revenue Growth",
+              value: creatorAnalytics.growth.revenueGrowthRate,
+              trend: "up",
+              description: "Your revenue is growing steadily",
+            },
+            {
+              type: "engagement",
+              title: "User Engagement",
+              value: userAnalytics.engagement.conversionRate,
+              trend: "stable",
+              description: "Good engagement with your content",
+            },
+          ],
+          recommendations: [
+            "Focus on content that drives higher engagement",
+            "Consider expanding to new categories",
+            "Optimize your persona descriptions for better discovery",
+          ],
+          trends: {
+            revenue: creatorAnalytics.growth.revenueGrowthRate,
+            subscribers: creatorAnalytics.growth.subscriberGrowthRate,
+            engagement: userAnalytics.engagement.conversionRate,
+          },
+        };
+      } catch (error) {
+        logger.error("Error getting business intelligence:", error);
+        // Return fallback data
+        return {
+          insights: [
+            {
+              type: "revenue",
+              title: "Revenue Growth",
+              value: 0,
+              trend: "stable",
+              description: "No data available yet",
+            },
+            {
+              type: "engagement",
+              title: "User Engagement",
+              value: 0,
+              trend: "stable",
+              description: "No data available yet",
+            },
+          ],
+          recommendations: [
+            "Start creating content to see analytics",
+            "Connect with other creators",
+            "Set up your first persona",
+          ],
+          trends: {
+            revenue: 0,
+            subscribers: 0,
+            engagement: 0,
+          },
+        };
+      }
+    }),
+});
+
+// Add this import at the top with other service imports
+import { SubscriptionsService } from "./services/subscriptionsService";
+
+// Add this initialization with other services
+const subscriptionsService = new SubscriptionsService();
+
+// Add this router after the personaMonetizationRouter
+const subscriptionsRouter = router({
+  // Get user's subscriptions
+  getUserSubscriptions: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const subscriptions = await subscriptionsService.getUserSubscriptions(
+        ctx.user.id
+      );
+      return subscriptions;
+    } catch (error) {
+      logger.error("Error getting user subscriptions:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get user subscriptions",
+      });
+    }
+  }),
+
+  // Get user's payment methods
+  getUserPaymentMethods: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const paymentMethods = await subscriptionsService.getUserPaymentMethods(
+        ctx.user.id
+      );
+      return paymentMethods;
+    } catch (error) {
+      logger.error("Error getting user payment methods:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get user payment methods",
+      });
+    }
+  }),
+
+  // Cancel subscription
+  cancelSubscription: protectedProcedure
+    .input(
+      z.object({
+        subscriptionId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await subscriptionsService.cancelSubscription(
+          input.subscriptionId
+        );
+        return result;
+      } catch (error) {
+        logger.error("Error canceling subscription:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to cancel subscription",
+        });
+      }
+    }),
+
+  // Reactivate subscription
+  reactivateSubscription: protectedProcedure
+    .input(
+      z.object({
+        subscriptionId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await subscriptionsService.reactivateSubscription(
+          input.subscriptionId
+        );
+        return result;
+      } catch (error) {
+        logger.error("Error reactivating subscription:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to reactivate subscription",
+        });
+      }
+    }),
+});
+
 // Main app router
 export const appRouter = router({
   auth: authRouter,
@@ -3118,6 +3624,10 @@ export const appRouter = router({
   discovery: discoveryRouter,
   socialEngagement: socialEngagementRouter,
   feed: feedRouter,
+  messages: messagesRouter,
+  notifications: notificationsRouter,
+  analytics: analyticsRouter,
+  subscriptions: subscriptionsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -3,7 +3,7 @@
     "python.linting.enabled": true,
     "python.linting.flake8Enabled": true,
     "python.formatting.provider": "black",
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
     "cursor.chat.defaultModel": "gpt-4",
     "cursor.autocomplete.enabled": true,
     "files.associations": {

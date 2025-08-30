@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { trpc } from "@/lib/trpc";
 
 interface NavigationItem {
   name: string;
@@ -20,121 +21,80 @@ export default function MainNavigation() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
 
+  // Add refs for hover handling
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const notificationsTimeoutRef = useRef<NodeJS.Timeout>();
+  const messagesTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Get real messages from tRPC
+  const { data: allMessages = [] } = trpc.messages.getUserMessages.useQuery(
+    { limit: 20 },
+    { refetchInterval: 30000 } // Refetch every 30 seconds
+  );
+
+  // Filter for unread messages only
+  const unreadMessages = allMessages.filter((message) => !message.isRead);
+
+  // Enhanced hover handling for notifications
+  const handleNotificationsMouseEnter = () => {
+    if (notificationsTimeoutRef.current) {
+      clearTimeout(notificationsTimeoutRef.current);
+    }
+    setIsNotificationsOpen(true);
+  };
+
+  const handleNotificationsMouseLeave = () => {
+    notificationsTimeoutRef.current = setTimeout(() => {
+      setIsNotificationsOpen(false);
+    }, 150); // Small delay to prevent accidental closing
+  };
+
+  // Enhanced hover handling for messages
+  const handleMessagesMouseEnter = () => {
+    if (messagesTimeoutRef.current) {
+      clearTimeout(messagesTimeoutRef.current);
+    }
+    setIsMessagesOpen(true);
+  };
+
+  const handleMessagesMouseLeave = () => {
+    messagesTimeoutRef.current = setTimeout(() => {
+      setIsMessagesOpen(false);
+    }, 150); // Small delay to prevent accidental closing
+  };
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (notificationsTimeoutRef.current) {
+        clearTimeout(notificationsTimeoutRef.current);
+      }
+      if (messagesTimeoutRef.current) {
+        clearTimeout(messagesTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Hide navigation on auth routes and landing page to avoid showing header on login/signout
   const hideOnAuthRoutes = pathname === "/" || pathname.startsWith("/auth/");
   if (hideOnAuthRoutes) {
     return null;
   }
-  
+
   // Additional safety: Hide if user is not authenticated and on landing page
   if (pathname === "/" && !user) {
     return null;
   }
 
-  const DEFAULT_RECENT_NOTIFICATIONS = 8; // can be overridden via admin later
-  const notifications = [
-    {
-      id: "n1",
-      title: "New follower on your persona",
-      time: "2m ago",
-      type: "social" as const,
-    },
-    {
-      id: "n2",
-      title: "Your persona was liked",
-      time: "10m ago",
-      type: "like" as const,
-    },
-    {
-      id: "n3",
-      title: "New review received",
-      time: "23m ago",
-      type: "review" as const,
-    },
-    {
-      id: "n4",
-      title: "Trending boost: +12%",
-      time: "1h ago",
-      type: "trending" as const,
-    },
-    {
-      id: "n5",
-      title: "Recommendation added to feed",
-      time: "3h ago",
-      type: "feed" as const,
-    },
-    {
-      id: "n6",
-      title: "Subscription inquiry",
-      time: "5h ago",
-      type: "monetization" as const,
-    },
-    {
-      id: "n7",
-      title: "System message updated",
-      time: "Yesterday",
-      type: "system" as const,
-    },
-    {
-      id: "n8",
-      title: "New persona suggestion",
-      time: "Yesterday",
-      type: "suggestion" as const,
-    },
-    {
-      id: "n9",
-      title: "Two-factor login from Chrome",
-      time: "2d ago",
-      type: "security" as const,
-    },
-  ];
+  const handleLogout = async () => {
+    setIsProfileMenuOpen(false);
+    await logout();
+  };
 
-  const DEFAULT_RECENT_MESSAGES = 8; // configurable later
-  const messages = [
-    {
-      id: "m1",
-      from: "Airica",
-      preview: "Here’s your daily insight…",
-      time: "2m ago",
-    },
-    {
-      id: "m2",
-      from: "Alex J.",
-      preview: "Thanks for the collab!",
-      time: "12m ago",
-    },
-    {
-      id: "m3",
-      from: "System",
-      preview: "Your export is ready.",
-      time: "34m ago",
-    },
-    {
-      id: "m4",
-      from: "Support",
-      preview: "We’ve updated your ticket.",
-      time: "1h ago",
-    },
-    {
-      id: "m5",
-      from: "Marcus R.",
-      preview: "Let’s chat tomorrow.",
-      time: "3h ago",
-    },
-    {
-      id: "m6",
-      from: "Airica",
-      preview: "New suggestion for you.",
-      time: "5h ago",
-    },
-    {
-      id: "m7",
-      from: "Sarah K.",
-      preview: "Loved your persona!",
-      time: "Yesterday",
-    },
-    { id: "m8", from: "Billing", preview: "Invoice paid.", time: "2d ago" },
-  ];
+  const isActive = (href: string) => {
+    return pathname === href || pathname.startsWith(href + "/");
+  };
 
   const mainNavItems: NavigationItem[] = [
     {
@@ -164,7 +124,6 @@ export default function MainNavigation() {
         </svg>
       ),
     },
-
     {
       name: "Social",
       href: "/social",
@@ -183,27 +142,43 @@ export default function MainNavigation() {
         </svg>
       ),
     },
+    {
+      name: "Messages",
+      href: "/messages",
+      icon: (
+        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Analytics",
+      href: "/analytics",
+      icon: (
+        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      ),
+    },
+    {
+      name: "Creator",
+      href: "/creator/dashboard",
+      icon: (
+        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      ),
+    },
   ];
 
   const profileMenuItems = [
     { name: "Account Settings", href: "/account", icon: "⚙️" },
-    { name: "Dashboard", href: "/dashboard", icon: "📊" },
-    { name: "Creator Tools", href: "/creator/dashboard", icon: "🛠️" },
-    { name: "Analytics", href: "/analytics", icon: "📈" },
+    { name: "Billing", href: "/account/billing", icon: "💳" },
+    { name: "Analytics", href: "/analytics", icon: "📊" },
+    { name: "Creator Dashboard", href: "/creator/dashboard", icon: "🎨" },
     { name: "Monetization", href: "/monetization", icon: "💰" },
-    { name: "Safety Center", href: "/safety", icon: "🛡️" },
-    { name: "Privacy Settings", href: "/privacy", icon: "🔒" },
-    { name: "Files", href: "/files", icon: "📁" },
+    { name: "Help & Support", href: "/help", icon: "❓" },
   ];
-
-  const handleLogout = async () => {
-    await logout();
-    // No need to redirect here - AuthContext.logout() already handles the redirect
-  };
-
-  const isActive = (href: string) => {
-    return pathname === href || pathname.startsWith(href + "/");
-  };
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
@@ -270,9 +245,10 @@ export default function MainNavigation() {
             <div className="flex items-center space-x-2">
               {/* Messages */}
               <div
+                ref={messagesRef}
                 className="relative"
-                onMouseEnter={() => setIsMessagesOpen(true)}
-                onMouseLeave={() => setIsMessagesOpen(false)}
+                onMouseEnter={handleMessagesMouseEnter}
+                onMouseLeave={handleMessagesMouseLeave}
               >
                 <button
                   onClick={() => setIsMessagesOpen((v) => !v)}
@@ -286,46 +262,57 @@ export default function MainNavigation() {
                     <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
                   </svg>
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {Math.min(messages.length, 9)}
+                    {Math.min(unreadMessages.length, 9)}
                   </span>
                 </button>
 
                 {isMessagesOpen && (
-                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                  <div
+                    className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
+                    onMouseEnter={handleMessagesMouseEnter}
+                    onMouseLeave={handleMessagesMouseLeave}
+                  >
                     <div className="px-4 py-2 border-b border-gray-100">
                       <h4 className="text-sm font-semibold text-gray-900">
-                        Messages
+                        Unread Messages
                       </h4>
                       <p className="text-xs text-gray-500">
-                        Showing latest {DEFAULT_RECENT_MESSAGES}
+                        {unreadMessages.length} unread message
+                        {unreadMessages.length !== 1 ? "s" : ""}
                       </p>
                     </div>
                     <ul className="max-h-96 overflow-auto">
-                      {messages.slice(0, DEFAULT_RECENT_MESSAGES).map((m) => (
-                        <li
-                          key={m.id}
-                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-xs font-medium">
-                              {m.from.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <div className="text-sm font-medium text-gray-900 truncate">
-                                  {m.from}
-                                </div>
-                                <div className="text-xs text-gray-500 ml-2 flex-shrink-0">
-                                  {m.time}
-                                </div>
-                              </div>
-                              <div className="text-sm text-gray-600 truncate">
-                                {m.preview}
-                              </div>
-                            </div>
-                          </div>
+                      {unreadMessages.length === 0 ? (
+                        <li className="px-4 py-3 text-center text-gray-500">
+                          No unread messages
                         </li>
-                      ))}
+                      ) : (
+                        unreadMessages.slice(0, 8).map((m) => (
+                          <li
+                            key={m.id}
+                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-xs font-medium">
+                                {m.from.charAt(0)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-sm font-medium text-gray-900 truncate">
+                                    {m.from}
+                                  </div>
+                                  <div className="text-xs text-gray-500 ml-2 flex-shrink-0">
+                                    {m.time}
+                                  </div>
+                                </div>
+                                <div className="text-sm text-gray-600 truncate">
+                                  {m.preview}
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        ))
+                      )}
                     </ul>
                     <div className="px-4 py-2 border-t border-gray-100 text-right">
                       <a
@@ -342,9 +329,10 @@ export default function MainNavigation() {
 
               {/* Notifications */}
               <div
+                ref={notificationsRef}
                 className="relative"
-                onMouseEnter={() => setIsNotificationsOpen(true)}
-                onMouseLeave={() => setIsNotificationsOpen(false)}
+                onMouseEnter={handleNotificationsMouseEnter}
+                onMouseLeave={handleNotificationsMouseLeave}
               >
                 <button
                   onClick={() => setIsNotificationsOpen((v) => !v)}
@@ -358,49 +346,28 @@ export default function MainNavigation() {
                     <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
                   </svg>
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {Math.min(notifications.length, 9)}
+                    0
                   </span>
                 </button>
 
                 {isNotificationsOpen && (
-                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                  <div
+                    className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
+                    onMouseEnter={handleNotificationsMouseEnter}
+                    onMouseLeave={handleNotificationsMouseLeave}
+                  >
                     <div className="px-4 py-2 border-b border-gray-100">
                       <h4 className="text-sm font-semibold text-gray-900">
                         Notifications
                       </h4>
                       <p className="text-xs text-gray-500">
-                        Showing latest {DEFAULT_RECENT_NOTIFICATIONS}
+                        No notifications yet
                       </p>
                     </div>
                     <ul className="max-h-96 overflow-auto">
-                      {notifications
-                        .slice(0, DEFAULT_RECENT_NOTIFICATIONS)
-                        .map((n) => (
-                          <li
-                            key={n.id}
-                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-start gap-3"
-                          >
-                            <span className="text-lg">
-                              {n.type === "like" && "👍"}
-                              {n.type === "social" && "👥"}
-                              {n.type === "review" && "📝"}
-                              {n.type === "trending" && "🔥"}
-                              {n.type === "feed" && "✨"}
-                              {n.type === "monetization" && "💰"}
-                              {n.type === "system" && "🔔"}
-                              {n.type === "suggestion" && "💡"}
-                              {n.type === "security" && "🛡️"}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm text-gray-900 truncate">
-                                {n.title}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {n.time}
-                              </div>
-                            </div>
-                          </li>
-                        ))}
+                      <li className="px-4 py-3 text-center text-gray-500">
+                        No notifications yet
+                      </li>
                     </ul>
                     <div className="px-4 py-2 border-t border-gray-100 text-right">
                       <a
@@ -414,116 +381,56 @@ export default function MainNavigation() {
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Profile Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                className="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100"
-              >
-                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-medium text-sm">
-                    {user?.name?.charAt(0) || "U"}
-                  </span>
-                </div>
-                <svg
-                  className="w-4 h-4 text-gray-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              {/* Profile Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsProfileMenuOpen((v) => !v)}
+                  className="flex items-center space-x-2 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
+                  <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    {user?.name?.charAt(0) || "U"}
+                  </div>
+                </button>
 
-              {/* Profile Dropdown Menu */}
-              {isProfileMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
-                  {/* User Info */}
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
-                        <span className="text-white font-medium">
-                          {user?.name?.charAt(0) || "U"}
-                        </span>
+                {isProfileMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <div className="text-sm font-medium text-gray-900">
+                        {user?.name || "User"}
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {user?.name || "User"}
-                        </p>
-                        <p className="text-sm text-gray-600">{user?.email}</p>
-                      </div>
+                      <div className="text-xs text-gray-500">{user?.email}</div>
                     </div>
+                    <ul>
+                      {profileMenuItems.map((item) => (
+                        <li key={item.name}>
+                          <Link
+                            href={item.href}
+                            onClick={() => setIsProfileMenuOpen(false)}
+                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                          >
+                            <span className="mr-2">{item.icon}</span>
+                            {item.name}
+                          </Link>
+                        </li>
+                      ))}
+                      <li>
+                        <button
+                          onClick={handleLogout}
+                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+                        >
+                          <span className="mr-2">🚪</span>
+                          Logout
+                        </button>
+                      </li>
+                    </ul>
                   </div>
-
-                  {/* Menu Items */}
-                  <div className="py-2">
-                    {profileMenuItems.map((item) => (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        onClick={() => setIsProfileMenuOpen(false)}
-                      >
-                        <span className="mr-3">{item.icon}</span>
-                        {item.name}
-                      </Link>
-                    ))}
-                  </div>
-
-                  {/* Logout */}
-                  <div className="border-t border-gray-100 pt-2">
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                    >
-                      <span className="mr-3">🚪</span>
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Navigation */}
-        <div className="md:hidden border-t border-gray-200">
-          <div className="flex items-center justify-around py-2">
-            {mainNavItems.slice(0, 4).map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex flex-col items-center py-2 px-3 rounded-lg ${
-                  isActive(item.href) ? "text-blue-600" : "text-gray-600"
-                }`}
-              >
-                <span className="mb-1">{item.icon}</span>
-                <span className="text-xs">{item.name}</span>
-                {item.count && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                    {item.count}
-                  </span>
                 )}
-              </Link>
-            ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Click outside to close dropdown */}
-      {isProfileMenuOpen && (
-        <div
-          className="fixed inset-0 z-0"
-          onClick={() => setIsProfileMenuOpen(false)}
-        />
-      )}
     </nav>
   );
 }

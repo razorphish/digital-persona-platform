@@ -7,6 +7,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { trpc } from "@/lib/trpc";
 
 // Types for social connections
+// TEST: This comment should persist after save to verify no reversion
 interface PublicPersona {
   id: string;
   name: string;
@@ -110,6 +111,16 @@ function SocialPageContent() {
 
   const [connections, setConnections] = useState<Connection[]>([]);
   const [pendingRequests, setPendingRequests] = useState<Connection[]>([]);
+
+  const { data: followingData, isLoading: followingLoading, error: followingError } = trpc.socialEngagement.getUserFollowing.useQuery({
+    limit: 10,
+    offset: 0
+  });
+
+  const { data: likedPersonasData, isLoading: likedPersonasLoading, error: likedPersonasError } = trpc.socialEngagement.getUserLikedPersonas.useQuery({
+    limit: 10,
+    offset: 0
+  });
 
   // Filter personas based on search and filters
   const filteredPersonas = discoveredPersonas.filter((persona) => {
@@ -505,35 +516,178 @@ function SocialPageContent() {
         {/* Friends Tab */}
         {activeTab === "friends" && (
           <div className="bg-white rounded-xl shadow-sm p-8">
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-blue-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
-                </svg>
+            {followingLoading || likedPersonasLoading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600">
+                  Loading your connections...
+                </p>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                No friends yet
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Start connecting with personas to build your network
-              </p>
-              <button
-                onClick={() => setActiveTab("discover")}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Discover Personas
-              </button>
-            </div>
+            ) : followingError || likedPersonasError ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg
+                    className="w-8 h-8 text-red-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Error loading connections
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {followingError?.message ||
+                    likedPersonasError?.message ||
+                    "Failed to load your connections"}
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : (followingData && followingData.length > 0) ||
+              (likedPersonasData && likedPersonasData.length > 0) ? (
+              <div className="space-y-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  Your Connections (
+                  {(followingData?.length || 0) +
+                    (likedPersonasData?.length || 0)}
+                  )
+                </h2>
+
+                {followingData && followingData.length > 0 && (
+                  <div className="mb-8">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                      Following ({followingData.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {followingData.map((follow) => (
+                        <div
+                          key={follow.id}
+                          className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                        >
+                          <div className="flex items-center space-x-3 mb-3">
+                            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-medium">
+                              {follow.creator?.name?.charAt(0) || "U"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-gray-900 truncate">
+                                {follow.creator?.name || "Unknown User"}
+                              </h3>
+                              <p className="text-sm text-gray-600">Following</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(
+                                  follow.createdAt
+                                ).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              Connected
+                            </span>
+                            <button
+                              onClick={() =>
+                                router.push(`/creators/${follow.followingId}`)
+                              }
+                              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                            >
+                              View Profile
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {likedPersonasData && likedPersonasData.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                      Liked Personas ({likedPersonasData.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {likedPersonasData.map((like) => (
+                        <div
+                          key={like.id}
+                          className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                        >
+                          <div className="flex items-center space-x-3 mb-3">
+                            <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-medium">
+                              {like.persona?.name?.charAt(0) || "P"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-gray-900 truncate">
+                                {like.persona?.name || "Unknown Persona"}
+                              </h3>
+                              <p className="text-sm text-gray-600">
+                                Liked Persona
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(like.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                              Liked
+                            </span>
+                            <button
+                              onClick={() =>
+                                router.push(`/personas/${like.personaId}`)
+                              }
+                              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                            >
+                              View Persona
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg
+                    className="w-8 h-8 text-blue-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  No connections yet
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Start connecting with personas to build your network
+                </p>
+                <button
+                  onClick={() => setActiveTab("discover")}
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Discover Personas
+                </button>
+              </div>
+            )}
           </div>
         )}
 
