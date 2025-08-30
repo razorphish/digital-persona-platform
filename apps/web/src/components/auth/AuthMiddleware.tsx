@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -11,6 +11,8 @@ export function AuthMiddleware() {
   const { isLoading, isAuthenticated, isInitialized } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const lastRedirectRef = useRef<string | null>(null);
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   console.log("✅ AuthMiddleware: RE-ENABLED - Conservative route protection", {
     pathname,
@@ -20,7 +22,7 @@ export function AuthMiddleware() {
     currentTime: new Date().toISOString(),
   });
 
-    // Define protected routes that require authentication
+  // Define protected routes that require authentication
   const protectedRoutes = useMemo(
     () => [
       "/feed",
@@ -57,18 +59,41 @@ export function AuthMiddleware() {
     });
 
     // ONLY handle protected routes - redirect unauthenticated users to login
-    // Add delay to prevent race conditions with auth state changes
     if (isProtectedRoute && !isAuthenticated) {
       console.warn(
-        `🛡️ Protected route access denied: ${pathname} - redirecting to login in 200ms`
+        `🛡️ Protected route access denied: ${pathname} - redirecting to login`
       );
+      
+      // Prevent rapid redirects to the same path
+      if (lastRedirectRef.current === pathname) {
+        console.log("AuthMiddleware: Skipping redirect - already redirected from this path");
+        return;
+      }
+      
+      // Clear any existing timeout
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+      
+      // Set the last redirected path
+      lastRedirectRef.current = pathname;
       
       const protectionTimer = setTimeout(() => {
         console.log("🚨 Executing protection redirect to login");
         router.replace("/");
-      }, 200); // Small delay to prevent race conditions
+        // Clear the last redirect after a delay to allow future redirects
+        setTimeout(() => {
+          lastRedirectRef.current = null;
+        }, 2000);
+      }, 500); // Increased delay to prevent race conditions
       
-      return () => clearTimeout(protectionTimer);
+      redirectTimeoutRef.current = protectionTimer;
+      
+      return () => {
+        if (redirectTimeoutRef.current) {
+          clearTimeout(redirectTimeoutRef.current);
+        }
+      };
     }
 
     // Do NOT handle authenticated user redirects here - let pages handle their own logic

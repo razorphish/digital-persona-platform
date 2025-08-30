@@ -226,50 +226,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [isClient, isInitialized, checkAuthState]); // Include isClient dependency
 
-  // Periodic token validation (every 10 minutes) - reduced frequency to prevent race conditions
+  // Disable periodic token validation to prevent circular redirects
+  // Token validation will be handled by API responses and AuthMiddleware
   useEffect(() => {
     // Only start periodic validation after initialization and on client side
     if (!isInitialized || !isClient) return;
 
-    // Re-enable periodic token validation with conservative frequency (30 minutes)
-    const interval = setInterval(() => {
-      if (user) {
-        console.log("🕐 Periodic token validation check (30min interval)");
-        const tokens = AuthUtils.getTokens();
-        if (!tokens?.accessToken) {
-          console.warn("No token found during periodic check, logging out");
-          logout();
-          return;
-        }
+    // DISABLED: Periodic token validation to prevent circular redirects
+    // Token validation is now handled by:
+    // 1. API responses (401/403 errors)
+    // 2. AuthMiddleware (route protection)
+    // 3. User-initiated actions
+    
+    console.log("🕐 Periodic token validation DISABLED to prevent circular redirects");
+    
+    // const interval = setInterval(() => {
+    //   if (user) {
+    //     console.log("🕐 Periodic token validation check (30min interval)");
+    //     const tokens = AuthUtils.getTokens();
+    //     if (!tokens?.accessToken) {
+    //       console.warn("No token found during periodic check, logging out");
+    //       logout();
+    //       return;
+    //     }
+    //   }
+    // }, 30 * 60 * 1000); // 30 minutes - very conservative frequency
 
-        // EMERGENCY: Disable token expiration checks to debug refresh issue
-        console.log("🚨 Token validation DISABLED for debugging");
-        // try {
-        //   if (AuthUtils.isTokenExpired(tokens.accessToken)) {
-        //     const tokenData = AuthUtils.getUserFromToken(tokens.accessToken);
-        //     const currentTime = Date.now() / 1000;
-        //     const timeSinceExpiry = currentTime - (tokenData as any)?.exp;
-
-        //     // Only logout if token is expired by more than 10 minutes
-        //     if (timeSinceExpiry > 600) {
-        //       console.warn(
-        //         "Token significantly expired during periodic check (>10min), logging out"
-        //       );
-        //       logout();
-        //     } else {
-        //       console.log(
-        //         "Token recently expired, allowing grace period in periodic check"
-        //       );
-        //     }
-        //   }
-        // } catch (error) {
-        //   console.error("Error during periodic token validation:", error);
-        //   // Don't logout on validation errors during periodic checks
-        // }
-      }
-    }, 30 * 60 * 1000); // 30 minutes - very conservative frequency
-
-    return () => clearInterval(interval);
+    // return () => clearInterval(interval);
   }, [user, logout, isInitialized]);
 
   // Listen for storage changes and logout broadcasts (cross-tab security)

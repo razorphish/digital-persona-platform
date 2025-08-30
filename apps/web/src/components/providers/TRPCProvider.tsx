@@ -84,22 +84,20 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Re-enable conservative auth error handling
+      // Conservative auth error handling - let AuthMiddleware handle redirects
       if (isAuthError) {
-        console.warn("🔒 Auth error detected - handling conservatively:", {
+        console.warn("🔒 Auth error detected - clearing tokens only:", {
           status,
           error,
           pathname: window.location.pathname,
         });
 
-        // Clear corrupted/invalid tokens
+        // Clear corrupted/invalid tokens but don't redirect
+        // Let AuthMiddleware handle the redirect to prevent loops
         AuthUtils.clearTokens();
-
-        // Conservative redirect with delay to prevent loops
-        console.log("🔄 Redirecting to login in 1 second due to auth error");
-        setTimeout(() => {
-          window.location.href = "/";
-        }, 1000); // 1 second delay to prevent rapid redirects
+        
+        // Don't redirect here - let AuthMiddleware handle it
+        // This prevents circular redirects between error handler and middleware
       }
     }
   };
@@ -174,15 +172,8 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
                 console.warn("Clearing tokens due to confirmed 401 response");
                 AuthUtils.clearTokens();
 
-                // Add a small delay to prevent race conditions
-                setTimeout(() => {
-                  if (
-                    !window.location.pathname.startsWith("/auth/") &&
-                    window.location.pathname !== "/"
-                  ) {
-                    window.location.href = "/";
-                  }
-                }, 100);
+                // Don't redirect here - let AuthMiddleware handle it
+                // This prevents circular redirects between fetch and middleware
               } else {
                 console.log("Skipping token clear - initial load or auth page");
               }
