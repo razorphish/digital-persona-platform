@@ -5,6 +5,7 @@ import { TRPCProvider } from "../components/providers/TRPCProvider";
 import { AuthProvider } from "../contexts/AuthContext";
 import { AuthMiddleware } from "../components/auth/AuthMiddleware";
 import ConditionalNavigation from "../components/navigation/ConditionalNavigation";
+import ConditionalFooter from "../components/navigation/ConditionalFooter";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -48,7 +49,10 @@ export default function RootLayout({
           <AuthProvider>
             <AuthMiddleware />
             <ConditionalNavigation />
-            {children}
+            <main className="min-h-screen flex flex-col">
+              {children}
+            </main>
+            <ConditionalFooter />
           </AuthProvider>
         </TRPCProvider>
       </body>
