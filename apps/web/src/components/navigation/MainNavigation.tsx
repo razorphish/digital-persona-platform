@@ -142,15 +142,7 @@ export default function MainNavigation() {
         </svg>
       ),
     },
-    {
-      name: "Messages",
-      href: "/messages",
-      icon: (
-        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
-        </svg>
-      ),
-    },
+
     {
       name: "Analytics",
       href: "/analytics",
