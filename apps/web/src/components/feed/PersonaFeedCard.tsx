@@ -47,6 +47,7 @@ export default function PersonaFeedCard({
   const [isFollowing, setIsFollowing] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [isViewed, setIsViewed] = useState(false);
+  const [isShared, setIsShared] = useState(false);
 
   const { persona, creator, metadata, isPromoted, isTrending } = feedItem;
 
@@ -205,21 +206,58 @@ export default function PersonaFeedCard({
     router.push(`/persona-details?id=${persona.id}`);
   };
 
-  const handleShare = () => {
-    if (navigator.share && persona?.id) {
-      navigator.share({
-        title: `Check out ${persona.name} on Hibiji`,
-        text: persona.description,
-        url: `${window.location.origin}/personas/${persona.id}`,
-      });
-    } else {
-      // Fallback to clipboard
-      navigator.clipboard.writeText(
-        `${window.location.origin}/personas/${persona.id}`
-      );
-    }
+  const handleShare = async () => {
+    try {
+      if (navigator.share && persona?.id) {
+        await navigator.share({
+          title: `Check out ${persona.name} on Hibiji`,
+          text:
+            persona.description ||
+            `Check out this interesting persona on Hibiji`,
+          url: `${window.location.origin}/persona-details?id=${persona.id}`,
+        });
+      } else if (navigator.clipboard && persona?.id) {
+        // Fallback to clipboard
+        await navigator.clipboard.writeText(
+          `${window.location.origin}/persona-details?id=${persona.id}`
+        );
+        // You could add a toast notification here if you have a toast system
+        console.log("Link copied to clipboard!");
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = `${window.location.origin}/persona-details?id=${persona.id}`;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        console.log("Link copied to clipboard!");
+      }
 
-    onInteraction(feedItem.id, "shared");
+      setIsShared(true);
+      onInteraction(feedItem.id, "shared");
+
+      // Reset the shared state after 3 seconds
+      setTimeout(() => setIsShared(false), 3000);
+    } catch (error) {
+      console.error("Error sharing:", error);
+      // Fallback to clipboard if sharing fails
+      try {
+        if (navigator.clipboard && persona?.id) {
+          await navigator.clipboard.writeText(
+            `${window.location.origin}/persona-details?id=${persona.id}`
+          );
+          console.log("Link copied to clipboard!");
+          setIsShared(true);
+          onInteraction(feedItem.id, "shared");
+
+          // Reset the shared state after 3 seconds
+          setTimeout(() => setIsShared(false), 3000);
+        }
+      } catch (clipboardError) {
+        console.error("Clipboard fallback also failed:", clipboardError);
+      }
+    }
   };
 
   const handleDismiss = () => {
@@ -466,11 +504,15 @@ export default function PersonaFeedCard({
             {/* Share Button */}
             <button
               onClick={handleShare}
-              className="flex items-center space-x-2 text-gray-600 hover:text-green-500 transition-colors"
+              className={`flex items-center space-x-2 transition-colors ${
+                isShared
+                  ? "text-green-500"
+                  : "text-gray-600 hover:text-green-500"
+              }`}
             >
               <svg
-                className="w-6 h-6"
-                fill="none"
+                className={`w-6 h-6 ${isShared ? "fill-current" : ""}`}
+                fill={isShared ? "currentColor" : "none"}
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
@@ -481,6 +523,9 @@ export default function PersonaFeedCard({
                   d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
                 />
               </svg>
+              {isShared && (
+                <span className="text-sm text-green-500">Shared!</span>
+              )}
             </button>
           </div>
 

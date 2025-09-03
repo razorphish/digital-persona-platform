@@ -41,22 +41,28 @@ function FeedPageContent() {
   const [showFilters, setShowFilters] = useState(false);
 
   // tRPC queries for real data - OPTIMIZED for performance
-  const feedQuery = trpc.feed.getFeed.useQuery({
-    limit: 10, // Reduced from 50 to 10 for faster loading
-  }, {
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    retry: 1, // Only retry once on failure
-    retryDelay: 1000, // 1 second retry delay
-  });
+  const feedQuery = trpc.feed.getFeed.useQuery(
+    {
+      limit: 10, // Reduced from 50 to 10 for faster loading
+    },
+    {
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      retry: 1, // Only retry once on failure
+      retryDelay: 1000, // 1 second retry delay
+    }
+  );
 
-  const trendingQuery = trpc.discovery.getTrendingPersonas.useQuery({
-    timeframe: "24h" as const,
-    limit: 5, // Reduced from 10 to 5
-  }, {
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
-    retry: 1,
-    retryDelay: 1000,
-  });
+  const trendingQuery = trpc.discovery.getTrendingPersonas.useQuery(
+    {
+      timeframe: "24h" as const,
+      limit: 5, // Reduced from 10 to 5
+    },
+    {
+      staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+      retry: 1,
+      retryDelay: 1000,
+    }
+  );
 
   // Extract data
   const feed = feedQuery?.data || null;
@@ -106,9 +112,11 @@ function FeedPageContent() {
     } else if (!feedLoading && feedError) {
       console.error("❌ Feed API error:", feedError);
       setIsLoading(false);
-      
+
       // Show error but don't auto-refresh to prevent loops
-      console.log("🚫 Not auto-refreshing due to API error - user can manually refresh");
+      console.log(
+        "🚫 Not auto-refreshing due to API error - user can manually refresh"
+      );
     } else if (!feedLoading && (!feed || feed.length === 0)) {
       console.log("🔄 No feed data found, will show empty state");
       setIsLoading(false);
@@ -175,7 +183,12 @@ function FeedPageContent() {
   }
 
   // Show empty state when no feed items and not loading
-  if (!feedLoading && !isLoading && (!feedItems || feedItems.length === 0) && !feedError) {
+  if (
+    !feedLoading &&
+    !isLoading &&
+    (!feedItems || feedItems.length === 0) &&
+    !feedError
+  ) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -405,6 +418,7 @@ function FeedPageContent() {
             <TrendingSection
               trending={trending || []}
               isLoading={trendingLoading}
+              onCategoryFilter={handleCategoryFilter}
             />
           </div>
         </div>

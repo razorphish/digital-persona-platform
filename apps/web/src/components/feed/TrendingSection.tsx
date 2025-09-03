@@ -19,16 +19,25 @@ interface TrendingPersona {
 interface TrendingSectionProps {
   trending: TrendingPersona[];
   isLoading: boolean;
+  onCategoryFilter?: (category: string | null) => void;
 }
 
 export default function TrendingSection({
   trending,
   isLoading,
+  onCategoryFilter,
 }: TrendingSectionProps) {
   const router = useRouter();
 
   const handlePersonaClick = (personaId: string) => {
     router.push(`/persona-details?id=${personaId}`);
+  };
+
+  const handleTopicClick = (topicName: string) => {
+    if (onCategoryFilter) {
+      // Topic names are already in lowercase to match database categories
+      onCategoryFilter(topicName);
+    }
   };
 
   const formatGrowth = (growth: number) => {
@@ -188,20 +197,34 @@ export default function TrendingSection({
         </h4>
         <div className="flex flex-wrap gap-1">
           {[
-            { name: "Entertainment", emoji: "🎭", count: 24 },
-            { name: "Education", emoji: "📚", count: 18 },
-            { name: "Lifestyle", emoji: "🌟", count: 15 },
-            { name: "Gaming", emoji: "🎮", count: 12 },
+            { name: "entertainment", emoji: "🎭", count: 24 },
+            { name: "education", emoji: "📚", count: 18 },
+            { name: "lifestyle", emoji: "🌟", count: 15 },
+            { name: "gaming", emoji: "🎮", count: 12 },
+            { name: "technology", emoji: "💻", count: 10 },
+            { name: "fitness", emoji: "💪", count: 8 },
+            { name: "business", emoji: "💼", count: 6 },
+            { name: "art", emoji: "🎨", count: 5 },
+            { name: "music", emoji: "🎵", count: 4 },
+            { name: "cooking", emoji: "👨‍🍳", count: 3 },
           ].map((topic) => (
             <button
               key={topic.name}
-              className="inline-flex items-center space-x-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded-full transition-colors"
+              onClick={() => handleTopicClick(topic.name)}
+              className="inline-flex items-center space-x-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded-full transition-colors cursor-pointer"
             >
               <span>{topic.emoji}</span>
-              <span>{topic.name}</span>
+              <span className="capitalize">{topic.name}</span>
               <span className="text-gray-500">({topic.count})</span>
             </button>
           ))}
+          <button
+            onClick={() => onCategoryFilter?.(null)}
+            className="inline-flex items-center space-x-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs px-2 py-1 rounded-full transition-colors cursor-pointer"
+          >
+            <span>🔄</span>
+            <span>Clear Filters</span>
+          </button>
         </div>
       </div>
     </div>
