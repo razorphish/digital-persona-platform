@@ -473,7 +473,7 @@ function PersonasPageContent() {
                     {persona.requiresSubscription ? (
                       <button
                         onClick={() =>
-                          router.push(`/personas/${persona.id}/subscribe`)
+                          router.push(`/account/subscriptions`)
                         }
                         className="px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
                       >
@@ -482,7 +482,7 @@ function PersonasPageContent() {
                     ) : (
                       <button
                         onClick={() =>
-                          router.push(`/personas/${persona.id}/analytics`)
+                          router.push(`/analytics`)
                         }
                         className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
                       >

@@ -112,14 +112,22 @@ function SocialPageContent() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [pendingRequests, setPendingRequests] = useState<Connection[]>([]);
 
-  const { data: followingData, isLoading: followingLoading, error: followingError } = trpc.socialEngagement.getUserFollowing.useQuery({
+  const {
+    data: followingData,
+    isLoading: followingLoading,
+    error: followingError,
+  } = trpc.socialEngagement.getUserFollowing.useQuery({
     limit: 10,
-    offset: 0
+    offset: 0,
   });
 
-  const { data: likedPersonasData, isLoading: likedPersonasLoading, error: likedPersonasError } = trpc.socialEngagement.getUserLikedPersonas.useQuery({
+  const {
+    data: likedPersonasData,
+    isLoading: likedPersonasLoading,
+    error: likedPersonasError,
+  } = trpc.socialEngagement.getUserLikedPersonas.useQuery({
     limit: 10,
-    offset: 0
+    offset: 0,
   });
 
   // Filter personas based on search and filters
@@ -231,7 +239,7 @@ function SocialPageContent() {
               },
               {
                 id: "friends",
-                label: "Friends",
+                label: "Network",
                 icon: "👥",
                 count: connections.length,
               },
@@ -454,7 +462,7 @@ function SocialPageContent() {
                         </button>
                         <button
                           onClick={() =>
-                            router.push(`/personas/${persona.id}/preview`)
+                            router.push(`/persona-details?id=${persona.id}`)
                           }
                           className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
                         >
@@ -513,15 +521,13 @@ function SocialPageContent() {
           </div>
         )}
 
-        {/* Friends Tab */}
+        {/* Network Tab */}
         {activeTab === "friends" && (
           <div className="bg-white rounded-xl shadow-sm p-8">
             {followingLoading || likedPersonasLoading ? (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">
-                  Loading your connections...
-                </p>
+                <p className="mt-4 text-gray-600">Loading your network...</p>
               </div>
             ) : followingError || likedPersonasError ? (
               <div className="text-center py-12">
@@ -541,12 +547,12 @@ function SocialPageContent() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Error loading connections
+                  Error loading network
                 </h3>
                 <p className="text-gray-600 mb-6">
                   {followingError?.message ||
                     likedPersonasError?.message ||
-                    "Failed to load your connections"}
+                    "Failed to load your network"}
                 </p>
                 <button
                   onClick={() => window.location.reload()}
@@ -559,7 +565,7 @@ function SocialPageContent() {
               (likedPersonasData && likedPersonasData.length > 0) ? (
               <div className="space-y-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Your Connections (
+                  Your Network (
                   {(followingData?.length || 0) +
                     (likedPersonasData?.length || 0)}
                   )
@@ -568,7 +574,7 @@ function SocialPageContent() {
                 {followingData && followingData.length > 0 && (
                   <div className="mb-8">
                     <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      Following ({followingData.length})
+                      Creators You Follow ({followingData.length})
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {followingData.map((follow) => (
@@ -598,11 +604,11 @@ function SocialPageContent() {
                             </span>
                             <button
                               onClick={() =>
-                                router.push(`/creators/${follow.followingId}`)
+                                router.push(`/creator/${follow.followingId}`)
                               }
                               className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                             >
-                              View Profile
+                              View Creator Profile
                             </button>
                           </div>
                         </div>
@@ -614,7 +620,7 @@ function SocialPageContent() {
                 {likedPersonasData && likedPersonasData.length > 0 && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      Liked Personas ({likedPersonasData.length})
+                      Personas You Like ({likedPersonasData.length})
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {likedPersonasData.map((like) => (
@@ -644,7 +650,9 @@ function SocialPageContent() {
                             </span>
                             <button
                               onClick={() =>
-                                router.push(`/personas/${like.personaId}`)
+                                router.push(
+                                  `/persona-details?id=${like.personaId}`
+                                )
                               }
                               className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                             >
@@ -675,10 +683,11 @@ function SocialPageContent() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No connections yet
+                  No network yet
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  Start connecting with personas to build your network
+                  Start following creators and liking personas to build your
+                  network
                 </p>
                 <button
                   onClick={() => setActiveTab("discover")}
