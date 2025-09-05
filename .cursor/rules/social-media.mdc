@@ -1,5 +1,5 @@
 ---
 description: This is a social media platform.  All decisions made with code should keep this mind
 globs:
-alwaysApply: false
+alwaysApply: true
 ---

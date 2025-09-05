@@ -1,0 +1,5 @@
+---
+description: All database migrations are handled through the serverless workflow.  Do not create a separate flow
+globs:
+alwaysApply: true
+---

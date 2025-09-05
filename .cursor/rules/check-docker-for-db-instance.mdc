@@ -1,0 +1,5 @@
+---
+description:For local development of this project, Docker must be running to provide the PostgreSQL database. The database container is named 'dpp-postgres-dev' and runs on port 5432. If login fails with ECONNREFUSED errors, check that Docker is started and the database container is running with 'docker ps'.
+globs:
+alwaysApply: true
+---
