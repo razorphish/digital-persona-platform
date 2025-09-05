@@ -1,11 +1,13 @@
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import CreatorProfileClient from "./CreatorProfileClient";
 
-// Required for static export with dynamic routes
 export async function generateStaticParams() {
-  // Return empty array to indicate no static params should be generated
-  // This allows the page to be rendered dynamically when needed
-  return [];
+  // For static export, we need to provide at least one static param
+  // In a real app, you'd fetch actual creator IDs from your database
+  // For now, we'll provide a placeholder that allows dynamic rendering
+  return [
+    { id: "placeholder" },
+  ];
 }
 
 interface CreatorProfilePageProps {
