@@ -68,7 +68,7 @@ function PersonasPageContent() {
         privacyLevel: formData.privacyLevel || "friends",
         isPubliclyListed: formData.isPubliclyListed || false,
         requiresSubscription: formData.requiresSubscription || false,
-        subscriptionPrice: formData.subscriptionPrice || null,
+        subscriptionPrice: formData.subscriptionPrice ? Number(formData.subscriptionPrice) : undefined,
       });
     } catch (error) {
       console.error("Failed to create persona:", error);

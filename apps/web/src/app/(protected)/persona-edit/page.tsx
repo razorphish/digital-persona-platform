@@ -26,7 +26,7 @@ export default function PersonaEditClientPage() {
       privacyLevel: p?.privacyLevel || "friends",
       isPubliclyListed: Boolean(p?.isPubliclyListed),
       requiresSubscription: Boolean(p?.requiresSubscription),
-      subscriptionPrice: p?.subscriptionPrice || null,
+      subscriptionPrice: p?.subscriptionPrice || "",
       allowGlobalPosts: Boolean(p?.preferences?.allowGlobalPosts),
       allowConnectionPosts: Boolean(p?.preferences?.allowConnectionPosts),
       allowConsumerPosts: Boolean(p?.preferences?.allowConsumerPosts),
@@ -50,7 +50,7 @@ export default function PersonaEditClientPage() {
         privacyLevel: form.privacyLevel,
         isPubliclyListed: form.isPubliclyListed,
         requiresSubscription: form.requiresSubscription,
-        subscriptionPrice: form.subscriptionPrice ? Number(form.subscriptionPrice) : null,
+        subscriptionPrice: form.subscriptionPrice ? Number(form.subscriptionPrice) : undefined,
         preferences: {
           allowGlobalPosts: form.allowGlobalPosts,
           allowConnectionPosts: form.allowConnectionPosts,

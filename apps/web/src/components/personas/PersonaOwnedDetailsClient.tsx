@@ -57,7 +57,7 @@ export default function PersonaOwnedDetailsClient({ personaId }: { personaId: st
         privacyLevel: form.privacyLevel,
         isPubliclyListed: form.isPubliclyListed,
         requiresSubscription: form.requiresSubscription,
-        subscriptionPrice: form.subscriptionPrice ? Number(form.subscriptionPrice) : null,
+        subscriptionPrice: form.subscriptionPrice ? Number(form.subscriptionPrice) : undefined,
         preferences: form.preferences,
       } as any,
     });
