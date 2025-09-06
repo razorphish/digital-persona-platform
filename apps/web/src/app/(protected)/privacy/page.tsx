@@ -260,10 +260,32 @@ function PrivacyPageContent() {
     );
   };
 
+  // tRPC mutation for updating persona privacy settings
+  const updatePersonaMutation = trpc.personas.update.useMutation({
+    onSuccess: () => {
+      setIsDirty(false);
+      // Optionally refetch personas to get updated data
+    },
+  });
+
   const savePrivacySettings = async () => {
-    // Mock implementation - would use tRPC mutation
-    console.log("Saving privacy settings:", privacySettings);
-    setIsDirty(false);
+    if (!privacySettings.id) return;
+
+    try {
+      await updatePersonaMutation.mutateAsync({
+        id: privacySettings.id,
+        data: {
+          privacyLevel: privacySettings.privacyLevel,
+          traits: {
+            guardRails: privacySettings.guardRails,
+            contentFilter: privacySettings.contentFilter,
+          },
+        },
+      });
+      console.log("Privacy settings saved successfully");
+    } catch (error) {
+      console.error("Failed to save privacy settings:", error);
+    }
   };
 
   return (

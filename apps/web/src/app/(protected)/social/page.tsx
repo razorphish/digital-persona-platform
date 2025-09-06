@@ -55,59 +55,11 @@ function SocialPageContent() {
     priceRange: "all",
   });
 
-  // Mock data for now - would be replaced with actual tRPC queries
-  const [discoveredPersonas, setDiscoveredPersonas] = useState<PublicPersona[]>(
-    [
-      {
-        id: "1",
-        name: "Creative Artist Sarah",
-        description:
-          "Digital artist and creative consultant, love helping with design projects",
-        avatar: null,
-        userId: "user1",
-        personaType: "public",
-        privacyLevel: "public",
-        isPubliclyListed: true,
-        requiresSubscription: false,
-        subscriptionPrice: null,
-        interactionCount: 156,
-        tags: ["art", "design", "creativity"],
-        connectionStatus: "none",
-      },
-      {
-        id: "2",
-        name: "Business Mentor Alex",
-        description:
-          "Entrepreneur and business strategist with 15+ years experience",
-        avatar: null,
-        userId: "user2",
-        personaType: "premium",
-        privacyLevel: "subscribers",
-        isPubliclyListed: true,
-        requiresSubscription: true,
-        subscriptionPrice: "29.99",
-        interactionCount: 89,
-        tags: ["business", "strategy", "mentoring"],
-        connectionStatus: "none",
-      },
-      {
-        id: "3",
-        name: "Fitness Coach Maria",
-        description:
-          "Personal trainer focused on holistic wellness and nutrition",
-        avatar: null,
-        userId: "user3",
-        personaType: "public",
-        privacyLevel: "friends",
-        isPubliclyListed: true,
-        requiresSubscription: false,
-        subscriptionPrice: null,
-        interactionCount: 203,
-        tags: ["fitness", "wellness", "nutrition"],
-        connectionStatus: "pending",
-      },
-    ]
-  );
+  // Use real tRPC queries for discovered personas
+  const { data: discoveredPersonas = [], isLoading: isLoadingPersonas } =
+    trpc.discovery.getPersonalizedRecommendations.useQuery({
+      limit: 50,
+    });
 
   const [connections, setConnections] = useState<Connection[]>([]);
   const [pendingRequests, setPendingRequests] = useState<Connection[]>([]);
@@ -131,11 +83,12 @@ function SocialPageContent() {
   });
 
   // Filter personas based on search and filters
-  const filteredPersonas = discoveredPersonas.filter((persona) => {
+  const filteredPersonas = discoveredPersonas.filter((item) => {
+    const persona = item.persona;
     const matchesSearch =
       persona.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       persona.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      persona.tags?.some((tag) =>
+      item.tags?.some((tag) =>
         tag.toLowerCase().includes(searchQuery.toLowerCase())
       );
 
@@ -159,27 +112,46 @@ function SocialPageContent() {
     return matchesSearch && matchesType && matchesPrivacy && matchesPrice;
   });
 
+  // tRPC mutations for social connections
+  const toggleFollowMutation = trpc.socialEngagement.toggleFollow.useMutation();
+  const toggleLikeMutation = trpc.socialEngagement.toggleLike.useMutation();
+
   const handleConnect = async (
     personaId: string,
     connectionType: "friend" | "follower" | "subscriber"
   ) => {
-    // Mock implementation - would use tRPC mutation
-    setDiscoveredPersonas((prev) =>
-      prev.map((p) =>
-        p.id === personaId ? { ...p, connectionStatus: "pending" } : p
-      )
-    );
-    console.log(`Sending ${connectionType} request to persona ${personaId}`);
+    try {
+      await toggleFollowMutation.mutateAsync({
+        creatorId: personaId,
+        followReason:
+          connectionType === "friend"
+            ? "friend_connection"
+            : "creator_interest",
+      });
+      console.log(
+        `Successfully sent ${connectionType} request to persona ${personaId}`
+      );
+    } catch (error) {
+      console.error("Failed to connect:", error);
+    }
   };
 
   const handleAcceptRequest = async (requestId: string) => {
-    // Mock implementation
-    console.log(`Accepting request ${requestId}`);
+    try {
+      // This would need a specific tRPC route for accepting connection requests
+      console.log(`Accepting request ${requestId}`);
+    } catch (error) {
+      console.error("Failed to accept request:", error);
+    }
   };
 
   const handleDeclineRequest = async (requestId: string) => {
-    // Mock implementation
-    console.log(`Declining request ${requestId}`);
+    try {
+      // This would need a specific tRPC route for declining connection requests
+      console.log(`Declining request ${requestId}`);
+    } catch (error) {
+      console.error("Failed to decline request:", error);
+    }
   };
 
   const getPersonaTypeIcon = (type: string) => {
@@ -357,7 +329,9 @@ function SocialPageContent() {
 
             {/* Persona Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPersonas.map((persona) => (
+              {filteredPersonas.map((item) => {
+                const persona = item.persona;
+                return (
                 <div
                   key={persona.id}
                   className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
@@ -490,7 +464,8 @@ function SocialPageContent() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {filteredPersonas.length === 0 && (

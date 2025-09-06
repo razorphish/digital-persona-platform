@@ -15,12 +15,8 @@ function CreatorSafetyPageContent() {
     searchParams.get("personaId")
   );
 
-  // Mock personas data since backend route doesn't exist yet
-  const personas = [
-    { id: "1", name: "AI Assistant", description: "Helpful AI assistant" },
-    { id: "2", name: "Life Coach", description: "Personal development coach" },
-  ];
-  const isLoading = false;
+  // Use real tRPC query for personas
+  const { data: personas = [], isLoading } = trpc.personas.list.useQuery();
 
   if (isLoading) {
     return (

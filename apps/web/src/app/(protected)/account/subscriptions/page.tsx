@@ -25,25 +25,27 @@ function SubscriptionManagementContent() {
   const router = useRouter();
   const [cancelingId, setCancelingId] = useState<string | null>(null);
 
-  // tRPC queries
-  // Mock subscriptions data since backend route doesn't exist yet
-  const subscriptions: any[] = [];
-  const isLoading = false;
-  const refetch = () => {};
-  // Mock payment methods data since backend route doesn't exist yet
-  const paymentMethods: any[] = [];
+  // tRPC queries - using real API calls
+  const {
+    data: subscriptions = [],
+    isLoading,
+    refetch,
+  } = trpc.subscriptions.getUserSubscriptions.useQuery();
+  const { data: paymentMethods = [] } =
+    trpc.subscriptions.getUserPaymentMethods.useQuery();
 
-  // Mock mutations since backend routes don't exist yet
-  const cancelSubscription = {
-    mutate: () => {},
-    mutateAsync: async (params: any) => ({ success: true }),
-    isLoading: false,
-  };
-  const reactivateSubscription = {
-    mutate: () => {},
-    mutateAsync: async (params: any) => ({ success: true }),
-    isLoading: false,
-  };
+  // tRPC mutations - using real API calls
+  const cancelSubscription = trpc.subscriptions.cancelSubscription.useMutation({
+    onSuccess: () => {
+      refetch();
+    },
+  });
+  const reactivateSubscription =
+    trpc.subscriptions.reactivateSubscription.useMutation({
+      onSuccess: () => {
+        refetch();
+      },
+    });
 
   const handleCancelSubscription = async (subscriptionId: string) => {
     setCancelingId(subscriptionId);
@@ -347,8 +349,8 @@ function SubscriptionManagementContent() {
                           •••• •••• •••• {method.last4}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {method.brand.toUpperCase()} • Expires{" "}
-                          {method.expMonth}/{method.expYear}
+                          {method.brand?.toUpperCase()} • Expires{" "}
+                          {method.expiryMonth}/{method.expiryYear}
                         </p>
                       </div>
                     </div>
