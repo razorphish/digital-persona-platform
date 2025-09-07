@@ -226,7 +226,7 @@ resource "aws_rds_cluster" "database" {
   cluster_identifier           = "${local.resource_prefix}-cluster"
   engine                       = "aurora-postgresql"
   engine_mode                  = "provisioned"
-  engine_version               = "15.10"
+  engine_version               = "15.12"
   database_name                = "digital_persona"
   master_username              = "dpp_admin"
   master_password              = random_password.database_password.result
@@ -249,6 +249,10 @@ resource "aws_rds_cluster" "database" {
     Name = "${local.resource_prefix}-cluster"
     Type = "DatabaseCluster"
   })
+
+  lifecycle {
+    ignore_changes = [engine_version]
+  }
 }
 
 # Aurora Serverless v2 instance
