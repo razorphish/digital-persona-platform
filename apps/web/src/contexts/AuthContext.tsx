@@ -207,8 +207,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setIsLoading(false);
       setIsInitialized(true);
+    } finally {
+      // Ensure we always complete initialization, even if there was an error
+      if (!isInitialized) {
+        console.log("Ensuring auth initialization completes");
+        setIsLoading(false);
+        setIsInitialized(true);
+      }
     }
-  }, []);
+  }, [isInitialized]);
 
   // Check for existing authentication on mount (only once after hydration)
   useEffect(() => {
@@ -223,7 +230,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 250); // Increased delay to ensure stable hydration
 
-    return () => clearTimeout(timer);
+    // Fallback: If auth check doesn't complete within 5 seconds, force initialization
+    const fallbackTimer = setTimeout(() => {
+      if (!isInitialized) {
+        console.warn("Auth initialization timeout - forcing initialization to prevent infinite loading");
+        setUser(null);
+        setIsLoading(false);
+        setIsInitialized(true);
+      }
+    }, 5000);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(fallbackTimer);
+    };
   }, [isClient, isInitialized, checkAuthState]); // Include isClient dependency
 
   // Disable periodic token validation to prevent circular redirects

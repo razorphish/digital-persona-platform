@@ -12,7 +12,8 @@ export default function LandingPage() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const { login, error, clearError, isAuthenticated } = useAuth();
+  const [showFallback, setShowFallback] = useState(false);
+  const { login, error, clearError, isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
   // Fix hydration mismatch by ensuring component is only interactive after mount
@@ -22,6 +23,18 @@ export default function LandingPage() {
       "🔧 PAGE VERSION: refresh-fix-v5 - Component mounted on client"
     );
   }, []);
+
+  // Fallback: If auth is stuck loading for too long, show the login form anyway
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      if (authLoading) {
+        console.warn("Auth loading timeout - showing fallback login form");
+        setShowFallback(true);
+      }
+    }, 8000); // 8 second timeout
+
+    return () => clearTimeout(fallbackTimer);
+  }, [authLoading]);
 
   // Prevent any auth-related rendering until component is fully mounted
   const safeIsAuthenticated = isMounted && isAuthenticated;
