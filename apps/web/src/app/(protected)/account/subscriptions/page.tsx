@@ -378,14 +378,17 @@ function SubscriptionManagementContent() {
               Recent Billing History
             </h2>
             <button
-              onClick={() => router.push("/account/billing-history")}
+              onClick={() => {
+                const billingSection = document.getElementById('billing-history');
+                billingSection?.scrollIntoView({ behavior: 'smooth' });
+              }}
               className="text-indigo-600 hover:text-indigo-500 font-medium"
             >
               View All →
             </button>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div id="billing-history" className="bg-white rounded-lg shadow-sm border p-6">
             <p className="text-gray-600 text-center py-4">
               Billing history will appear here once you have active
               subscriptions.
