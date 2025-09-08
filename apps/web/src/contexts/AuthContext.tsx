@@ -124,7 +124,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Quick bypass for production if we're having issues
       if (process.env.NODE_ENV === "production") {
-        console.log("🔍 checkAuthState: Production bypass - skipping complex auth check");
+        console.log("🔍 checkAuthState: Production bypass - checking for existing tokens");
+        
+        // Check if we already have valid tokens before bypassing
+        const existingTokens = AuthUtils.getTokens();
+        if (existingTokens?.accessToken && !AuthUtils.isTokenExpired(existingTokens.accessToken)) {
+          console.log("🔍 checkAuthState: Production bypass - found valid tokens, extracting user");
+          const userData = AuthUtils.getUserFromToken(existingTokens.accessToken);
+          if (userData && (userData.id || userData.sub) && userData.email) {
+            const authenticatedUser = {
+              id: userData.id || userData.sub || "unknown",
+              email: userData.email,
+              name: userData.name || userData.email.split("@")[0] || "User",
+              createdAt: userData.createdAt || new Date().toISOString(),
+            };
+            setUser(authenticatedUser);
+            setIsLoading(false);
+            setIsInitialized(true);
+            return;
+          }
+        }
+        
+        // No valid tokens found, proceed with unauthenticated state
+        console.log("🔍 checkAuthState: Production bypass - no valid tokens, setting unauthenticated");
         setUser(null);
         setIsLoading(false);
         setIsInitialized(true);
