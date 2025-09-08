@@ -31,7 +31,7 @@ export default function LandingPage() {
         console.warn("Auth loading timeout - showing fallback login form");
         setShowFallback(true);
       }
-    }, 8000); // 8 second timeout
+    }, 3000); // 3 second timeout for faster recovery
 
     return () => clearTimeout(fallbackTimer);
   }, [authLoading]);

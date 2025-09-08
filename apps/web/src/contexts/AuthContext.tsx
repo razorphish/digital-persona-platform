@@ -122,6 +122,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Quick bypass for production if we're having issues
+      if (process.env.NODE_ENV === "production") {
+        console.log("🔍 checkAuthState: Production bypass - skipping complex auth check");
+        setUser(null);
+        setIsLoading(false);
+        setIsInitialized(true);
+        return;
+      }
+
       console.log("🔍 checkAuthState: Client side - checking localStorage...");
       const tokens = AuthUtils.getTokens();
       console.log("🔍 checkAuthState: Retrieved tokens:", {
@@ -230,7 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 250); // Increased delay to ensure stable hydration
 
-    // Fallback: If auth check doesn't complete within 5 seconds, force initialization
+    // Fallback: If auth check doesn't complete within 2 seconds, force initialization
     const fallbackTimer = setTimeout(() => {
       if (!isInitialized) {
         console.warn("Auth initialization timeout - forcing initialization to prevent infinite loading");
@@ -238,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         setIsInitialized(true);
       }
-    }, 5000);
+    }, 2000); // Reduced timeout for faster recovery
 
     return () => {
       clearTimeout(timer);
