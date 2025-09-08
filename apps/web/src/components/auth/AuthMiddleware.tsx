@@ -48,6 +48,12 @@ export function AuthMiddleware() {
       return;
     }
 
+    // Skip protection on login/auth pages to prevent redirect loops
+    if (pathname === "/" || pathname.startsWith("/auth/")) {
+      console.log("AuthMiddleware: Skipping protection on login/auth page:", pathname);
+      return;
+    }
+
     const isProtectedRoute = protectedRoutes.some((route) =>
       pathname.startsWith(route)
     );
