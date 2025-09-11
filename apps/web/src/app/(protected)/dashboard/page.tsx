@@ -42,15 +42,16 @@ function DashboardPageContent() {
   const [hasInitialized, setHasInitialized] = useState(false);
   const [relationshipStage, setRelationshipStage] = useState<any>(null);
 
-  // Airica tRPC hooks
+  // Airica tRPC hooks - only enable when user is authenticated
+  const { isAuthenticated } = useAuth();
   const initializeSession = trpc.chat.initializeSession.useQuery(
     { conversationId: undefined },
-    { enabled: !hasInitialized, retry: false }
+    { enabled: !hasInitialized && isAuthenticated, retry: false }
   );
   const sendChatMessage = trpc.chat.sendMessage.useMutation();
   const getRelationshipStatus = trpc.chat.getRelationshipStatus.useQuery(
     undefined,
-    { enabled: hasInitialized, refetchInterval: false }
+    { enabled: hasInitialized && isAuthenticated, refetchInterval: false }
   );
 
   // Navigation menu state

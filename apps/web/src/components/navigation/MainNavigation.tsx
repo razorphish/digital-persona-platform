@@ -27,10 +27,14 @@ export default function MainNavigation() {
   const notificationsTimeoutRef = useRef<NodeJS.Timeout>();
   const messagesTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Get real messages from tRPC
+  // Get real messages from tRPC - only when authenticated
+  const { isAuthenticated } = useAuth();
   const { data: allMessages = [] } = trpc.messages.getUserMessages.useQuery(
     { limit: 20 },
-    { refetchInterval: 30000 } // Refetch every 30 seconds
+    {
+      enabled: isAuthenticated,
+      refetchInterval: 30000, // Refetch every 30 seconds
+    }
   );
 
   // Filter for unread messages only
@@ -165,7 +169,11 @@ export default function MainNavigation() {
 
   const profileMenuItems = [
     { name: "Account Settings", href: "/account", icon: "⚙️" },
-    { name: "Billing & Subscriptions", href: "/account/subscriptions", icon: "💳" },
+    {
+      name: "Billing & Subscriptions",
+      href: "/account/subscriptions",
+      icon: "💳",
+    },
     { name: "Analytics", href: "/analytics", icon: "📊" },
     { name: "Creator Dashboard", href: "/creator/dashboard", icon: "🎨" },
     { name: "Monetization", href: "/monetization", icon: "💰" },
