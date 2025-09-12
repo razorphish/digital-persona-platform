@@ -68,6 +68,8 @@ interface UserPreferences {
 export class DiscoveryService {
   private openai: OpenAI | null;
   private db: ReturnType<typeof drizzle>;
+  private lastTrendingUpdate: number = 0;
+  private readonly TRENDING_UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
     // Initialize OpenAI client only if API key is available
@@ -139,8 +141,15 @@ export class DiscoveryService {
     categories?: string[]
   ): Promise<TrendingPersona[]> {
     try {
-      // Calculate trending scores for all personas
-      await this.updateTrendingScores();
+      // Only update trending scores if it's been more than 5 minutes
+      const now = Date.now();
+      if (now - this.lastTrendingUpdate > this.TRENDING_UPDATE_INTERVAL) {
+        console.log("🔄 Updating trending scores (last update was more than 5 minutes ago)");
+        await this.updateTrendingScores();
+        this.lastTrendingUpdate = now;
+      } else {
+        console.log("⚡ Using cached trending scores (updated recently)");
+      }
 
       const timeframeSuffix =
         timeframe === "24h"
@@ -186,6 +195,12 @@ export class DiscoveryService {
 
       const results = await query;
 
+      // If no results, return a simple fallback
+      if (results.length === 0) {
+        console.log("⚠️ No trending personas found, returning fallback data");
+        return [];
+      }
+
       return results.map((result) => ({
         personaId: result.personaId,
         name: result.name,
@@ -199,7 +214,8 @@ export class DiscoveryService {
         thumbnailUrl: result.thumbnailUrl || undefined,
       }));
     } catch (error) {
-      console.error("Error getting trending personas:", error);
+      console.error("❌ Error getting trending personas:", error);
+      // Return empty array instead of throwing to prevent feed from breaking
       return [];
     }
   }
@@ -299,50 +315,67 @@ export class DiscoveryService {
    */
   async updateTrendingScores(): Promise<void> {
     try {
-      // Get all personas with their metrics
+      console.log("🔄 Starting trending scores update...");
+      const startTime = Date.now();
+      
+      // Get all personas with their metrics (limit to public personas only)
       const personasData = await this.db
-        .select()
+        .select({
+          personaId: discoveryMetrics.personaId,
+          metrics: discoveryMetrics,
+          isPublic: personas.isPublic,
+        })
         .from(discoveryMetrics)
-        .leftJoin(personas, eq(discoveryMetrics.personaId, personas.id));
+        .leftJoin(personas, eq(discoveryMetrics.personaId, personas.id))
+        .where(eq(personas.isPublic, true))
+        .limit(100); // Limit to 100 personas for performance
 
-      for (const personaMetric of personasData) {
-        if (!personaMetric.discovery_metrics) continue;
+      console.log(`📊 Found ${personasData.length} public personas to update`);
 
-        const metrics = personaMetric.discovery_metrics;
-
-        // Calculate trending score based on recent engagement
-        const trendingScore = this.calculateTrendingScore(metrics);
-
-        // Calculate popularity score based on total engagement
-        const popularityScore = this.calculatePopularityScore(metrics);
-
-        // Calculate quality score based on reviews
-        const qualityScore = await this.calculateQualityScore(
-          metrics.personaId
-        );
-
-        // Calculate engagement score
-        const engagementScore = this.calculateEngagementScore(metrics);
-
-        // Update metrics
-        await this.db
-          .update(discoveryMetrics)
-          .set({
-            trendingScore: trendingScore.toString(),
-            popularityScore: popularityScore.toString(),
-            qualityScore: qualityScore.toString(),
-            engagementScore: engagementScore.toString(),
-            lastCalculated: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(discoveryMetrics.personaId, metrics.personaId));
+      // Process in batches to avoid overwhelming the database
+      const batchSize = 10;
+      const batches = [];
+      for (let i = 0; i < personasData.length; i += batchSize) {
+        batches.push(personasData.slice(i, i + batchSize));
       }
 
-      console.log(
-        `Updated trending scores for ${personasData.length} personas`
-      );
+      let updatedCount = 0;
+      for (const batch of batches) {
+        const updatePromises = batch.map(async (personaMetric) => {
+          if (!personaMetric.metrics) return;
+
+          const metrics = personaMetric.metrics;
+
+          // Calculate scores
+          const trendingScore = this.calculateTrendingScore(metrics);
+          const popularityScore = this.calculatePopularityScore(metrics);
+          const qualityScore = await this.calculateQualityScore(metrics.personaId);
+          const engagementScore = this.calculateEngagementScore(metrics);
+
+          // Update metrics
+          return this.db
+            .update(discoveryMetrics)
+            .set({
+              trendingScore: trendingScore.toString(),
+              popularityScore: popularityScore.toString(),
+              qualityScore: qualityScore.toString(),
+              engagementScore: engagementScore.toString(),
+              lastCalculated: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(discoveryMetrics.personaId, metrics.personaId));
+        });
+
+        await Promise.all(updatePromises);
+        updatedCount += batch.length;
+        console.log(`✅ Updated batch: ${updatedCount}/${personasData.length} personas`);
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`🎉 Updated trending scores for ${updatedCount} personas in ${duration}ms`);
     } catch (error) {
-      console.error("Error updating trending scores:", error);
+      console.error("❌ Error updating trending scores:", error);
+      // Don't throw the error to prevent breaking the feed
     }
   }
 

@@ -2633,15 +2633,28 @@ const discoveryRouter = router({
     )
     .query(async ({ input }) => {
       try {
-        const trending = await discoveryService.getTrendingPersonas(
+        // Add timeout to prevent hanging requests
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("Trending request timeout")), 8000); // 8 second timeout
+        });
+
+        const trendingPromise = discoveryService.getTrendingPersonas(
           input.timeframe,
           input.limit,
           input.categories
         );
 
+        const trending = await Promise.race([trendingPromise, timeoutPromise]);
         return trending;
       } catch (error) {
         logger.error("Error getting trending personas:", error);
+        
+        // Return empty array instead of throwing error to prevent UI from breaking
+        if (error instanceof Error && error.message === "Trending request timeout") {
+          logger.warn("Trending request timed out, returning empty array");
+          return [];
+        }
+        
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to get trending personas",
@@ -3040,15 +3053,28 @@ const feedRouter = router({
     )
     .query(async ({ input, ctx }) => {
       try {
-        const feed = await feedAlgorithmService.getUserFeed(
+        // Add timeout to prevent hanging requests
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("Feed request timeout")), 10000); // 10 second timeout
+        });
+
+        const feedPromise = feedAlgorithmService.getUserFeed(
           ctx.user.id,
           input.limit,
           input.offset
         );
 
+        const feed = await Promise.race([feedPromise, timeoutPromise]);
         return feed;
       } catch (error) {
         logger.error("Error getting feed:", error);
+        
+        // Return empty feed instead of throwing error to prevent UI from breaking
+        if (error instanceof Error && error.message === "Feed request timeout") {
+          logger.warn("Feed request timed out, returning empty feed");
+          return [];
+        }
+        
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to get feed",
