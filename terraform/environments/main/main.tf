@@ -533,6 +533,27 @@ module "lambda_backend" {
   }
 
   log_retention_days = 14
+
+  # Email configuration
+  domain_name        = var.domain_name
+  frontend_url       = "https://${module.s3_website.cloudfront_domain_name}"
+  ses_identity_arn   = module.ses_email.domain_identity_arn
+  from_email         = "noreply@${var.domain_name}"
+}
+
+# SES Email Service
+module "ses_email" {
+  source = "../../modules/ses-email"
+
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  aws_region      = var.aws_region
+  common_tags     = local.common_tags
+
+  domain_name                = var.domain_name
+  from_email                 = "noreply@${var.domain_name}"
+  lambda_execution_role_name = module.lambda_backend.lambda_execution_role_name
 }
 
 # Lambda security group
@@ -678,6 +699,27 @@ output "cloudfront_distribution_id" {
 output "website_domain" {
   description = "Website domain name"
   value       = local.website_domain
+}
+
+# SES Email outputs
+output "ses_domain_identity_arn" {
+  description = "ARN of the SES domain identity"
+  value       = module.ses_email.domain_identity_arn
+}
+
+output "ses_domain_verification_token" {
+  description = "Token for domain verification"
+  value       = module.ses_email.domain_identity_verification_token
+}
+
+output "ses_dkim_tokens" {
+  description = "DKIM tokens for domain authentication"
+  value       = module.ses_email.dkim_tokens
+}
+
+output "ses_from_email" {
+  description = "Verified sender email address"
+  value       = module.ses_email.from_email
 }
 
 # AWS Batch ML Processing for AI/ML workloads

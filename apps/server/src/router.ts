@@ -466,27 +466,31 @@ const authRouter = router({
           // User exists, create reset token and send email
           const { PasswordResetUtils } = await import("./utils/passwordReset");
           const { EmailService } = await import("./services/emailService");
-          
+
           const token = await PasswordResetUtils.createResetToken(user[0].id);
           const emailService = new EmailService();
-          
+
           // Send email (don't await to prevent timing attacks)
-          emailService.sendPasswordResetEmail(user[0].email, token).catch(
-            (error) => console.error("Failed to send password reset email:", error)
-          );
+          emailService
+            .sendPasswordResetEmail(user[0].email, token)
+            .catch((error) =>
+              console.error("Failed to send password reset email:", error)
+            );
         }
 
         // Always return the same response regardless of whether user exists
         return {
           success: true,
-          message: "If an account with that email exists, a password reset link has been sent.",
+          message:
+            "If an account with that email exists, a password reset link has been sent.",
         };
       } catch (error) {
         console.error("Error requesting password reset:", error);
         // Still return success to prevent information leakage
         return {
           success: true,
-          message: "If an account with that email exists, a password reset link has been sent.",
+          message:
+            "If an account with that email exists, a password reset link has been sent.",
         };
       }
     }),
@@ -496,7 +500,9 @@ const authRouter = router({
     .input(
       z.object({
         token: z.string(),
-        newPassword: z.string().min(8, "Password must be at least 8 characters"),
+        newPassword: z
+          .string()
+          .min(8, "Password must be at least 8 characters"),
       })
     )
     .mutation(async ({ input }) => {
@@ -505,8 +511,10 @@ const authRouter = router({
         const bcrypt = await import("bcryptjs");
 
         // Validate the reset token
-        const validation = await PasswordResetUtils.validateResetToken(input.token);
-        
+        const validation = await PasswordResetUtils.validateResetToken(
+          input.token
+        );
+
         if (!validation.isValid || !validation.userId) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -520,9 +528,9 @@ const authRouter = router({
         // Update the user's password
         await db
           .update(users)
-          .set({ 
+          .set({
             passwordHash: hashedPassword,
-            updatedAt: new Date()
+            updatedAt: new Date(),
           })
           .where(eq(users.id, validation.userId));
 
@@ -531,7 +539,8 @@ const authRouter = router({
 
         return {
           success: true,
-          message: "Password has been reset successfully. You can now log in with your new password.",
+          message:
+            "Password has been reset successfully. You can now log in with your new password.",
         };
       } catch (error) {
         console.error("Error resetting password:", error);
@@ -551,8 +560,10 @@ const authRouter = router({
     .query(async ({ input }) => {
       try {
         const { PasswordResetUtils } = await import("./utils/passwordReset");
-        const validation = await PasswordResetUtils.validateResetToken(input.token);
-        
+        const validation = await PasswordResetUtils.validateResetToken(
+          input.token
+        );
+
         return {
           isValid: validation.isValid,
           error: validation.error,
@@ -2765,13 +2776,16 @@ const discoveryRouter = router({
         return trending;
       } catch (error) {
         logger.error("Error getting trending personas:", error);
-        
+
         // Return empty array instead of throwing error to prevent UI from breaking
-        if (error instanceof Error && error.message === "Trending request timeout") {
+        if (
+          error instanceof Error &&
+          error.message === "Trending request timeout"
+        ) {
           logger.warn("Trending request timed out, returning empty array");
           return [];
         }
-        
+
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to get trending personas",
@@ -3185,13 +3199,16 @@ const feedRouter = router({
         return feed;
       } catch (error) {
         logger.error("Error getting feed:", error);
-        
+
         // Return empty feed instead of throwing error to prevent UI from breaking
-        if (error instanceof Error && error.message === "Feed request timeout") {
+        if (
+          error instanceof Error &&
+          error.message === "Feed request timeout"
+        ) {
           logger.warn("Feed request timed out, returning empty feed");
           return [];
         }
-        
+
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to get feed",

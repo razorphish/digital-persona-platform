@@ -9,12 +9,13 @@ export class EmailService {
   constructor() {
     this.sesClient = new SESClient({
       region: process.env.AWS_REGION || "us-west-1",
-      credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-        ? {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-          }
-        : undefined, // Use IAM role in production
+      credentials:
+        process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+          ? {
+              accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            }
+          : undefined, // Use IAM role in production
     });
 
     this.fromEmail = process.env.FROM_EMAIL || "noreply@hibiji.com";

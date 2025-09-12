@@ -11,20 +11,23 @@ export default function ForgotPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const requestPasswordResetMutation = trpc.auth.requestPasswordReset.useMutation({
-    onSuccess: () => {
-      setIsSubmitted(true);
-      setError("");
-    },
-    onError: (error) => {
-      setError(error.message || "Failed to send reset email. Please try again.");
-      setIsSubmitting(false);
-    },
-  });
+  const requestPasswordResetMutation =
+    trpc.auth.requestPasswordReset.useMutation({
+      onSuccess: () => {
+        setIsSubmitted(true);
+        setError("");
+      },
+      onError: (error) => {
+        setError(
+          error.message || "Failed to send reset email. Please try again."
+        );
+        setIsSubmitting(false);
+      },
+    });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email.trim()) {
       setError("Please enter your email address");
       return;
@@ -64,7 +67,8 @@ export default function ForgotPasswordPage() {
               Check Your Email
             </h2>
             <p className="text-gray-600 mb-6">
-              If an account with that email exists, a password reset link has been sent to{" "}
+              If an account with that email exists, a password reset link has
+              been sent to{" "}
               <span className="font-medium text-gray-900">{email}</span>
             </p>
             <p className="text-sm text-gray-500 mb-6">
@@ -99,7 +103,8 @@ export default function ForgotPasswordPage() {
             Forgot Password?
           </h2>
           <p className="text-gray-600 mb-8">
-            Enter your email address and we'll send you a link to reset your password.
+            Enter your email address and we'll send you a link to reset your
+            password.
           </p>
         </div>
 
@@ -149,9 +154,7 @@ export default function ForgotPasswordPage() {
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">
-                    Error
-                  </h3>
+                  <h3 className="text-sm font-medium text-red-800">Error</h3>
                   <div className="mt-1 text-sm text-red-700">{error}</div>
                 </div>
               </div>

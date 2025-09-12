@@ -107,12 +107,10 @@ export class PasswordResetUtils {
    * Clean up expired tokens (can be run as a cron job)
    */
   static async cleanupExpiredTokens(): Promise<number> {
-    const result = await db
-      .delete(passwordResetTokens)
-      .where(
-        eq(passwordResetTokens.expiresAt, new Date()) // This will need to be adjusted for proper date comparison
-      );
-    
+    const result = await db.delete(passwordResetTokens).where(
+      eq(passwordResetTokens.expiresAt, new Date()) // This will need to be adjusted for proper date comparison
+    );
+
     return result.rowCount || 0;
   }
 

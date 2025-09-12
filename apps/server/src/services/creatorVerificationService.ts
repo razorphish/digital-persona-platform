@@ -653,7 +653,9 @@ export class CreatorVerificationService {
 
       const textResponse = await this.rekognitionClient.send(detectTextCommand);
       const extractedText =
-        (textResponse as any).TextDetections?.map((t: any) => t.DetectedText).join(" ") || "";
+        (textResponse as any).TextDetections?.map(
+          (t: any) => t.DetectedText
+        ).join(" ") || "";
 
       // Update document with OCR results
       await db

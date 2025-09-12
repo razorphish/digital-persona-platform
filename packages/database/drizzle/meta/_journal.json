@@ -43,6 +43,13 @@
       "when": 1756582111177,
       "tag": "0005_shocking_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1757718800342,
+      "tag": "0006_lame_gideon",
+      "breakpoints": true
     }
   ]
 }

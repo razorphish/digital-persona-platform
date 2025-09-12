@@ -103,6 +103,19 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
           var.database_secret_arn,
           var.jwt_secret_arn
         ]
+      },
+      # SES access for sending emails
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "ses:GetSendQuota",
+          "ses:GetSendStatistics"
+        ]
+        Resource = [
+          var.ses_identity_arn != null ? var.ses_identity_arn : "*"
+        ]
       }
       ], var.ml_sqs_queue_arn != null ? [
       # SQS access for ML job queuing (only when ML queue is enabled)
@@ -150,6 +163,9 @@ resource "aws_lambda_function" "api" {
       S3_UPLOADS_BUCKET   = var.s3_uploads_bucket_name
       ML_SQS_QUEUE_URL    = var.ml_sqs_queue_url != null ? var.ml_sqs_queue_url : ""
       AWS_ACCOUNT_ID      = data.aws_caller_identity.current.account_id
+      # Email configuration
+      FROM_EMAIL          = var.from_email != null ? var.from_email : "noreply@${var.domain_name}"
+      FRONTEND_URL        = var.frontend_url
       # AWS_REGION is reserved by AWS Lambda and cannot be set manually
     }, var.additional_environment_variables)
   }

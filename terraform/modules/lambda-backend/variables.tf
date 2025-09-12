@@ -141,4 +141,27 @@ variable "ml_sqs_queue_arn" {
   description = "SQS queue ARN for ML job requests (for IAM permissions)"
   type        = string
   default     = null
+}
+
+# Email Configuration
+variable "ses_identity_arn" {
+  description = "ARN of the SES identity for sending emails"
+  type        = string
+  default     = null
+}
+
+variable "from_email" {
+  description = "From email address for sending emails"
+  type        = string
+  default     = null
+}
+
+variable "frontend_url" {
+  description = "Frontend URL for password reset links"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "Domain name for email configuration"
+  type        = string
 } 
