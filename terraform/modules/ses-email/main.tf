@@ -38,11 +38,6 @@ resource "aws_ses_configuration_set" "main" {
   }
 
   reputation_metrics_enabled = true
-
-  tags = merge(var.common_tags, {
-    Name = "${var.environment}-${var.sub_environment}-${var.project_name}-email-config"
-    Type = "SESConfigurationSet"
-  })
 }
 
 # SES Event Destination for CloudWatch
