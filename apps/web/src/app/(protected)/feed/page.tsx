@@ -105,9 +105,9 @@ function FeedPageContent() {
 
   // Handle data loading with better error recovery
   useEffect(() => {
-    if (feed && feed.length > 0) {
+    if (feed && Array.isArray(feed) && feed.length > 0) {
       console.log("📰 Using real feed data:", feed.length, "items");
-      setFeedItems(feed);
+      setFeedItems(feed as FeedItem[]);
       setIsLoading(false);
     } else if (!feedLoading && feedError) {
       console.error("❌ Feed API error:", feedError);
@@ -117,7 +117,7 @@ function FeedPageContent() {
       console.log(
         "🚫 Not auto-refreshing due to API error - user can manually refresh"
       );
-    } else if (!feedLoading && (!feed || feed.length === 0)) {
+    } else if (!feedLoading && (!feed || !Array.isArray(feed) || feed.length === 0)) {
       console.log("🔄 No feed data found, will show empty state");
       setIsLoading(false);
       // Don't auto-generate to prevent timeout loops
@@ -416,7 +416,7 @@ function FeedPageContent() {
           {/* Trending Sidebar */}
           <div className="space-y-6">
             <TrendingSection
-              trending={trending || []}
+              trending={Array.isArray(trending) ? trending : []}
               isLoading={trendingLoading}
               onCategoryFilter={handleCategoryFilter}
             />
