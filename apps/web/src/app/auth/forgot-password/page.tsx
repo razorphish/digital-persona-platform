@@ -3,12 +3,24 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { trpc } from "@/lib/trpc";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const requestPasswordResetMutation = trpc.auth.requestPasswordReset.useMutation({
+    onSuccess: () => {
+      setIsSubmitted(true);
+      setError("");
+    },
+    onError: (error) => {
+      setError(error.message || "Failed to send reset email. Please try again.");
+      setIsSubmitting(false);
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,12 +33,11 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
     setError("");
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // For now, just show success message (password reset not implemented yet)
-    setIsSubmitted(true);
-    setIsSubmitting(false);
+    try {
+      await requestPasswordResetMutation.mutateAsync({ email: email.trim() });
+    } catch (error) {
+      // Error is handled in onError callback
+    }
   };
 
   if (isSubmitted) {
@@ -50,14 +61,14 @@ export default function ForgotPasswordPage() {
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Password Reset Not Yet Available
+              Check Your Email
             </h2>
             <p className="text-gray-600 mb-6">
-              Password reset functionality is currently under development. 
-              For now, please contact support if you need to reset your password.
+              If an account with that email exists, a password reset link has been sent to{" "}
+              <span className="font-medium text-gray-900">{email}</span>
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              Need help?{" "}
+              Didn't receive the email? Check your spam folder or{" "}
               <button
                 onClick={() => {
                   setIsSubmitted(false);
@@ -65,9 +76,8 @@ export default function ForgotPasswordPage() {
                 }}
                 className="text-indigo-600 hover:text-indigo-500 font-medium"
               >
-                Try again
-              </button>{" "}
-              or contact our support team.
+                try again
+              </button>
             </p>
             <Link
               href="/"

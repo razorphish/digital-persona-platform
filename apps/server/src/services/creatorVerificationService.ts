@@ -456,7 +456,7 @@ export class CreatorVerificationService {
 
       const response = await this.rekognitionClient.send(command);
 
-      const faceMatches = response.FaceMatches || [];
+      const faceMatches = (response as any).FaceMatches || [];
       const confidenceScore =
         faceMatches.length > 0 ? faceMatches[0].Similarity || 0 : 0;
 
@@ -640,7 +640,7 @@ export class CreatorVerificationService {
       });
 
       const response = await this.s3Client.send(getObjectCommand);
-      const imageBytes = await response.Body?.transformToByteArray();
+      const imageBytes = await (response as any).Body?.transformToByteArray();
 
       if (!imageBytes) return;
 
@@ -653,7 +653,7 @@ export class CreatorVerificationService {
 
       const textResponse = await this.rekognitionClient.send(detectTextCommand);
       const extractedText =
-        textResponse.TextDetections?.map((t) => t.DetectedText).join(" ") || "";
+        (textResponse as any).TextDetections?.map((t: any) => t.DetectedText).join(" ") || "";
 
       // Update document with OCR results
       await db

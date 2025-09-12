@@ -448,6 +448,123 @@ const authRouter = router({
       };
     }
   }),
+
+  // Request password reset
+  requestPasswordReset: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ input }) => {
+      try {
+        // Always return success to prevent email enumeration
+        // Check if user exists without revealing the result
+        const user = await db
+          .select({ id: users.id, email: users.email })
+          .from(users)
+          .where(eq(users.email, input.email))
+          .limit(1);
+
+        if (user[0]) {
+          // User exists, create reset token and send email
+          const { PasswordResetUtils } = await import("./utils/passwordReset");
+          const { EmailService } = await import("./services/emailService");
+          
+          const token = await PasswordResetUtils.createResetToken(user[0].id);
+          const emailService = new EmailService();
+          
+          // Send email (don't await to prevent timing attacks)
+          emailService.sendPasswordResetEmail(user[0].email, token).catch(
+            (error) => console.error("Failed to send password reset email:", error)
+          );
+        }
+
+        // Always return the same response regardless of whether user exists
+        return {
+          success: true,
+          message: "If an account with that email exists, a password reset link has been sent.",
+        };
+      } catch (error) {
+        console.error("Error requesting password reset:", error);
+        // Still return success to prevent information leakage
+        return {
+          success: true,
+          message: "If an account with that email exists, a password reset link has been sent.",
+        };
+      }
+    }),
+
+  // Reset password with token
+  resetPassword: publicProcedure
+    .input(
+      z.object({
+        token: z.string(),
+        newPassword: z.string().min(8, "Password must be at least 8 characters"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        const { PasswordResetUtils } = await import("./utils/passwordReset");
+        const bcrypt = await import("bcryptjs");
+
+        // Validate the reset token
+        const validation = await PasswordResetUtils.validateResetToken(input.token);
+        
+        if (!validation.isValid || !validation.userId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: validation.error || "Invalid or expired reset token",
+          });
+        }
+
+        // Hash the new password
+        const hashedPassword = await bcrypt.hash(input.newPassword, 12);
+
+        // Update the user's password
+        await db
+          .update(users)
+          .set({ 
+            passwordHash: hashedPassword,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, validation.userId));
+
+        // Mark the token as used
+        await PasswordResetUtils.markTokenAsUsed(input.token);
+
+        return {
+          success: true,
+          message: "Password has been reset successfully. You can now log in with your new password.",
+        };
+      } catch (error) {
+        console.error("Error resetting password:", error);
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to reset password",
+        });
+      }
+    }),
+
+  // Validate reset token (for frontend to check if token is valid)
+  validateResetToken: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      try {
+        const { PasswordResetUtils } = await import("./utils/passwordReset");
+        const validation = await PasswordResetUtils.validateResetToken(input.token);
+        
+        return {
+          isValid: validation.isValid,
+          error: validation.error,
+        };
+      } catch (error) {
+        console.error("Error validating reset token:", error);
+        return {
+          isValid: false,
+          error: "Token validation failed",
+        };
+      }
+    }),
 });
 
 // Enhanced Personas router with new functionality

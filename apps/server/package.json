@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.848.0",
+    "@aws-sdk/client-ses": "^3.888.0",
     "@aws-sdk/client-sqs": "^3.848.0",
     "@aws-sdk/s3-request-presigner": "^3.848.0",
     "@digital-persona/database": "*",
@@ -38,14 +39,15 @@
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.24.1",
     "pg": "^8.11.3",
-    "stripe": "^14.15.0",
     "postgres": "^3.4.7",
     "serverless-http": "^3.2.0",
+    "stripe": "^14.15.0",
     "superjson": "^2.2.1",
     "uuid": "^11.1.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@aws-sdk/client-rekognition": "^3.848.0",
     "@types/aws-lambda": "^8.10.130",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
@@ -53,7 +55,6 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.9.0",
     "@types/pg": "^8.10.7",
-    "@aws-sdk/client-rekognition": "^3.848.0",
     "drizzle-kit": "^0.20.6",
     "esbuild": "^0.19.5",
     "tsx": "^4.6.0",
