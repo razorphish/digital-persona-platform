@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
 import MainNavigation from "./MainNavigation";
 
 const HIDE_NAV_PREFIXES = [
@@ -13,7 +12,6 @@ const HIDE_NAV_PREFIXES = [
 
 export default function ConditionalNavigation() {
   const pathname = usePathname() || "/";
-  const { isAuthenticated, isLoading } = useAuth();
 
   const shouldHide =
     pathname === "/" ||
@@ -21,12 +19,6 @@ export default function ConditionalNavigation() {
 
   // Hide global navigation on auth and landing pages only
   if (shouldHide) return null;
-
-  // Don't show navigation while authentication is loading
-  if (isLoading) return null;
-
-  // Don't show navigation if user is not authenticated (they'll be redirected)
-  if (!isAuthenticated) return null;
 
   return <MainNavigation />;
 }
