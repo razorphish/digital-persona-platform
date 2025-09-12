@@ -47,7 +47,6 @@ export default function RootLayout({
       <body className={inter.className}>
         <TRPCProvider>
           <AuthProvider>
-            <AuthMiddleware />
             <ConditionalNavigation />
             <main className="min-h-screen flex flex-col">
               {children}
