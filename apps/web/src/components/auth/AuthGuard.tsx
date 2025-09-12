@@ -35,6 +35,7 @@ export function AuthGuard({
 
       if (requiresAuth && !isAuthenticated) {
         // Clear any potentially corrupted state and redirect
+        console.log("AuthGuard: Redirecting unauthenticated user to:", redirectTo);
         router.replace(redirectTo);
         return;
       }
