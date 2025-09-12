@@ -282,7 +282,7 @@ export default function LandingPage() {
 
             <div className="mt-4 text-center">
               <Link
-                href="/forgot-password"
+                href="/auth/forgot-password"
                 className="text-sm text-indigo-600 hover:text-indigo-800"
               >
                 Forgot your password?
