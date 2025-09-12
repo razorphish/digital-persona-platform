@@ -21,9 +21,17 @@ interface AnalyticsData {
 }
 
 function AnalyticsPageContent() {
-  const { user } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [timeRange, setTimeRange] = useState("30d");
+
+  // Debug logging
+  console.log("AnalyticsPageContent: Auth state:", {
+    user: !!user,
+    isAuthenticated,
+    authLoading,
+    userEmail: user?.email
+  });
 
   // tRPC queries for real analytics data
   const {

@@ -36,12 +36,20 @@ interface Persona {
 }
 
 function PersonasPageContent() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedPersonaType, setSelectedPersonaType] = useState<
     "child" | "public" | "premium"
   >("child");
+
+  // Debug logging
+  console.log("PersonasPageContent: Auth state:", {
+    user: !!user,
+    isAuthenticated,
+    authLoading,
+    userEmail: user?.email
+  });
 
   // tRPC queries with type assertions for build compatibility
   const { data: personas, isLoading, refetch } = trpc.personas.list.useQuery();
