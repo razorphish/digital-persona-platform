@@ -704,6 +704,7 @@ module "ses_email" {
   domain_name                = var.domain_name
   from_email                 = "noreply@${var.domain_name}"
   lambda_execution_role_name = module.lambda_backend.lambda_execution_role_name
+  route53_zone_id            = data.aws_route53_zone.main.zone_id
 }
 
 # Lambda security group

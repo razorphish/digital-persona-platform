@@ -37,47 +37,15 @@ terraform plan -var="sub_environment=main01"
 terraform apply -var="sub_environment=main01"
 ```
 
-### 2. Verify Your Domain
+### 2. Domain Verification (Automated)
 
-After deployment, you'll need to verify your domain with AWS SES:
+The SES module now automatically handles domain verification through Route 53:
 
-#### Get the Verification Token
+- **TXT Record**: Automatically created for domain verification
+- **DKIM Records**: Three CNAME records automatically created for email authentication
+- **Verification**: Automatically verified during Terraform deployment
 
-```bash
-# Get the domain verification token
-terraform output ses_domain_verification_token
-```
-
-#### Add DNS Record
-
-Add a TXT record to your domain's DNS:
-
-- **Name**: `_amazonses.yourdomain.com`
-- **Type**: `TXT`
-- **Value**: The verification token from the output above
-
-**Note**: Domain verification is now manual to prevent Terraform deployment failures. The infrastructure will deploy successfully, but email sending will be limited until the domain is verified.
-
-#### Get DKIM Tokens
-
-```bash
-# Get the DKIM tokens
-terraform output ses_dkim_tokens
-```
-
-Add three CNAME records for DKIM authentication:
-
-- **Name**: `[token1]._domainkey.yourdomain.com`
-- **Type**: `CNAME`
-- **Value**: `[token1].dkim.amazonses.com`
-
-- **Name**: `[token2]._domainkey.yourdomain.com`
-- **Type**: `CNAME`
-- **Value**: `[token2].dkim.amazonses.com`
-
-- **Name**: `[token3]._domainkey.yourdomain.com`
-- **Type**: `CNAME`
-- **Value**: `[token3].dkim.amazonses.com`
+**No manual DNS setup required!** The infrastructure will deploy with fully verified email capabilities.
 
 ### 3. Verify Domain in AWS Console
 

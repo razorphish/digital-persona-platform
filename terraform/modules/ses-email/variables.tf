@@ -42,3 +42,8 @@ variable "common_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone ID for the domain"
+  type        = string
+}
