@@ -20,14 +20,8 @@ resource "aws_ses_domain_mail_from" "main" {
   mail_from_domain = "mail.${aws_ses_domain_identity.main.domain}"
 }
 
-# SES Domain Identity Verification
-resource "aws_ses_domain_identity_verification" "main" {
-  domain = aws_ses_domain_identity.main.id
-
-  timeouts {
-    create = "5m"
-  }
-}
+# Note: Domain verification must be done manually after deployment
+# Add the TXT record provided in the output to your domain's DNS
 
 # SES Configuration Set for tracking
 resource "aws_ses_configuration_set" "main" {
