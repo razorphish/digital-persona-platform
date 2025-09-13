@@ -56,6 +56,8 @@ Add a TXT record to your domain's DNS:
 - **Type**: `TXT`
 - **Value**: The verification token from the output above
 
+**Note**: Domain verification is now manual to prevent Terraform deployment failures. The infrastructure will deploy successfully, but email sending will be limited until the domain is verified.
+
 #### Get DKIM Tokens
 
 ```bash
