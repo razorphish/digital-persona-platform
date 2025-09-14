@@ -83,9 +83,71 @@ resource "aws_cloudfront_distribution" "website" {
     origin_access_control_id = aws_cloudfront_origin_access_control.website.id
   }
 
-  # Cache behavior for static assets
+  # Cache behavior for Next.js static assets (_next/*)
+  ordered_cache_behavior {
+    path_pattern           = "/_next/*"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-${aws_s3_bucket.website.bucket}"
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 86400    # 1 day
+    default_ttl = 604800   # 7 days
+    max_ttl     = 31536000 # 1 year
+  }
+
+  # Cache behavior for other static assets
   ordered_cache_behavior {
     path_pattern           = "/assets/*"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-${aws_s3_bucket.website.bucket}"
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 86400    # 1 day
+    default_ttl = 604800   # 7 days
+    max_ttl     = 31536000 # 1 year
+  }
+
+  # Cache behavior for static file extensions (js, css, png, etc.)
+  ordered_cache_behavior {
+    path_pattern           = "*.js"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-${aws_s3_bucket.website.bucket}"
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 86400    # 1 day
+    default_ttl = 604800   # 7 days
+    max_ttl     = 31536000 # 1 year
+  }
+
+  ordered_cache_behavior {
+    path_pattern           = "*.css"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "S3-${aws_s3_bucket.website.bucket}"
@@ -146,6 +208,8 @@ resource "aws_cloudfront_distribution" "website" {
   }
 
   # Custom error responses for SPA routing
+  # Note: Static assets (_next/*, *.js, *.css, etc.) should NOT be redirected to index.html
+  # Only redirect actual page routes to support client-side routing
   custom_error_response {
     error_code         = 403
     response_code      = 200
