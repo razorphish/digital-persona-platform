@@ -138,18 +138,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               name: userData.name || userData.email.split("@")[0] || "User",
               createdAt: userData.createdAt || new Date().toISOString(),
             };
-            setUser(authenticatedUser);
-            setIsLoading(false);
-            setIsInitialized(true);
+            // Use setTimeout to ensure this happens after hydration
+            setTimeout(() => {
+              setUser(authenticatedUser);
+              setIsLoading(false);
+              setIsInitialized(true);
+            }, 0);
             return;
           }
         }
         
         // No valid tokens found, proceed with unauthenticated state
         console.log("🔍 checkAuthState: Production bypass - no valid tokens, setting unauthenticated");
-        setUser(null);
-        setIsLoading(false);
-        setIsInitialized(true);
+        // Use setTimeout to ensure this happens after hydration
+        setTimeout(() => {
+          setUser(null);
+          setIsLoading(false);
+          setIsInitialized(true);
+        }, 0);
         return;
       }
 
@@ -452,14 +458,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const value: AuthContextType = {
-    user,
-    isLoading,
+    user: isClient ? user : null, // Always null on server to prevent hydration mismatch
+    isLoading: isClient ? isLoading : true, // Always loading on server
     isAuthenticated: isClient && !!user, // Prevent hydration mismatch
     isInitialized: isClient && isInitialized, // Prevent hydration mismatch
     login,
     register,
     logout,
-    error,
+    error: isClient ? error : null, // Always null on server
     clearError,
     checkAuthState,
   };
