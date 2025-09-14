@@ -36,9 +36,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isClient, setIsClient] = useState(false);
   const router = useRouter();
 
+  // Prevent hydration mismatch by ensuring consistent initial state
+  const [isHydrated, setIsHydrated] = useState(false);
+
   // Fix hydration mismatch by ensuring we're on client side
   useEffect(() => {
     setIsClient(true);
+    // Mark as hydrated after a brief delay to ensure React hydration is complete
+    const timer = setTimeout(() => {
+      setIsHydrated(true);
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   // Debug logging for state changes
@@ -257,7 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check for existing authentication on mount (only once after hydration)
   useEffect(() => {
     // Only initialize after client-side hydration is complete
-    if (!isClient) return;
+    if (!isClient || !isHydrated) return;
 
     // Add a small delay to ensure client-side hydration is complete
     const timer = setTimeout(() => {
@@ -265,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Initializing auth state on mount (client-side only)");
         checkAuthState();
       }
-    }, 250); // Increased delay to ensure stable hydration
+    }, 100); // Reduced delay since we already waited for hydration
 
     // Fallback: If auth check doesn't complete within 2 seconds, force initialization
     const fallbackTimer = setTimeout(() => {
@@ -281,7 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       clearTimeout(fallbackTimer);
     };
-  }, [isClient, isInitialized, checkAuthState]); // Include isClient dependency
+  }, [isClient, isHydrated, isInitialized, checkAuthState]); // Include isHydrated dependency
 
   // Disable periodic token validation to prevent circular redirects
   // Token validation will be handled by API responses and AuthMiddleware
@@ -458,14 +466,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const value: AuthContextType = {
-    user: isClient ? user : null, // Always null on server to prevent hydration mismatch
-    isLoading: isClient ? isLoading : true, // Always loading on server
-    isAuthenticated: isClient && !!user, // Prevent hydration mismatch
-    isInitialized: isClient && isInitialized, // Prevent hydration mismatch
+    user: isHydrated ? user : null, // Always null until hydrated to prevent hydration mismatch
+    isLoading: isHydrated ? isLoading : true, // Always loading until hydrated
+    isAuthenticated: isHydrated && !!user, // Only true after hydration
+    isInitialized: isHydrated && isInitialized, // Only true after hydration
     login,
     register,
     logout,
-    error: isClient ? error : null, // Always null on server
+    error: isHydrated ? error : null, // Always null until hydrated
     clearError,
     checkAuthState,
   };
