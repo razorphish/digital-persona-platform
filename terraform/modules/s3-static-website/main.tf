@@ -33,7 +33,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "website" {
   }
 }
 
-# S3 Bucket Public Access Block (initially block all)
+# S3 Bucket Public Access Block (allow public access for website hosting)
 resource "aws_s3_bucket_public_access_block" "website" {
   bucket = aws_s3_bucket.website.id
 
@@ -41,6 +41,24 @@ resource "aws_s3_bucket_public_access_block" "website" {
   block_public_policy     = false
   ignore_public_acls      = false
   restrict_public_buckets = false
+}
+
+# S3 Bucket Policy for public read access (required for website hosting)
+resource "aws_s3_bucket_policy" "website" {
+  bucket = aws_s3_bucket.website.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.website.arn}/*"
+      }
+    ]
+  })
 }
 
 # S3 Bucket Website Configuration
@@ -56,19 +74,20 @@ resource "aws_s3_bucket_website_configuration" "website" {
   }
 }
 
+# Note: Using S3 website endpoint instead of OAC for proper directory index support
 # CloudFront Origin Access Control
-resource "aws_cloudfront_origin_access_control" "website" {
-  name                              = "${var.environment}-${var.sub_environment}-${var.project_name}-oac"
-  description                       = "Origin Access Control for ${var.project_name} website"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-
-  lifecycle {
-    # Prevent recreation if OAC already exists
-    ignore_changes = [name]
-  }
-}
+# resource "aws_cloudfront_origin_access_control" "website" {
+#   name                              = "${var.environment}-${var.sub_environment}-${var.project_name}-oac"
+#   description                       = "Origin Access Control for ${var.project_name} website"
+#   origin_access_control_origin_type = "s3"
+#   signing_behavior                  = "always"
+#   signing_protocol                  = "sigv4"
+#
+#   lifecycle {
+#     # Prevent recreation if OAC already exists
+#     ignore_changes = [name]
+#   }
+# }
 
 # CloudFront Distribution
 resource "aws_cloudfront_distribution" "website" {
@@ -78,9 +97,15 @@ resource "aws_cloudfront_distribution" "website" {
   price_class         = var.cloudfront_price_class
 
   origin {
-    domain_name              = aws_s3_bucket.website.bucket_regional_domain_name
-    origin_id                = "S3-${aws_s3_bucket.website.bucket}"
-    origin_access_control_id = aws_cloudfront_origin_access_control.website.id
+    domain_name = aws_s3_bucket_website_configuration.website.website_endpoint
+    origin_id   = "S3-${aws_s3_bucket.website.bucket}"
+    
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
   }
 
   # Cache behavior for Next.js static assets (_next/*)
@@ -210,19 +235,19 @@ resource "aws_cloudfront_distribution" "website" {
   # Custom error responses for SPA routing
   # Note: Static assets (_next/*, *.js, *.css, etc.) should NOT be redirected to index.html
   # Only redirect actual page routes to support client-side routing
-  # We'll handle this with a Lambda@Edge function or by being more specific about which paths to redirect
-  # For now, we'll remove the blanket redirects and let the cache behaviors handle static assets
-  # custom_error_response {
-  #   error_code         = 403
-  #   response_code      = 200
-  #   response_page_path = "/index.html"
-  # }
+  # We need to redirect 404/403 errors to index.html for SPA routing, but the cache behaviors
+  # for static assets should take precedence and prevent this redirect for those paths
+  custom_error_response {
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
 
-  # custom_error_response {
-  #   error_code         = 404
-  #   response_code      = 200
-  #   response_page_path = "/index.html"
-  # }
+  custom_error_response {
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
 
   restrictions {
     geo_restriction {
@@ -325,4 +350,4 @@ resource "aws_s3_bucket_lifecycle_configuration" "builds" {
       noncurrent_days = var.build_retention_days
     }
   }
-} 
+}
