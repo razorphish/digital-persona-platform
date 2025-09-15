@@ -210,17 +210,19 @@ resource "aws_cloudfront_distribution" "website" {
   # Custom error responses for SPA routing
   # Note: Static assets (_next/*, *.js, *.css, etc.) should NOT be redirected to index.html
   # Only redirect actual page routes to support client-side routing
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
+  # We'll handle this with a Lambda@Edge function or by being more specific about which paths to redirect
+  # For now, we'll remove the blanket redirects and let the cache behaviors handle static assets
+  # custom_error_response {
+  #   error_code         = 403
+  #   response_code      = 200
+  #   response_page_path = "/index.html"
+  # }
 
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
+  # custom_error_response {
+  #   error_code         = 404
+  #   response_code      = 200
+  #   response_page_path = "/index.html"
+  # }
 
   restrictions {
     geo_restriction {
