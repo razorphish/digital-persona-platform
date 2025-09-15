@@ -44,22 +44,7 @@ resource "aws_s3_bucket_public_access_block" "website" {
 }
 
 # S3 Bucket Policy for public read access (required for website hosting)
-resource "aws_s3_bucket_policy" "website" {
-  bucket = aws_s3_bucket.website.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "PublicReadGetObject"
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.website.arn}/*"
-      }
-    ]
-  })
-}
+# Note: This policy is merged with the CloudFront policy below
 
 # S3 Bucket Website Configuration
 resource "aws_s3_bucket_website_configuration" "website" {
@@ -99,7 +84,7 @@ resource "aws_cloudfront_distribution" "website" {
   origin {
     domain_name = aws_s3_bucket_website_configuration.website.website_endpoint
     origin_id   = "S3-${aws_s3_bucket.website.bucket}"
-    
+
     custom_origin_config {
       http_port              = 80
       https_port             = 443
@@ -274,13 +259,20 @@ resource "aws_cloudfront_distribution" "website" {
   depends_on = [aws_s3_bucket.website]
 }
 
-# S3 Bucket Policy for CloudFront access
+# S3 Bucket Policy for public read access and CloudFront access
 resource "aws_s3_bucket_policy" "website" {
   bucket = aws_s3_bucket.website.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Sid       = "PublicReadGetObject"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.website.arn}/*"
+      },
       {
         Sid    = "AllowCloudFrontServicePrincipal"
         Effect = "Allow"
