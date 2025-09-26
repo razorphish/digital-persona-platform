@@ -9,11 +9,11 @@ domain_name = "hibiji.com"
 image_tag          = "latest"
 frontend_image_tag = "latest"
 
-# Cost optimization settings for dev environment
+# Cost optimization settings for dev environment - OPTIMIZED
 aurora_auto_pause   = true
 aurora_pause_delay  = 300 # 5 minutes
-aurora_min_capacity = 0.5
-aurora_max_capacity = 2.0
+aurora_min_capacity = 0.5 # Minimum possible for Aurora Serverless v2
+aurora_max_capacity = 1.0 # Reduced from 2.0 to 1.0 for cost savings
 
 lambda_memory_size = 512 # Standard for dev
 lambda_timeout     = 120 # Increased for database seeding operations

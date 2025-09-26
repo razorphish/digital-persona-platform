@@ -53,7 +53,7 @@ export default function DebugAuthPage() {
 
   useEffect(() => {
     refreshDebugData();
-    const interval = setInterval(refreshDebugData, 1000); // Refresh every second
+    const interval = setInterval(refreshDebugData, 10000); // Refresh every 10 seconds (reduced from 1 second)
     return () => clearInterval(interval);
   }, []);
 

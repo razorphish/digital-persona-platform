@@ -53,13 +53,21 @@ function CreatorDashboardContent() {
   const { data: creatorAnalytics, isLoading: statsLoading } =
     trpc.analytics.getCreatorAnalytics.useQuery(
       { timeRange: selectedTimeRange },
-      { refetchInterval: 300000 } // Refetch every 5 minutes
+      {
+        staleTime: 15 * 60 * 1000, // Cache for 15 minutes
+        refetchInterval: 900000, // Refetch every 15 minutes (reduced from 5 minutes)
+        refetchOnWindowFocus: false, // Don't refetch when window gains focus
+      }
     );
 
   const { data: revenueForecasting, isLoading: revenueLoading } =
     trpc.analytics.getRevenueForecasting.useQuery(
       { timeRange: selectedTimeRange },
-      { refetchInterval: 300000 }
+      {
+        staleTime: 15 * 60 * 1000,
+        refetchInterval: 900000,
+        refetchOnWindowFocus: false,
+      }
     );
 
   // Placeholder for top personas - this endpoint doesn't exist yet

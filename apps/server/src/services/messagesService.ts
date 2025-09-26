@@ -97,6 +97,32 @@ export class MessagesService {
   }
 
   /**
+   * Get unread message count for navigation (lightweight query)
+   */
+  async getUnreadMessageCount(userId: string): Promise<number> {
+    try {
+      const result = await this.db
+        .select({ count: count() })
+        .from(userDmMessages)
+        .leftJoin(userDmThreads, eq(userDmMessages.threadId, userDmThreads.id))
+        .where(
+          and(
+            or(
+              eq(userDmThreads.userAId, userId),
+              eq(userDmThreads.userBId, userId)
+            ),
+            eq(userDmMessages.isRead, false)
+          )
+        );
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error("Error getting unread message count:", error);
+      return 0;
+    }
+  }
+
+  /**
    * Format timestamp to "time ago" format
    */
   private formatTimeAgo(date: Date): string {

@@ -24,6 +24,14 @@ function initializeDatabase() {
 
     pool = new Pool({
       connectionString,
+      // Connection pool optimization for cost reduction
+      max: 10, // Maximum number of connections in the pool
+      min: 2, // Minimum number of connections to maintain
+      idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+      connectionTimeoutMillis: 5000, // Timeout after 5 seconds when connecting
+      // Aurora Serverless v2 optimization
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 0,
     });
 
     dbInstance = drizzle(pool, { schema });

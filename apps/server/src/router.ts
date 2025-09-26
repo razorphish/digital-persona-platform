@@ -402,11 +402,31 @@ const authRouter = router({
   }),
 
   me: protectedProcedure.query(async ({ ctx }) => {
+    // Get complete user profile from database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, ctx.user.id))
+      .limit(1);
+
+    if (!user) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
     return {
-      id: ctx.user.id,
-      email: ctx.user.email,
-      name: ctx.user.name,
-      createdAt: ctx.user.createdAt.toISOString(),
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      dateOfBirth: user.dateOfBirth?.toISOString(),
+      location: user.location,
+      bio: user.bio,
+      allowSocialConnections: user.allowSocialConnections,
+      defaultPrivacyLevel: user.defaultPrivacyLevel,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
     };
   }),
 
@@ -574,6 +594,145 @@ const authRouter = router({
           isValid: false,
           error: "Token validation failed",
         };
+      }
+    }),
+
+  // Update user profile
+  updateProfile: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(1, "Name is required"),
+        dateOfBirth: z.string().optional(),
+        location: z.string().optional(),
+        bio: z.string().optional(),
+        allowSocialConnections: z.boolean().optional(),
+        defaultPrivacyLevel: z
+          .enum(["public", "friends", "subscribers", "private"])
+          .optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const updateData: any = {
+          name: input.name,
+          updatedAt: new Date(),
+        };
+
+        // Only include optional fields if they are provided
+        if (input.dateOfBirth !== undefined) {
+          updateData.dateOfBirth = input.dateOfBirth
+            ? new Date(input.dateOfBirth)
+            : null;
+        }
+        if (input.location !== undefined) {
+          updateData.location = input.location;
+        }
+        if (input.bio !== undefined) {
+          updateData.bio = input.bio;
+        }
+        if (input.allowSocialConnections !== undefined) {
+          updateData.allowSocialConnections = input.allowSocialConnections;
+        }
+        if (input.defaultPrivacyLevel !== undefined) {
+          updateData.defaultPrivacyLevel = input.defaultPrivacyLevel;
+        }
+
+        const [updatedUser] = await db
+          .update(users)
+          .set(updateData)
+          .where(eq(users.id, ctx.user.id))
+          .returning();
+
+        return {
+          success: true,
+          user: {
+            id: updatedUser.id,
+            email: updatedUser.email,
+            name: updatedUser.name,
+            dateOfBirth: updatedUser.dateOfBirth?.toISOString(),
+            location: updatedUser.location,
+            bio: updatedUser.bio,
+            allowSocialConnections: updatedUser.allowSocialConnections,
+            defaultPrivacyLevel: updatedUser.defaultPrivacyLevel,
+            createdAt: updatedUser.createdAt.toISOString(),
+            updatedAt: updatedUser.updatedAt.toISOString(),
+          },
+        };
+      } catch (error) {
+        console.error("Error updating user profile:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update profile",
+        });
+      }
+    }),
+
+  // Change password
+  changePassword: protectedProcedure
+    .input(
+      z.object({
+        currentPassword: z.string().min(1, "Current password is required"),
+        newPassword: z
+          .string()
+          .min(8, "New password must be at least 8 characters"),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const bcrypt = await import("bcryptjs");
+
+        // Get current user with password hash
+        const [user] = await db
+          .select({ passwordHash: users.passwordHash })
+          .from(users)
+          .where(eq(users.id, ctx.user.id))
+          .limit(1);
+
+        if (!user || !user.passwordHash) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "User not found",
+          });
+        }
+
+        // Verify current password
+        const isValidPassword = await bcrypt.compare(
+          input.currentPassword,
+          user.passwordHash
+        );
+
+        if (!isValidPassword) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Current password is incorrect",
+          });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(input.newPassword, 12);
+
+        // Update password
+        await db
+          .update(users)
+          .set({
+            passwordHash: hashedPassword,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, ctx.user.id));
+
+        return {
+          success: true,
+          message: "Password changed successfully",
+        };
+      } catch (error) {
+        console.error("Error changing password:", error);
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to change password",
+        });
       }
     }),
 });
@@ -3296,6 +3455,20 @@ const messagesRouter = router({
         });
       }
     }),
+
+  // Get unread message count only (lightweight for navigation)
+  getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const count = await messagesService.getUnreadMessageCount(ctx.user.id);
+      return { count };
+    } catch (error) {
+      logger.error("Error getting unread message count:", error);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get unread count",
+      });
+    }
+  }),
 });
 
 // Notifications Router

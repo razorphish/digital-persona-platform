@@ -9,11 +9,11 @@ domain_name     = "hibiji.com"
 image_tag          = "latest"
 frontend_image_tag = "latest"
 
-# Cost optimization settings - Aggressive savings for local development
+# Cost optimization settings - Aggressive savings for local development - OPTIMIZED
 aurora_auto_pause   = true
 aurora_pause_delay  = 300 # 5 minutes
-aurora_min_capacity = 0.5 # Minimum possible
-aurora_max_capacity = 1.0 # Low ceiling for local
+aurora_min_capacity = 0.5 # Minimum possible for Aurora Serverless v2
+aurora_max_capacity = 0.5 # Reduced to minimum for maximum cost savings
 
 lambda_memory_size = 256 # Minimal memory
 lambda_timeout     = 30  # Standard timeout

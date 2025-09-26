@@ -30,7 +30,7 @@ function AnalyticsPageContent() {
     user: !!user,
     isAuthenticated,
     authLoading,
-    userEmail: user?.email
+    userEmail: user?.email,
   });
 
   // tRPC queries for real analytics data
@@ -40,7 +40,11 @@ function AnalyticsPageContent() {
     error: creatorError,
   } = trpc.analytics.getCreatorAnalytics.useQuery(
     { timeRange: timeRange as any },
-    { refetchInterval: 300000 } // Refetch every 5 minutes
+    {
+      staleTime: 15 * 60 * 1000, // Cache for 15 minutes
+      refetchInterval: 900000, // Refetch every 15 minutes (reduced from 5 minutes)
+      refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    }
   );
 
   const {
@@ -49,7 +53,11 @@ function AnalyticsPageContent() {
     error: forecastingError,
   } = trpc.analytics.getRevenueForecasting.useQuery(
     { timeRange: timeRange as any },
-    { refetchInterval: 300000 }
+    {
+      staleTime: 15 * 60 * 1000,
+      refetchInterval: 900000,
+      refetchOnWindowFocus: false,
+    }
   );
 
   const {
@@ -58,7 +66,11 @@ function AnalyticsPageContent() {
     error: subscriberError,
   } = trpc.analytics.getSubscriberDemographics.useQuery(
     { timeRange: timeRange as any },
-    { refetchInterval: 300000 }
+    {
+      staleTime: 15 * 60 * 1000,
+      refetchInterval: 900000,
+      refetchOnWindowFocus: false,
+    }
   );
 
   const {
@@ -67,7 +79,11 @@ function AnalyticsPageContent() {
     error: benchmarksError,
   } = trpc.analytics.getPerformanceBenchmarks.useQuery(
     { timeRange: timeRange as any },
-    { refetchInterval: 300000 }
+    {
+      staleTime: 15 * 60 * 1000,
+      refetchInterval: 900000,
+      refetchOnWindowFocus: false,
+    }
   );
 
   const {
@@ -76,7 +92,11 @@ function AnalyticsPageContent() {
     error: behaviorError,
   } = trpc.analytics.getUserBehaviorAnalytics.useQuery(
     { timeRange: timeRange as any },
-    { refetchInterval: 300000 }
+    {
+      staleTime: 15 * 60 * 1000,
+      refetchInterval: 900000,
+      refetchOnWindowFocus: false,
+    }
   );
 
   const {
@@ -85,7 +105,11 @@ function AnalyticsPageContent() {
     error: insightsError,
   } = trpc.analytics.getBusinessIntelligence.useQuery(
     { timeRange: timeRange as any },
-    { refetchInterval: 300000 }
+    {
+      staleTime: 15 * 60 * 1000,
+      refetchInterval: 900000,
+      refetchOnWindowFocus: false,
+    }
   );
 
   // Check if any data is loading

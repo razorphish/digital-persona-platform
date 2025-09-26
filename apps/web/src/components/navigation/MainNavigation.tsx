@@ -27,17 +27,35 @@ export default function MainNavigation() {
   const notificationsTimeoutRef = useRef<NodeJS.Timeout>();
   const messagesTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Get real messages from tRPC - only when authenticated
+  // Get unread message count - LIGHTWEIGHT for cost optimization
   const { isAuthenticated } = useAuth();
-  const { data: allMessages = [] } = trpc.messages.getUserMessages.useQuery(
-    { limit: 20 },
+  const [messagesEnabled, setMessagesEnabled] = useState(false);
+
+  // Lightweight unread count query - runs on every page but very fast
+  const { data: unreadCountData } = trpc.messages.getUnreadCount.useQuery(
+    undefined,
     {
       enabled: isAuthenticated,
-      refetchInterval: 30000, // Refetch every 30 seconds
+      staleTime: 2 * 60 * 1000, // Cache for 2 minutes
+      refetchInterval: 300000, // Refetch every 5 minutes
+      refetchOnWindowFocus: false, // Don't refetch when window gains focus
     }
   );
 
-  // Filter for unread messages only
+  // Full messages query - only when user shows interest
+  const { data: allMessages = [] } = trpc.messages.getUserMessages.useQuery(
+    { limit: 20 },
+    {
+      enabled: isAuthenticated && messagesEnabled,
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      refetchInterval: 300000, // Refetch every 5 minutes
+      refetchOnWindowFocus: false, // Don't refetch when window gains focus
+      refetchOnMount: false, // Don't refetch when component mounts
+    }
+  );
+
+  // Use lightweight count for badge, full messages for dropdown
+  const unreadCount = unreadCountData?.count || 0;
   const unreadMessages = allMessages.filter((message) => !message.isRead);
 
   // Enhanced hover handling for notifications
@@ -54,17 +72,25 @@ export default function MainNavigation() {
     }, 150); // Small delay to prevent accidental closing
   };
 
-  // Enhanced hover handling for messages
+  // Enhanced hover handling for messages - OPTIMIZED
   const handleMessagesMouseEnter = () => {
     if (messagesTimeoutRef.current) {
       clearTimeout(messagesTimeoutRef.current);
     }
+    // Enable messages query only when user shows interest
+    setMessagesEnabled(true);
     setIsMessagesOpen(true);
   };
 
   const handleMessagesMouseLeave = () => {
     messagesTimeoutRef.current = setTimeout(() => {
       setIsMessagesOpen(false);
+      // Keep messages enabled for a while in case user comes back
+      setTimeout(() => {
+        if (!isMessagesOpen) {
+          setMessagesEnabled(false);
+        }
+      }, 30000); // Disable after 30 seconds of no interaction
     }, 150); // Small delay to prevent accidental closing
   };
 
@@ -251,7 +277,10 @@ export default function MainNavigation() {
                 onMouseLeave={handleMessagesMouseLeave}
               >
                 <button
-                  onClick={() => setIsMessagesOpen((v) => !v)}
+                  onClick={() => {
+                    setMessagesEnabled(true); // Enable messages query on click
+                    setIsMessagesOpen((v) => !v);
+                  }}
                   className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full"
                 >
                   <svg
@@ -261,9 +290,12 @@ export default function MainNavigation() {
                   >
                     <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
                   </svg>
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {Math.min(unreadMessages.length, 9)}
-                  </span>
+                  {/* Show unread count badge if there are unread messages */}
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {Math.min(unreadCount, 9)}
+                    </span>
+                  )}
                 </button>
 
                 {isMessagesOpen && (
@@ -277,12 +309,16 @@ export default function MainNavigation() {
                         Unread Messages
                       </h4>
                       <p className="text-xs text-gray-500">
-                        {unreadMessages.length} unread message
-                        {unreadMessages.length !== 1 ? "s" : ""}
+                        {unreadCount} unread message
+                        {unreadCount !== 1 ? "s" : ""}
                       </p>
                     </div>
                     <ul className="max-h-96 overflow-auto">
-                      {unreadMessages.length === 0 ? (
+                      {!messagesEnabled ? (
+                        <li className="px-4 py-3 text-center text-gray-500">
+                          Loading messages...
+                        </li>
+                      ) : unreadMessages.length === 0 ? (
                         <li className="px-4 py-3 text-center text-gray-500">
                           No unread messages
                         </li>
