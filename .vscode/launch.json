@@ -1,0 +1,273 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // =====================================
+    // 🌐 LOCAL DEVELOPMENT
+    // =====================================
+    {
+      "name": "Frontend (Launch)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/web",
+      "program": "${workspaceFolder}/node_modules/.bin/next",
+      "args": ["dev", "-p", "4000"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Clear Caches and Check Ports",
+      "env": {
+        "NODE_ENV": "development",
+        "NEXT_PUBLIC_API_URL": "http://localhost:4001",
+        "BETTER_AUTH_URL": "http://localhost:4001/api/auth",
+        "BETTER_AUTH_SECRET": "development-secret-key"
+      }
+    },
+    {
+      "name": "Frontend (Debug)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/web",
+      "program": "${workspaceFolder}/node_modules/.bin/next",
+      "args": ["dev", "-p", "4000"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Clear Caches and Check Ports",
+      "env": {
+        "NODE_ENV": "development",
+        "NODE_OPTIONS": "--inspect=0.0.0.0:9229",
+        "NEXT_PUBLIC_API_URL": "http://localhost:4001",
+        "BETTER_AUTH_URL": "http://localhost:4001/api/auth",
+        "BETTER_AUTH_SECRET": "development-secret-key"
+      }
+    },
+    {
+      "name": "Frontend (Build)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Build Frontend and Check Port",
+      "env": {
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--inspect=0.0.0.0:9229",
+        "NEXT_PUBLIC_API_URL": "http://localhost:4001",
+        "BETTER_AUTH_URL": "http://localhost:4001/api/auth",
+        "BETTER_AUTH_SECRET": "development-secret-key"
+      }
+    },
+    {
+      "name": "Frontend (Static Export)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Build Frontend Static Export and Check Port",
+      "env": {
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--inspect=0.0.0.0:9229",
+        "NEXT_PUBLIC_API_URL": "http://localhost:4001",
+        "BETTER_AUTH_URL": "http://localhost:4001/api/auth",
+        "BETTER_AUTH_SECRET": "development-secret-key"
+      }
+    },
+    {
+      "name": "Backend (Launch)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Clear Caches and Check Ports",
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "4001",
+        "CORS_ORIGIN": "http://localhost:4000",
+        "JWT_SECRET": "development-jwt-secret",
+        "DATABASE_URL": "postgresql://dpp_user:dpp_password@localhost:5432/digital_persona"
+      }
+    },
+    {
+      "name": "Backend (Debug)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/server",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "watch", "--inspect=0.0.0.0:9231", "src/index.ts"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Clear Caches and Setup Environment",
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "4001",
+        "CORS_ORIGIN": "http://localhost:4000",
+        "JWT_SECRET": "development-jwt-secret",
+        "DATABASE_URL": "postgresql://dpp_user:dpp_password@localhost:5432/digital_persona"
+      }
+    },
+    // =====================================
+    // 🐳 DOCKER DEVELOPMENT
+    // =====================================
+    {
+      "name": "Frontend (Docker)",
+      "type": "node",
+      "request": "attach",
+      "port": 9230,
+      "address": "localhost",
+      "localRoot": "${workspaceFolder}/apps/web",
+      "remoteRoot": "/app",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Backend (Docker)",
+      "type": "node",
+      "request": "attach",
+      "port": 9231,
+      "address": "localhost",
+      "localRoot": "${workspaceFolder}/apps/server",
+      "remoteRoot": "/app",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    // =====================================
+    // ☁️ AWS CLOUD DEVELOPMENT
+    // =====================================
+    {
+      "name": "Frontend (AWS)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Check and Kill Frontend Port",
+      "env": {
+        "NODE_ENV": "development",
+        "NEXT_PUBLIC_API_URL": "http://localhost:4000/api/trpc"
+      },
+      "envFile": "${workspaceFolder}/.env.aws"
+    },
+    {
+      "name": "Backend (AWS)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Check and Kill Backend Port",
+      "envFile": "${workspaceFolder}/.env.aws"
+    },
+    // =====================================
+    // 🐍 PYTHON ML SERVICE
+    // =====================================
+    {
+      "name": "Python ML (Local)",
+      "type": "python",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--reload"
+      ],
+      "cwd": "${workspaceFolder}/python-ml-service",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/python-ml-service"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python ML (Docker)",
+      "type": "python",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/python-ml-service",
+          "remoteRoot": "/app"
+        }
+      ]
+    }
+  ],
+  "compounds": [
+    // =====================================
+    // 🚀 FULL STACK CONFIGURATIONS
+    // =====================================
+    {
+      "name": "🚀 Launch Full Stack",
+      "configurations": ["Frontend (Launch)", "Backend (Launch)"],
+      "preLaunchTask": "Setup Development Environment",
+      "presentation": {
+        "group": "fullstack",
+        "order": 1
+      }
+    },
+    {
+      "name": "🐛 Debug Full Stack",
+      "configurations": ["Frontend (Launch)", "Backend (Debug)"],
+      "preLaunchTask": "Clear Caches and Setup Environment",
+      "presentation": {
+        "group": "fullstack",
+        "order": 2
+      }
+    },
+    {
+      "name": "🤔 Debug Full Stack (Interactive)",
+      "configurations": ["Frontend (Launch)", "Backend (Debug)"],
+      "preLaunchTask": "Interactive Port Cleanup",
+      "presentation": {
+        "group": "fullstack",
+        "order": 3
+      }
+    },
+    {
+      "name": "🐳 Debug Full Stack (Docker)",
+      "configurations": ["Frontend (Docker)", "Backend (Docker)"],
+      "presentation": {
+        "group": "docker",
+        "order": 1
+      }
+    },
+    {
+      "name": "🌟 Debug Complete Platform",
+      "configurations": ["Frontend (Launch)", "Backend (Debug)", "Python ML (Local)"],
+      "preLaunchTask": "Clear Caches and Check Ports",
+      "presentation": {
+        "group": "complete",
+        "order": 1
+      }
+    },
+    {
+      "name": "🏗️ Debug Complete Platform (Build)",
+      "configurations": ["Frontend (Build)", "Backend (Debug)", "Python ML (Local)"],
+      "preLaunchTask": "Build and Setup Environment",
+      "presentation": {
+        "group": "complete",
+        "order": 2
+      }
+    },
+    {
+      "name": "🚀 Debug Complete Platform (Static Export)",
+      "configurations": ["Frontend (Static Export)", "Backend (Debug)", "Python ML (Local)"],
+      "preLaunchTask": "Build and Setup Environment",
+      "presentation": {
+        "group": "complete",
+        "order": 3
+      }
+    }
+  ]
+} 

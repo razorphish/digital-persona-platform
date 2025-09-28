@@ -1,0 +1,258 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Kill Port Conflicts",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/kill-port-conflicts.sh",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Check and Kill Frontend Port",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "if lsof -Pi :4000 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4000 is in use. Killing processes...'; lsof -ti:4000 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4000 cleared'; else echo '✅ Port 4000 is available'; fi"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Check and Kill Backend Port", 
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "if lsof -Pi :4001 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4001 is in use. Killing processes...'; lsof -ti:4001 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4001 cleared'; else echo '✅ Port 4001 is available'; fi"
+      ],
+      "group": "build", 
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clear All Development Ports",
+      "type": "shell", 
+      "command": "bash",
+      "args": [
+        "-c",
+        "echo '🧹 Clearing development ports (4000, 4001, 8001)...'; for port in 4000 4001 8001; do if lsof -Pi :\$port -sTCP:LISTEN -t >/dev/null 2>&1; then echo \"🔍 Killing processes on port \$port\"; lsof -ti:\$port | xargs kill -9 2>/dev/null || true; else echo \"✅ Port \$port is available\"; fi; done; sleep 2; echo '🎉 All ports cleared!'"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always", 
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Interactive Port Cleanup",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/interactive-port-cleanup.sh",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Database for Debugging",
+      "type": "shell",
+      "command": "docker-compose",
+      "args": ["-f", "docker-compose.dev.yml", "up", "postgres", "-d"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup Development Environment",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Start Database for Debugging", "Clear All Development Ports"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}/apps/web"
+      },
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Frontend Static Export",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}/apps/web",
+        "env": {
+          "NEXT_BUILD_EXPORT": "true"
+        }
+      },
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Frontend and Check Port",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Build Frontend", "Check and Kill Frontend Port"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Frontend Static Export and Check Port",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Build Frontend Static Export", "Check and Kill Frontend Port"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build and Setup Environment",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Start Database for Debugging", "Build Frontend and Check Port"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clear Build Caches",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "echo '🧹 Clearing build caches...'; rm -rf apps/web/.next apps/web/out apps/server/dist 2>/dev/null || true; echo '✅ Build caches cleared'"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clear Caches and Setup Environment",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Clear Build Caches", "Start Database for Debugging", "Clear All Development Ports"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clear Caches and Check Ports",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Clear Build Caches", "Clear All Development Ports"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    }
+  ]
+} 

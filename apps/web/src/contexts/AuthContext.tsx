@@ -24,6 +24,7 @@ interface AuthContextType {
   error: string | null;
   clearError: () => void;
   checkAuthState: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -119,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   // Enhanced authentication checking with better error handling
-  const checkAuthState = useCallback(() => {
+  const checkAuthState = useCallback(async () => {
     try {
       console.log("🔍 checkAuthState: Starting authentication check...");
 
@@ -132,32 +133,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Quick bypass for production if we're having issues
       if (process.env.NODE_ENV === "production") {
-        console.log("🔍 checkAuthState: Production bypass - checking for existing tokens");
-        
+        console.log(
+          "🔍 checkAuthState: Production bypass - checking for existing tokens"
+        );
+
         // Check if we already have valid tokens before bypassing
         const existingTokens = AuthUtils.getTokens();
-        if (existingTokens?.accessToken && !AuthUtils.isTokenExpired(existingTokens.accessToken)) {
-          console.log("🔍 checkAuthState: Production bypass - found valid tokens, extracting user");
-          const userData = AuthUtils.getUserFromToken(existingTokens.accessToken);
-          if (userData && (userData.id || userData.sub) && userData.email) {
-            const authenticatedUser = {
-              id: userData.id || userData.sub || "unknown",
-              email: userData.email,
-              name: userData.name || userData.email.split("@")[0] || "User",
-              createdAt: userData.createdAt || new Date().toISOString(),
-            };
+        if (
+          existingTokens?.accessToken &&
+          !AuthUtils.isTokenExpired(existingTokens.accessToken)
+        ) {
+          console.log(
+            "🔍 checkAuthState: Production bypass - found valid tokens, fetching user profile"
+          );
+          try {
+            // Use fetch directly since we're not in a React component context
+            const response = await fetch(
+              `${
+                typeof window !== "undefined" &&
+                window.location.hostname === "localhost"
+                  ? "http://localhost:4001/api/trpc/auth.me"
+                  : process.env.NEXT_PUBLIC_API_URL ||
+                    "http://localhost:4001/api/trpc/auth.me"
+              }`,
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${existingTokens.accessToken}`,
+                },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const fullUserProfile = data.result?.data;
+            console.log(
+              "🔍 checkAuthState: Production bypass - fetched complete user profile:",
+              fullUserProfile
+            );
             // Use setTimeout to ensure this happens after hydration
             setTimeout(() => {
-              setUser(authenticatedUser);
+              setUser(fullUserProfile);
               setIsLoading(false);
               setIsInitialized(true);
             }, 0);
             return;
+          } catch (error) {
+            console.error(
+              "🔍 checkAuthState: Production bypass - failed to fetch user profile:",
+              error
+            );
+            // Fallback to basic token extraction
+            const userData = AuthUtils.getUserFromToken(
+              existingTokens.accessToken
+            );
+            if (userData && (userData.id || userData.sub) && userData.email) {
+              const authenticatedUser = {
+                id: userData.id || userData.sub || "unknown",
+                email: userData.email,
+                name: userData.name || userData.email.split("@")[0] || "User",
+                createdAt: userData.createdAt || new Date().toISOString(),
+              };
+              // Use setTimeout to ensure this happens after hydration
+              setTimeout(() => {
+                setUser(authenticatedUser);
+                setIsLoading(false);
+                setIsInitialized(true);
+              }, 0);
+              return;
+            }
           }
         }
-        
+
         // No valid tokens found, proceed with unauthenticated state
-        console.log("🔍 checkAuthState: Production bypass - no valid tokens, setting unauthenticated");
+        console.log(
+          "🔍 checkAuthState: Production bypass - no valid tokens, setting unauthenticated"
+        );
         // Use setTimeout to ensure this happens after hydration
         setTimeout(() => {
           setUser(null);
@@ -223,15 +278,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // More lenient validation - only require basic fields
       if (userData && (userData.id || userData.sub) && userData.email) {
-        const authenticatedUser = {
-          id: userData.id || userData.sub || "unknown",
-          email: userData.email,
-          name: userData.name || userData.email.split("@")[0] || "User", // More fallbacks
-          createdAt: userData.createdAt || new Date().toISOString(),
-        };
+        console.log(
+          "🔍 checkAuthState: Valid token data found, fetching complete profile..."
+        );
+        // Get complete user profile from API instead of just using token data
+        try {
+          // Use fetch directly since we're not in a React component context
+          console.log(
+            "🔍 checkAuthState: Making API call to fetch user data..."
+          );
+          const response = await fetch(
+            `${
+              typeof window !== "undefined" &&
+              window.location.hostname === "localhost"
+                ? "http://localhost:4001/api/trpc/auth.me"
+                : process.env.NEXT_PUBLIC_API_URL ||
+                  "http://localhost:4001/api/trpc/auth.me"
+            }`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${tokens.accessToken}`,
+              },
+            }
+          );
 
-        console.log("Setting authenticated user:", authenticatedUser);
-        setUser(authenticatedUser);
+          console.log(
+            "🔍 checkAuthState: API response status:",
+            response.status
+          );
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log("🔍 checkAuthState: Raw API response:", data);
+          const fullUserProfile = data.result?.data;
+          console.log(
+            "✅ checkAuthState: Fetched complete user profile:",
+            fullUserProfile
+          );
+          setUser(fullUserProfile);
+        } catch (error) {
+          console.error(
+            "❌ checkAuthState: Failed to fetch user profile from API:",
+            error
+          );
+          // Fallback to basic token data if API call fails
+          const authenticatedUser = {
+            id: userData.id || userData.sub || "unknown",
+            email: userData.email,
+            name: userData.name || userData.email.split("@")[0] || "User",
+            createdAt: userData.createdAt || new Date().toISOString(),
+          };
+          console.log(
+            "⚠️ checkAuthState: Using fallback user data:",
+            authenticatedUser
+          );
+          setUser(authenticatedUser);
+        }
       } else {
         console.warn("Invalid token payload - missing critical fields:", {
           userData,
@@ -262,6 +368,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [isInitialized]);
 
+  // Function to refresh user data from the API
+  const refreshUser = useCallback(async () => {
+    try {
+      console.log("🔄 refreshUser: Starting user data refresh...");
+      const tokens = AuthUtils.getTokens();
+      if (!tokens?.accessToken) {
+        console.log("❌ refreshUser: No access token found for refresh");
+        return;
+      }
+
+      console.log("🔄 refreshUser: Making API call to fetch user data...");
+      const response = await fetch(
+        `${
+          typeof window !== "undefined" &&
+          window.location.hostname === "localhost"
+            ? "http://localhost:4001/api/trpc/auth.me"
+            : process.env.NEXT_PUBLIC_API_URL ||
+              "http://localhost:4001/api/trpc/auth.me"
+        }`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${tokens.accessToken}`,
+          },
+        }
+      );
+
+      console.log("🔄 refreshUser: API response status:", response.status);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("🔄 refreshUser: Raw API response:", data);
+      const fullUserProfile = data.result?.data;
+      console.log("✅ refreshUser: Parsed user profile:", fullUserProfile);
+      console.log(
+        "✅ refreshUser: Setting user in context with:",
+        fullUserProfile
+      );
+      setUser(fullUserProfile);
+    } catch (error) {
+      console.error("❌ refreshUser: Failed to refresh user profile:", error);
+    }
+  }, []);
+
   // Check for existing authentication on mount (only once after hydration)
   useEffect(() => {
     // Only initialize after client-side hydration is complete
@@ -271,14 +424,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => {
       if (!isInitialized) {
         console.log("Initializing auth state on mount (client-side only)");
-        checkAuthState();
+        checkAuthState().catch(console.error);
       }
     }, 100); // Reduced delay since we already waited for hydration
 
     // Fallback: If auth check doesn't complete within 2 seconds, force initialization
     const fallbackTimer = setTimeout(() => {
       if (!isInitialized) {
-        console.warn("Auth initialization timeout - forcing initialization to prevent infinite loading");
+        console.warn(
+          "Auth initialization timeout - forcing initialization to prevent infinite loading"
+        );
         setUser(null);
         setIsLoading(false);
         setIsInitialized(true);
@@ -302,9 +457,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 1. API responses (401/403 errors)
     // 2. AuthMiddleware (route protection)
     // 3. User-initiated actions
-    
-    console.log("🕐 Periodic token validation DISABLED to prevent circular redirects");
-    
+
+    console.log(
+      "🕐 Periodic token validation DISABLED to prevent circular redirects"
+    );
+
     // const interval = setInterval(() => {
     //   if (user) {
     //     console.log("🕐 Periodic token validation check (30min interval)");
@@ -340,7 +497,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           // Token was updated in another tab
           console.log("Token updated in another tab, re-checking auth state");
-          checkAuthState();
+          checkAuthState().catch(console.error);
         }
       }
     };
@@ -476,6 +633,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error: isHydrated ? error : null, // Always null until hydrated
     clearError,
     checkAuthState,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

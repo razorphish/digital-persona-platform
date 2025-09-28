@@ -4,10 +4,18 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { trpc } from "@/lib/trpc";
 
 function AccountPageContent() {
   const { user, logout } = useAuth();
   const router = useRouter();
+
+  // tRPC mutations
+  const updateProfileMutation = trpc.auth.updateProfile.useMutation();
+  const changePasswordMutation = trpc.auth.changePassword.useMutation();
+
+  // Test query to get user data
+  const { data: userData, refetch: refetchUser } = trpc.auth.me.useQuery();
 
   // Form states
   const [formData, setFormData] = useState({
@@ -17,7 +25,11 @@ function AccountPageContent() {
     location: "",
     bio: "",
     allowSocialConnections: true,
-    defaultPrivacyLevel: "friends",
+    defaultPrivacyLevel: "friends" as
+      | "public"
+      | "friends"
+      | "subscribers"
+      | "private",
   });
 
   const [passwordData, setPasswordData] = useState({
@@ -27,8 +39,6 @@ function AccountPageContent() {
   });
 
   const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -45,20 +55,28 @@ function AccountPageContent() {
     { name: "Analytics", href: "/analytics", icon: "📈" },
   ];
 
-  // Initialize form with user data
+  // Initialize form with user data - prioritize tRPC query data over AuthContext
   useEffect(() => {
-    if (user) {
-      setFormData({
-        name: user.name || "",
-        email: user.email || "",
-        dateOfBirth: "", // We'll need to add this to user object
-        location: "", // We'll need to add this to user object
-        bio: "", // We'll need to add this to user object
-        allowSocialConnections: true,
-        defaultPrivacyLevel: "friends",
-      });
+    console.log("Account page - user data changed:", user);
+    console.log("Account page - userData from tRPC:", userData);
+
+    const sourceData = userData || user;
+    if (sourceData) {
+      const newFormData = {
+        name: sourceData.name || "",
+        email: sourceData.email || "",
+        dateOfBirth: sourceData.dateOfBirth || "",
+        location: sourceData.location || "",
+        bio: sourceData.bio || "",
+        allowSocialConnections: sourceData.allowSocialConnections ?? true,
+        defaultPrivacyLevel: sourceData.defaultPrivacyLevel || "friends",
+      };
+      console.log("Account page - setting form data:", newFormData);
+      setFormData(newFormData);
+    } else {
+      console.log("Account page - no user data available yet");
     }
-  }, [user]);
+  }, [user, userData]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -105,25 +123,46 @@ function AccountPageContent() {
   };
 
   const handleSaveProfile = async () => {
-    setIsSaving(true);
     setSaveMessage("");
 
-    try {
-      // TODO: Implement API call to update user profile
-      console.log("Saving profile data:", formData);
+    // Check if user data is loaded
+    if (!user) {
+      setSaveMessage("Please wait for user data to load");
+      return;
+    }
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Validate required fields
+    if (!formData.name || formData.name.trim().length === 0) {
+      setSaveMessage("Name is required");
+      return;
+    }
+
+    try {
+      const updateData = {
+        name: formData.name.trim(),
+        dateOfBirth: formData.dateOfBirth || undefined,
+        location: formData.location || undefined,
+        bio: formData.bio || undefined,
+        allowSocialConnections: formData.allowSocialConnections,
+        defaultPrivacyLevel: formData.defaultPrivacyLevel,
+      };
+
+      console.log("Sending profile update data:", updateData);
+
+      const result = await updateProfileMutation.mutateAsync(updateData);
 
       setSaveMessage("Profile updated successfully!");
       setIsEditing(false);
 
+      // Refresh the user data from the API
+      await refetchUser();
+
       setTimeout(() => setSaveMessage(""), 3000);
-    } catch (error) {
-      setSaveMessage("Failed to update profile. Please try again.");
+    } catch (error: any) {
+      setSaveMessage(
+        error?.message || "Failed to update profile. Please try again."
+      );
       console.error("Profile update error:", error);
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -138,15 +177,13 @@ function AccountPageContent() {
       return;
     }
 
-    setIsChangingPassword(true);
     setPasswordMessage("");
 
     try {
-      // TODO: Implement API call to change password
-      console.log("Changing password");
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await changePasswordMutation.mutateAsync({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
 
       setPasswordMessage("Password changed successfully!");
       setPasswordData({
@@ -156,17 +193,38 @@ function AccountPageContent() {
       });
 
       setTimeout(() => setPasswordMessage(""), 3000);
-    } catch (error) {
-      setPasswordMessage("Failed to change password. Please try again.");
+    } catch (error: any) {
+      setPasswordMessage(
+        error?.message || "Failed to change password. Please try again."
+      );
       console.error("Password change error:", error);
-    } finally {
-      setIsChangingPassword(false);
     }
   };
 
+  // Debug: Show user data status
+  console.log("Account page render - user:", user);
+  console.log("Account page render - userData from tRPC:", userData);
+  console.log("Account page render - formData:", formData);
+  console.log(
+    "Account page render - user keys:",
+    user ? Object.keys(user) : "no user"
+  );
+  console.log(
+    "Account page render - userData keys:",
+    userData ? Object.keys(userData) : "no userData"
+  );
+  console.log("Account page render - user dateOfBirth:", user?.dateOfBirth);
+  console.log(
+    "Account page render - userData dateOfBirth:",
+    userData?.dateOfBirth
+  );
+  console.log("Account page render - user bio:", user?.bio);
+  console.log("Account page render - userData bio:", userData?.bio);
+  console.log("Account page render - user location:", user?.location);
+  console.log("Account page render - userData location:", userData?.location);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="bg-white rounded-lg shadow-md">
@@ -183,25 +241,33 @@ function AccountPageContent() {
               </div>
               <div className="flex items-center space-x-3">
                 {!isEditing ? (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    <svg
-                      className="w-4 h-4 mr-2"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                  <>
+                    <button
+                      onClick={() => refetchUser()}
+                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
-                    Edit Profile
-                  </button>
+                      Test API
+                    </button>
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      <svg
+                        className="w-4 h-4 mr-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                      </svg>
+                      Edit Profile
+                    </button>
+                  </>
                 ) : (
                   <div className="flex space-x-2">
                     <button
@@ -212,10 +278,16 @@ function AccountPageContent() {
                     </button>
                     <button
                       onClick={handleSaveProfile}
-                      disabled={isSaving}
+                      disabled={
+                        updateProfileMutation.isLoading ||
+                        !user ||
+                        !formData.name.trim()
+                      }
                       className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                     >
-                      {isSaving ? "Saving..." : "Save Changes"}
+                      {updateProfileMutation.isLoading
+                        ? "Saving..."
+                        : "Save Changes"}
                     </button>
                   </div>
                 )}
@@ -269,15 +341,17 @@ function AccountPageContent() {
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
                     Email Address
+                    <span className="text-xs text-gray-500 ml-2">
+                      (Username - Cannot be changed)
+                    </span>
                   </label>
                   <input
                     type="email"
                     id="email"
                     name="email"
                     value={formData.email}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
                   />
                 </div>
 
@@ -473,14 +547,14 @@ function AccountPageContent() {
                   <button
                     onClick={handleChangePassword}
                     disabled={
-                      isChangingPassword ||
+                      changePasswordMutation.isLoading ||
                       !passwordData.currentPassword ||
                       !passwordData.newPassword ||
                       !passwordData.confirmPassword
                     }
                     className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isChangingPassword
+                    {changePasswordMutation.isLoading
                       ? "Changing Password..."
                       : "Change Password"}
                   </button>

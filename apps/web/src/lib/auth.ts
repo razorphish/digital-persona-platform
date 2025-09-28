@@ -4,7 +4,13 @@ export interface User {
   email: string;
   name: string;
   image?: string;
+  dateOfBirth?: string;
+  location?: string;
+  bio?: string;
+  allowSocialConnections?: boolean;
+  defaultPrivacyLevel?: "public" | "friends" | "subscribers" | "private";
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface AuthTokens {
