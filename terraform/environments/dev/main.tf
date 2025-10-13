@@ -571,7 +571,7 @@ resource "aws_acm_certificate_validation" "api" {
 # Route53 records for certificate validation
 resource "aws_route53_record" "website_cert_validation" {
   for_each = {
-    for dvo in aws_acm_certificate.website.domain_validation_options : dvo.domain_name => {
+    for dvo in try(aws_acm_certificate.website.domain_validation_options, []) : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
@@ -589,7 +589,7 @@ resource "aws_route53_record" "website_cert_validation" {
 # Route53 records for API certificate validation
 resource "aws_route53_record" "api_cert_validation" {
   for_each = {
-    for dvo in aws_acm_certificate.api.domain_validation_options : dvo.domain_name => {
+    for dvo in try(aws_acm_certificate.api.domain_validation_options, []) : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
