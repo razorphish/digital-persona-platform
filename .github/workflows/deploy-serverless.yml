@@ -1078,13 +1078,12 @@ jobs:
           echo "🔍 DEBUG: Checking terraform backend state..."
           echo "Expected backend key: $MAIN_ENV/$ENVIRONMENT/terraform.tfstate"
 
-          # Clean any existing terraform state to ensure fresh initialization
-          echo "🧹 Cleaning any cached terraform state..."
-          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
-
-          # Re-initialize with explicit backend configuration
-          echo "🔄 Re-initializing terraform with isolated backend..."
-          terraform init -backend-config="key=$MAIN_ENV/$ENVIRONMENT/terraform.tfstate" -reconfigure
+          # NOTE: Do NOT clean state here - imports from previous step must be preserved!
+          # The .terraform directory and state are already initialized from Import step
+          echo "✅ Using existing Terraform initialization with imported resources from previous step"
+          
+          # Verify state is preserved
+          echo "📊 Resources in state: $(terraform state list 2>/dev/null | wc -l)"
 
                     # Run terraform plan and parse output to detect changes
           echo "📊 Running terraform plan to detect changes..."
