@@ -823,7 +823,15 @@ jobs:
           SES_CONFIG_SET="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-email-config"
           if aws ses describe-configuration-set --configuration-set-name "$SES_CONFIG_SET" --output text >/dev/null 2>&1; then
             echo "📋 SES Configuration Set exists: $SES_CONFIG_SET"
-            import_resource "SES Configuration Set" "module.ses_email.aws_ses_configuration_set.email" "$SES_CONFIG_SET"
+            import_resource "SES Configuration Set" "module.ses_email.aws_ses_configuration_set.main" "$SES_CONFIG_SET"
+          fi
+
+          # Import SES Event Destination (if exists)
+          echo "🔍 Checking SES Event Destination..."
+          # Event destinations are imported with format: configuration-set-name/event-destination-name
+          if aws ses describe-configuration-set --configuration-set-name "$SES_CONFIG_SET" --output text 2>&1 | grep -q "cloudwatch-destination"; then
+            echo "📋 SES Event Destination exists for $SES_CONFIG_SET"
+            import_resource "SES Event Destination" "module.ses_email.aws_ses_event_destination.cloudwatch" "${SES_CONFIG_SET}/cloudwatch-destination"
           fi
 
           # Import SES Route53 Records (if they exist)
