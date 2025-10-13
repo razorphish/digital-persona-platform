@@ -385,7 +385,7 @@ jobs:
           EOF
 
           echo "📋 Step 3: Terraform Planning..."
-          
+
           # Check if this is a fresh deployment (empty state)
           STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
           if [ "$STATE_RESOURCES" -eq 0 ]; then
@@ -409,7 +409,7 @@ jobs:
           # Check if Terraform state exists and has resources
           echo "🔍 Checking Terraform state..."
           STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
-          
+
           if [ "$STATE_RESOURCES" -eq 0 ]; then
             echo "✅ State is empty - this is a fresh deployment"
             echo "⏭️  Skipping import phase - Terraform will create all resources fresh"
@@ -517,7 +517,7 @@ jobs:
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
         run: |
           echo "🔄 Checking if import is needed..."
-          
+
           # Check if state is empty
           STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
           if [ "$STATE_RESOURCES" -eq 0 ]; then
@@ -525,7 +525,7 @@ jobs:
             echo "ℹ️  Terraform will create all resources fresh"
             exit 0
           fi
-          
+
           echo "📦 State contains $STATE_RESOURCES resources - proceeding with imports"
           echo "🔄 Importing existing AWS resources into Terraform state..."
           echo "🏷️  Using naming pattern: $MAIN_ENV-$ENVIRONMENT-dpp-*"
@@ -819,12 +819,12 @@ jobs:
           echo "🌐 Target domains:"
           echo "   📄 Website: $WEBSITE_DOMAIN"
           echo "   🔗 API: $API_DOMAIN"
-          
+
           # Get Route53 hosted zone ID
           HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "hibiji.com" \
             --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
           echo "🌐 Route53 Hosted Zone ID: $HOSTED_ZONE_ID"
-          
+
           # Function to create validation records for a certificate
           create_validation_records() {
             local domain=$1
@@ -832,10 +832,10 @@ jobs:
             
             echo "🔍 Looking for certificate for: $domain"
             
-            # Find the certificate ARN
+            # Find the certificate ARN - use | [0] to get only first if duplicates exist
             CERT_ARN=$(aws acm list-certificates --region us-east-1 \
-              --query "CertificateSummaryList[?DomainName=='$domain'].CertificateArn" \
-              --output text | head -n1)
+              --query "CertificateSummaryList[?DomainName=='$domain'].CertificateArn | [0]" \
+              --output text)
             
             if [ -z "$CERT_ARN" ] || [ "$CERT_ARN" = "None" ]; then
               echo "⚠️  No certificate found for $domain - skipping validation records"
@@ -884,18 +884,18 @@ jobs:
               echo "⚠️  Failed to create validation record (may already exist)"
             fi
           }
-          
+
           # Create validation records for both certificates
           create_validation_records "$WEBSITE_DOMAIN" "Website"
           create_validation_records "$API_DOMAIN" "API"
-          
+
           echo "✅ DNS validation records created"
 
           # Function to check if certificate exists for domain
           check_certificate() {
             local domain=$1
             local cert_arn=$(aws acm list-certificates --region us-east-1 \
-              --query "CertificateSummaryList[?DomainName=='$domain' && Status=='ISSUED'].CertificateArn" \
+              --query "CertificateSummaryList[?DomainName=='$domain' && Status=='ISSUED'].CertificateArn | [0]" \
               --output text 2>/dev/null || echo "")
             
             if [ -n "$cert_arn" ] && [ "$cert_arn" != "None" ]; then
