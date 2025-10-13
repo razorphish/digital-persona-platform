@@ -396,6 +396,20 @@ jobs:
         run: |
           echo "📥 Step 3: Handling existing AWS resources..."
 
+          # Check if Terraform state exists and has resources
+          echo "🔍 Checking Terraform state..."
+          STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
+          
+          if [ "$STATE_RESOURCES" -eq 0 ]; then
+            echo "✅ State is empty - this is a fresh deployment"
+            echo "⏭️  Skipping import phase - Terraform will create all resources fresh"
+            echo "STATE_IS_EMPTY=true" >> $GITHUB_ENV
+            exit 0
+          else
+            echo "📦 State contains $STATE_RESOURCES resources - proceeding with import checks"
+            echo "STATE_IS_EMPTY=false" >> $GITHUB_ENV
+          fi
+
           # Check and import existing RDS DB Subnet Group if it exists
           SUBNET_GROUP_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-db-subnet-group"
           echo "🔍 Checking for existing DB Subnet Group: $SUBNET_GROUP_NAME"
@@ -487,6 +501,7 @@ jobs:
           echo "✅ Resource conflict handling completed"
 
       - name: Import Existing Resources
+        if: env.STATE_IS_EMPTY != 'true'
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
           ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
