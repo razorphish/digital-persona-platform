@@ -401,7 +401,7 @@ const authRouter = router({
     };
   }),
 
-  me: protectedProcedure.query(async ({ ctx }) => {
+  me: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     // Get complete user profile from database
     const [user] = await db
       .select()
@@ -804,7 +804,7 @@ const personasRouter = router({
       };
     }),
   // Get all personas for user
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     const userPersonas = await db
       .select({
         id: personas.id,
@@ -1045,7 +1045,7 @@ const personasRouter = router({
     }),
 
   // Get main persona
-  getMain: protectedProcedure.query(async ({ ctx }) => {
+  getMain: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     const mainPersona = await PersonaService.getOrCreateMainPersona(
       ctx.user.id
     );
@@ -1191,7 +1191,7 @@ const conversationIntelligence = new ConversationIntelligenceService();
 // Enhanced Chat router with Airica intelligence
 const chatRouter = router({
   // List conversations
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     const userConversations = await db
       .select()
       .from(conversations)
@@ -1413,7 +1413,7 @@ const chatRouter = router({
     }),
 
   // Get Airica's relationship assessment
-  getRelationshipStatus: protectedProcedure.query(async ({ ctx }) => {
+  getRelationshipStatus: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     try {
       const stage = await conversationIntelligence.determineRelationshipStage(
         ctx.user.id
@@ -1479,7 +1479,7 @@ const chatRouter = router({
 
 // Direct Messages Router (user-to-user)
 const directMessagesRouter = router({
-  listThreads: protectedProcedure.query(async ({ ctx }) => {
+  listThreads: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     const threads = await db
       .select()
       .from(userDmThreads)
@@ -1714,7 +1714,7 @@ const mediaRouter = router({
     }),
 
   // List user's media files
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     const files = await db.execute(sql`
       SELECT * FROM media_files 
       WHERE user_id = ${ctx.user.id} 
@@ -1748,7 +1748,7 @@ const mediaRouter = router({
 // Social connections router (placeholder for future implementation)
 const socialRouter = router({
   // List connections
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     const connections = await db
       .select()
       .from(socialConnections)
@@ -1982,7 +1982,7 @@ const creatorVerificationRouter = router({
     }),
 
   // Get verification status
-  getVerificationStatus: protectedProcedure.query(async ({ ctx }) => {
+  getVerificationStatus: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     try {
       return await creatorVerificationService.getVerificationStatus(
         ctx.user.id
@@ -2104,7 +2104,7 @@ const creatorMonetizationRouter = router({
     }),
 
   // Get creator earnings summary
-  getEarningsSummary: protectedProcedure.query(async ({ ctx }) => {
+  getEarningsSummary: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     try {
       // TODO: Implement earnings summary calculation
       return {
@@ -3457,7 +3457,7 @@ const messagesRouter = router({
     }),
 
   // Get unread message count only (lightweight for navigation)
-  getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+  getUnreadCount: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     try {
       const count = await messagesService.getUnreadMessageCount(ctx.user.id);
       return { count };
@@ -3541,7 +3541,7 @@ const notificationsRouter = router({
   }),
 
   // Get unread notification count
-  getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+  getUnreadCount: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     try {
       const count = await notificationsService.getUnreadCount(ctx.user.id);
       return { count };
@@ -3864,7 +3864,7 @@ const subscriptionsService = new SubscriptionsService();
 // Add this router after the personaMonetizationRouter
 const subscriptionsRouter = router({
   // Get user's subscriptions
-  getUserSubscriptions: protectedProcedure.query(async ({ ctx }) => {
+  getUserSubscriptions: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     try {
       const subscriptions = await subscriptionsService.getUserSubscriptions(
         ctx.user.id
@@ -3880,7 +3880,7 @@ const subscriptionsRouter = router({
   }),
 
   // Get user's payment methods
-  getUserPaymentMethods: protectedProcedure.query(async ({ ctx }) => {
+  getUserPaymentMethods: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
     try {
       const paymentMethods = await subscriptionsService.getUserPaymentMethods(
         ctx.user.id

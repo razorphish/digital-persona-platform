@@ -48,7 +48,7 @@ function CreatorDashboardContent() {
 
   // tRPC queries for real data
   const { data: verificationStatus, isLoading: verificationLoading } =
-    trpc.creatorVerification.getVerificationStatus.useQuery();
+    trpc.creatorVerification.getVerificationStatus.useQuery(undefined);
 
   const { data: creatorAnalytics, isLoading: statsLoading } =
     trpc.analytics.getCreatorAnalytics.useQuery(

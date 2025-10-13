@@ -799,12 +799,12 @@ jobs:
           echo "🔍 Checking Secrets Manager secrets..."
           JWT_SECRET_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-jwt-secret"
           DB_SECRET_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-database-password"
-          
+
           if aws secretsmanager describe-secret --secret-id "$JWT_SECRET_NAME" --output text >/dev/null 2>&1; then
             echo "📋 JWT Secret exists: $JWT_SECRET_NAME"
             import_resource "Secrets Manager Secret" "aws_secretsmanager_secret.jwt_secret" "$JWT_SECRET_NAME"
           fi
-          
+
           if aws secretsmanager describe-secret --secret-id "$DB_SECRET_NAME" --output text >/dev/null 2>&1; then
             echo "📋 Database Password Secret exists: $DB_SECRET_NAME"
             import_resource "Secrets Manager Secret" "aws_secretsmanager_secret.database_password" "$DB_SECRET_NAME"
@@ -838,7 +838,7 @@ jobs:
           # Import SES Route53 Records (if they exist)
           echo "🔍 Checking SES Route53 records..."
           SES_VERIFICATION_RECORD="_amazonses.${BASE_DOMAIN}"
-          
+
           if aws route53 list-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" --query "ResourceRecordSets[?Name=='$SES_VERIFICATION_RECORD.' && Type=='TXT']" --output text | grep -q "$SES_VERIFICATION_RECORD"; then
             echo "📋 SES verification record exists for $SES_VERIFICATION_RECORD"
             import_resource "Route53 Record" "module.ses_email.aws_route53_record.ses_verification" "${HOSTED_ZONE_ID}_${SES_VERIFICATION_RECORD}_TXT"

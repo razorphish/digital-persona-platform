@@ -15,7 +15,7 @@ function AccountPageContent() {
   const changePasswordMutation = trpc.auth.changePassword.useMutation();
 
   // Test query to get user data
-  const { data: userData, refetch: refetchUser } = trpc.auth.me.useQuery();
+  const { data: userData, refetch: refetchUser } = trpc.auth.me.useQuery(undefined);
 
   // Form states
   const [formData, setFormData] = useState({

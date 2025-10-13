@@ -48,12 +48,12 @@ function PersonasPageContent() {
     user: !!user,
     isAuthenticated,
     authLoading,
-    userEmail: user?.email
+    userEmail: user?.email,
   });
 
   // tRPC queries with type assertions for build compatibility
-  const { data: personas, isLoading, refetch } = trpc.personas.list.useQuery();
-  const { data: mainPersona } = trpc.personas.getMain.useQuery();
+  const { data: personas, isLoading, refetch } = trpc.personas.list.useQuery(undefined);
+  const { data: mainPersona } = trpc.personas.getMain.useQuery(undefined);
 
   // Type-safe persona arrays (using unknown for build compatibility)
   const typedPersonas = personas as unknown as Persona[] | undefined;
@@ -76,7 +76,9 @@ function PersonasPageContent() {
         privacyLevel: formData.privacyLevel || "friends",
         isPubliclyListed: formData.isPubliclyListed || false,
         requiresSubscription: formData.requiresSubscription || false,
-        subscriptionPrice: formData.subscriptionPrice ? Number(formData.subscriptionPrice) : undefined,
+        subscriptionPrice: formData.subscriptionPrice
+          ? Number(formData.subscriptionPrice)
+          : undefined,
       });
     } catch (error) {
       console.error("Failed to create persona:", error);
@@ -480,18 +482,14 @@ function PersonasPageContent() {
                     </button>
                     {persona.requiresSubscription ? (
                       <button
-                        onClick={() =>
-                          router.push(`/account/subscriptions`)
-                        }
+                        onClick={() => router.push(`/account/subscriptions`)}
                         className="px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
                       >
                         Subscribe
                       </button>
                     ) : (
                       <button
-                        onClick={() =>
-                          router.push(`/analytics`)
-                        }
+                        onClick={() => router.push(`/analytics`)}
                         className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
                       >
                         Analytics

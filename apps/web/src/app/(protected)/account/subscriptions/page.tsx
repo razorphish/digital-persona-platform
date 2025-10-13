@@ -30,9 +30,9 @@ function SubscriptionManagementContent() {
     data: subscriptions = [],
     isLoading,
     refetch,
-  } = trpc.subscriptions.getUserSubscriptions.useQuery();
+  } = trpc.subscriptions.getUserSubscriptions.useQuery(undefined);
   const { data: paymentMethods = [] } =
-    trpc.subscriptions.getUserPaymentMethods.useQuery();
+    trpc.subscriptions.getUserPaymentMethods.useQuery(undefined);
 
   // tRPC mutations - using real API calls
   const cancelSubscription = trpc.subscriptions.cancelSubscription.useMutation({
@@ -379,8 +379,9 @@ function SubscriptionManagementContent() {
             </h2>
             <button
               onClick={() => {
-                const billingSection = document.getElementById('billing-history');
-                billingSection?.scrollIntoView({ behavior: 'smooth' });
+                const billingSection =
+                  document.getElementById("billing-history");
+                billingSection?.scrollIntoView({ behavior: "smooth" });
               }}
               className="text-indigo-600 hover:text-indigo-500 font-medium"
             >
@@ -388,7 +389,10 @@ function SubscriptionManagementContent() {
             </button>
           </div>
 
-          <div id="billing-history" className="bg-white rounded-lg shadow-sm border p-6">
+          <div
+            id="billing-history"
+            className="bg-white rounded-lg shadow-sm border p-6"
+          >
             <p className="text-gray-600 text-center py-4">
               Billing history will appear here once you have active
               subscriptions.

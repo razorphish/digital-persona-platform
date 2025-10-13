@@ -61,9 +61,9 @@ function PrivacyPageContent() {
   >("guard-rails");
   const [isDirty, setIsDirty] = useState(false);
 
-  // tRPC queries
-  const { data: personas } = trpc.personas.list.useQuery();
-  const { data: mainPersona } = trpc.personas.getMain.useQuery();
+  // tRPC queries  
+  const { data: personas } = trpc.personas.list.useQuery(undefined);
+  const { data: mainPersona } = trpc.personas.getMain.useQuery(undefined);
 
   // Privacy settings state
   const [privacySettings, setPrivacySettings] =

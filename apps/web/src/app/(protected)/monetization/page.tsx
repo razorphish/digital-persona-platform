@@ -62,8 +62,8 @@ function MonetizationPageContent() {
   const [isDirty, setIsDirty] = useState(false);
 
   // tRPC queries for real data
-  const { data: personas } = trpc.personas.list.useQuery();
-  const { data: mainPersona } = trpc.personas.getMain.useQuery();
+  const { data: personas } = trpc.personas.list.useQuery(undefined);
+  const { data: mainPersona } = trpc.personas.getMain.useQuery(undefined);
 
   // Get monetization settings for selected persona
   const { 

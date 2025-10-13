@@ -16,7 +16,7 @@ function CreatorSafetyPageContent() {
   );
 
   // Use real tRPC query for personas
-  const { data: personas = [], isLoading } = trpc.personas.list.useQuery();
+  const { data: personas = [], isLoading } = trpc.personas.list.useQuery(undefined);
 
   if (isLoading) {
     return (

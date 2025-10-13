@@ -95,7 +95,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         // Clear corrupted/invalid tokens but don't redirect
         // Let AuthMiddleware handle the redirect to prevent loops
         AuthUtils.clearTokens();
-        
+
         // Don't redirect here - let AuthMiddleware handle it
         // This prevents circular redirects between error handler and middleware
       }

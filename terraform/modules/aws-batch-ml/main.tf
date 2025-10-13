@@ -250,12 +250,15 @@ resource "aws_batch_compute_environment" "ml_processing" {
     }
   }
 
-  # Prevent unnecessary replacements due to tag changes
+  # Prevent unnecessary replacements due to tag, state, or network changes
   lifecycle {
     ignore_changes = [
       compute_resources[0].tags,
+      compute_resources[0].security_group_ids, # Prevents replacement when security groups change
+      compute_resources[0].subnets,            # Prevents replacement when subnets change  
       tags,
-      tags_all
+      tags_all,
+      state # State can be managed separately (ENABLED/DISABLED) without replacement
     ]
   }
 
@@ -357,4 +360,4 @@ resource "aws_batch_job_definition" "ml_processor" {
     Name = "${var.environment}-${var.sub_environment}-${var.project_name}-ml-processor-job-def"
     Type = "BatchJobDefinition"
   })
-} 
+}
