@@ -511,12 +511,22 @@ jobs:
           echo "✅ Resource conflict handling completed"
 
       - name: Import Existing Resources
-        if: env.STATE_IS_EMPTY != 'true'
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
           ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
         run: |
+          echo "🔄 Checking if import is needed..."
+          
+          # Check if state is empty
+          STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
+          if [ "$STATE_RESOURCES" -eq 0 ]; then
+            echo "✅ State is empty - skipping import phase"
+            echo "ℹ️  Terraform will create all resources fresh"
+            exit 0
+          fi
+          
+          echo "📦 State contains $STATE_RESOURCES resources - proceeding with imports"
           echo "🔄 Importing existing AWS resources into Terraform state..."
           echo "🏷️  Using naming pattern: $MAIN_ENV-$ENVIRONMENT-dpp-*"
           echo ""
