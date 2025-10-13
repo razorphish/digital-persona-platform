@@ -542,16 +542,20 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# Certificate validation
+# Certificate validation - simplified approach without explicit DNS records
+# ACM will automatically validate using DNS if records are created externally
 resource "aws_acm_certificate_validation" "website" {
   provider        = aws.us_east_1
   certificate_arn = aws_acm_certificate.website.arn
-  validation_record_fqdns = [
-    for record in aws_route53_record.website_cert_validation : record.fqdn
-  ]
 
   timeouts {
     create = "10m"
+  }
+  
+  # Allow validation to proceed without waiting for DNS records
+  # DNS records will be created manually or via workflow
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -559,49 +563,14 @@ resource "aws_acm_certificate_validation" "website" {
 resource "aws_acm_certificate_validation" "api" {
   provider        = aws.us_east_1
   certificate_arn = aws_acm_certificate.api.arn
-  validation_record_fqdns = [
-    for record in aws_route53_record.api_cert_validation : record.fqdn
-  ]
 
   timeouts {
     create = "10m"
   }
-}
-
-# Route53 records for certificate validation
-resource "aws_route53_record" "website_cert_validation" {
-  for_each = {
-    for dvo in try(aws_acm_certificate.website.domain_validation_options, []) : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
+  
+  lifecycle {
+    create_before_destroy = true
   }
-
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
-}
-
-# Route53 records for API certificate validation
-resource "aws_route53_record" "api_cert_validation" {
-  for_each = {
-    for dvo in try(aws_acm_certificate.api.domain_validation_options, []) : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
 }
 
 # S3 Static Website

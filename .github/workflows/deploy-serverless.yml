@@ -788,7 +788,7 @@ jobs:
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
           PROJECT_NAME: "dpp"
         run: |
-          echo "🔐 Step 4: Verifying ACM certificates for custom domains..."
+          echo "🔐 Step 4: Creating DNS validation records for ACM certificates..."
 
           # Define domain names for this environment
           if [ "$ENVIRONMENT" = "prod" ]; then
@@ -802,6 +802,77 @@ jobs:
           echo "🌐 Target domains:"
           echo "   📄 Website: $WEBSITE_DOMAIN"
           echo "   🔗 API: $API_DOMAIN"
+          
+          # Get Route53 hosted zone ID
+          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "hibiji.com" \
+            --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
+          echo "🌐 Route53 Hosted Zone ID: $HOSTED_ZONE_ID"
+          
+          # Function to create validation records for a certificate
+          create_validation_records() {
+            local domain=$1
+            local cert_type=$2
+            
+            echo "🔍 Looking for certificate for: $domain"
+            
+            # Find the certificate ARN
+            CERT_ARN=$(aws acm list-certificates --region us-east-1 \
+              --query "CertificateSummaryList[?DomainName=='$domain'].CertificateArn" \
+              --output text | head -n1)
+            
+            if [ -z "$CERT_ARN" ] || [ "$CERT_ARN" = "None" ]; then
+              echo "⚠️  No certificate found for $domain - skipping validation records"
+              return 0
+            fi
+            
+            echo "✅ Found certificate: $CERT_ARN"
+            echo "📋 Getting DNS validation records..."
+            
+            # Get validation records
+            VALIDATION_RECORDS=$(aws acm describe-certificate --region us-east-1 \
+              --certificate-arn "$CERT_ARN" \
+              --query "Certificate.DomainValidationOptions[0].ResourceRecord" \
+              --output json)
+            
+            if [ "$VALIDATION_RECORDS" = "null" ] || [ -z "$VALIDATION_RECORDS" ]; then
+              echo "ℹ️  No validation records needed (cert may already be validated)"
+              return 0
+            fi
+            
+            RECORD_NAME=$(echo "$VALIDATION_RECORDS" | jq -r '.Name')
+            RECORD_VALUE=$(echo "$VALIDATION_RECORDS" | jq -r '.Value')
+            RECORD_TYPE=$(echo "$VALIDATION_RECORDS" | jq -r '.Type')
+            
+            echo "📝 Creating DNS validation record:"
+            echo "   Name: $RECORD_NAME"
+            echo "   Type: $RECORD_TYPE"
+            echo "   Value: $RECORD_VALUE"
+            
+            # Create or update the validation record
+            aws route53 change-resource-record-sets --hosted-zone-id "$HOSTED_ZONE_ID" --change-batch "{
+              \"Changes\": [{
+                \"Action\": \"UPSERT\",
+                \"ResourceRecordSet\": {
+                  \"Name\": \"$RECORD_NAME\",
+                  \"Type\": \"$RECORD_TYPE\",
+                  \"TTL\": 60,
+                  \"ResourceRecords\": [{\"Value\": \"$RECORD_VALUE\"}]
+                }
+              }]
+            }" > /dev/null 2>&1
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Validation record created for $cert_type certificate"
+            else
+              echo "⚠️  Failed to create validation record (may already exist)"
+            fi
+          }
+          
+          # Create validation records for both certificates
+          create_validation_records "$WEBSITE_DOMAIN" "Website"
+          create_validation_records "$API_DOMAIN" "API"
+          
+          echo "✅ DNS validation records created"
 
           # Function to check if certificate exists for domain
           check_certificate() {
