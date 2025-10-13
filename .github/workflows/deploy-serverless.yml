@@ -693,6 +693,12 @@ jobs:
                 return 0
               fi
               
+              if echo "$import_output" | grep -q "ValidationException\|validation error\|failed to satisfy constraint"; then
+                echo "  ⚠️ Validation error during import (possibly invalid ARN format)"
+                echo "  💡 Skipping import - resource may need to be created or manually fixed"
+                return 0
+              fi
+              
               echo "  ⚠️ Import failed - resource may not exist or have permission issues"
               echo "  💡 This is non-critical if resource will be created fresh"
               return 1
@@ -758,13 +764,14 @@ jobs:
 
           # Import SSL Certificates (if they exist)
           echo "🔍 Checking SSL Certificates..."
-          WEBSITE_CERT_ARN=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}.${BASE_DOMAIN}'].CertificateArn" --output text 2>/dev/null || echo "")
+          # Select only the FIRST certificate if duplicates exist (use [0] to get single ARN)
+          WEBSITE_CERT_ARN=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}.${BASE_DOMAIN}'].CertificateArn | [0]" --output text 2>/dev/null || echo "")
           if [ -n "$WEBSITE_CERT_ARN" ] && [ "$WEBSITE_CERT_ARN" != "None" ]; then
             echo "📋 Website SSL certificate exists: $WEBSITE_CERT_ARN"
             import_resource "SSL Certificate" "aws_acm_certificate.website" "$WEBSITE_CERT_ARN"
           fi
 
-          API_CERT_ARN=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}-api.${BASE_DOMAIN}'].CertificateArn" --output text 2>/dev/null || echo "")
+          API_CERT_ARN=$(aws acm list-certificates --region ${{ env.AWS_CERT_REGION }} --query "CertificateSummaryList[?DomainName=='${ENVIRONMENT}-api.${BASE_DOMAIN}'].CertificateArn | [0]" --output text 2>/dev/null || echo "")
           if [ -n "$API_CERT_ARN" ] && [ "$API_CERT_ARN" != "None" ]; then
             echo "📋 API SSL certificate exists: $API_CERT_ARN"
             import_resource "SSL Certificate" "aws_acm_certificate.api" "$API_CERT_ARN"
