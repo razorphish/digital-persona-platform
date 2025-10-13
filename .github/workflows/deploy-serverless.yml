@@ -385,7 +385,17 @@ jobs:
           EOF
 
           echo "📋 Step 3: Terraform Planning..."
-          terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+          
+          # Check if this is a fresh deployment (empty state)
+          STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
+          if [ "$STATE_RESOURCES" -eq 0 ]; then
+            echo "🆕 Fresh deployment detected - using targeted plan for certificates"
+            echo "📋 Planning certificates first to avoid for_each issues with unknown values..."
+            terraform plan -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars" -out=tfplan
+          else
+            echo "📋 Existing deployment - using full plan"
+            terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+          fi
 
       - name: Handle Existing Resources
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
