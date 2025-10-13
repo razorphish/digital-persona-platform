@@ -1010,6 +1010,22 @@ jobs:
             echo "🚀 Changes detected! Applying Terraform configuration..."
             echo "📊 Resources will be created/modified"
 
+            # Check if this is a fresh deployment (empty state)
+            STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
+            if [ "$STATE_RESOURCES" -eq 0 ]; then
+              echo "🆕 Fresh deployment detected - using two-stage apply for certificates"
+              echo "📋 Stage 1: Creating ACM certificates first..."
+              
+              if terraform apply -auto-approve -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars"; then
+                echo "✅ Stage 1 completed: Certificates created"
+                echo "📋 Stage 2: Creating remaining resources..."
+                # Refresh plan for stage 2
+                terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+              else
+                echo "⚠️  Stage 1 failed, but continuing with full apply..."
+              fi
+            fi
+
             # Robust apply with retry mechanism (no targeted fallback)
             APPLY_SUCCESS="false"
             for attempt in 1 2 3; do
