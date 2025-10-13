@@ -828,9 +828,10 @@ jobs:
 
           # Import SES Event Destination (if exists)
           echo "🔍 Checking SES Event Destination..."
-          # Event destinations are imported with format: configuration-set-name/event-destination-name
-          if aws ses describe-configuration-set --configuration-set-name "$SES_CONFIG_SET" --output text 2>&1 | grep -q "cloudwatch-destination"; then
-            echo "📋 SES Event Destination exists for $SES_CONFIG_SET"
+          # Check using list-configuration-sets and looking for event destinations
+          if aws ses list-configuration-sets --query "ConfigurationSets[?Name=='$SES_CONFIG_SET']" --output text | grep -q "$SES_CONFIG_SET"; then
+            # Try to get event destination details - if it exists, import will succeed
+            echo "📋 SES Configuration Set found, attempting to import event destination"
             import_resource "SES Event Destination" "module.ses_email.aws_ses_event_destination.cloudwatch" "${SES_CONFIG_SET}/cloudwatch-destination"
           fi
 
@@ -856,6 +857,24 @@ jobs:
               fi
               TOKEN_COUNT=$((TOKEN_COUNT + 1))
             done
+          fi
+
+          # Import AWS Budget (if exists)
+          echo "🔍 Checking AWS Budget..."
+          BUDGET_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-budget"
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          if aws budgets describe-budget --account-id "$ACCOUNT_ID" --budget-name "$BUDGET_NAME" --output text >/dev/null 2>&1; then
+            echo "📋 AWS Budget exists: $BUDGET_NAME"
+            import_resource "AWS Budget" "aws_budgets_budget.dev_environment" "${ACCOUNT_ID}:${BUDGET_NAME}"
+          fi
+
+          # Import CloudFront Response Headers Policy (if exists)
+          echo "🔍 Checking CloudFront Response Headers Policy..."
+          CORS_POLICY_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-api-cors"
+          CORS_POLICY_ID=$(aws cloudfront list-response-headers-policies --query "ResponseHeadersPolicyList.Items[?ResponseHeadersPolicy.ResponseHeadersPolicyConfig.Name=='$CORS_POLICY_NAME'].ResponseHeadersPolicy.Id" --output text 2>/dev/null || echo "")
+          if [ -n "$CORS_POLICY_ID" ] && [ "$CORS_POLICY_ID" != "None" ]; then
+            echo "📋 CloudFront Response Headers Policy exists: $CORS_POLICY_ID"
+            import_resource "CloudFront Response Headers Policy" "module.api_gateway.aws_cloudfront_response_headers_policy.api_cors" "$CORS_POLICY_ID"
           fi
 
           echo "✅ Comprehensive resource import completed"
