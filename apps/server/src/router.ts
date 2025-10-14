@@ -1413,31 +1413,33 @@ const chatRouter = router({
     }),
 
   // Get Airica's relationship assessment
-  getRelationshipStatus: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
-    try {
-      const stage = await conversationIntelligence.determineRelationshipStage(
-        ctx.user.id
-      );
-      return {
-        success: true,
-        stage: stage.stage,
-        name: stage.name,
-        description: stage.description,
-        messageThreshold: stage.messageThreshold,
-        intimacyLevel: stage.intimacyLevel,
-      };
-    } catch (error) {
-      logger.error("Error getting relationship status:", error);
-      return {
-        success: false,
-        stage: "stranger",
-        name: "Getting to Know You",
-        description: "Learning the basics about who you are",
-        messageThreshold: 0,
-        intimacyLevel: 2,
-      };
-    }
-  }),
+  getRelationshipStatus: protectedProcedure
+    .input(z.void())
+    .query(async ({ ctx }) => {
+      try {
+        const stage = await conversationIntelligence.determineRelationshipStage(
+          ctx.user.id
+        );
+        return {
+          success: true,
+          stage: stage.stage,
+          name: stage.name,
+          description: stage.description,
+          messageThreshold: stage.messageThreshold,
+          intimacyLevel: stage.intimacyLevel,
+        };
+      } catch (error) {
+        logger.error("Error getting relationship status:", error);
+        return {
+          success: false,
+          stage: "stranger",
+          name: "Getting to Know You",
+          description: "Learning the basics about who you are",
+          messageThreshold: 0,
+          intimacyLevel: 2,
+        };
+      }
+    }),
 
   // Generate a random learning question (for testing/manual triggers)
   getLearningQuestion: protectedProcedure
@@ -1982,19 +1984,21 @@ const creatorVerificationRouter = router({
     }),
 
   // Get verification status
-  getVerificationStatus: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
-    try {
-      return await creatorVerificationService.getVerificationStatus(
-        ctx.user.id
-      );
-    } catch (error) {
-      logger.error("Error getting verification status:", error);
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to get verification status",
-      });
-    }
-  }),
+  getVerificationStatus: protectedProcedure
+    .input(z.void())
+    .query(async ({ ctx }) => {
+      try {
+        return await creatorVerificationService.getVerificationStatus(
+          ctx.user.id
+        );
+      } catch (error) {
+        logger.error("Error getting verification status:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get verification status",
+        });
+      }
+    }),
 
   // Finalize verification process
   finalizeVerification: protectedProcedure
@@ -2104,24 +2108,26 @@ const creatorMonetizationRouter = router({
     }),
 
   // Get creator earnings summary
-  getEarningsSummary: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
-    try {
-      // TODO: Implement earnings summary calculation
-      return {
-        totalEarnings: 0,
-        monthlyEarnings: 0,
-        pendingPayouts: 0,
-        totalSubscribers: 0,
-        activeSubscriptions: 0,
-      };
-    } catch (error) {
-      logger.error("Error getting earnings summary:", error);
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to get earnings summary",
-      });
-    }
-  }),
+  getEarningsSummary: protectedProcedure
+    .input(z.void())
+    .query(async ({ ctx }) => {
+      try {
+        // TODO: Implement earnings summary calculation
+        return {
+          totalEarnings: 0,
+          monthlyEarnings: 0,
+          pendingPayouts: 0,
+          totalSubscribers: 0,
+          activeSubscriptions: 0,
+        };
+      } catch (error) {
+        logger.error("Error getting earnings summary:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get earnings summary",
+        });
+      }
+    }),
 
   // Create payment intent for subscription or time-based payment
   createPaymentIntent: protectedProcedure
@@ -3864,36 +3870,40 @@ const subscriptionsService = new SubscriptionsService();
 // Add this router after the personaMonetizationRouter
 const subscriptionsRouter = router({
   // Get user's subscriptions
-  getUserSubscriptions: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
-    try {
-      const subscriptions = await subscriptionsService.getUserSubscriptions(
-        ctx.user.id
-      );
-      return subscriptions;
-    } catch (error) {
-      logger.error("Error getting user subscriptions:", error);
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to get user subscriptions",
-      });
-    }
-  }),
+  getUserSubscriptions: protectedProcedure
+    .input(z.void())
+    .query(async ({ ctx }) => {
+      try {
+        const subscriptions = await subscriptionsService.getUserSubscriptions(
+          ctx.user.id
+        );
+        return subscriptions;
+      } catch (error) {
+        logger.error("Error getting user subscriptions:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get user subscriptions",
+        });
+      }
+    }),
 
   // Get user's payment methods
-  getUserPaymentMethods: protectedProcedure.input(z.void()).query(async ({ ctx }) => {
-    try {
-      const paymentMethods = await subscriptionsService.getUserPaymentMethods(
-        ctx.user.id
-      );
-      return paymentMethods;
-    } catch (error) {
-      logger.error("Error getting user payment methods:", error);
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to get user payment methods",
-      });
-    }
-  }),
+  getUserPaymentMethods: protectedProcedure
+    .input(z.void())
+    .query(async ({ ctx }) => {
+      try {
+        const paymentMethods = await subscriptionsService.getUserPaymentMethods(
+          ctx.user.id
+        );
+        return paymentMethods;
+      } catch (error) {
+        logger.error("Error getting user payment methods:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get user payment methods",
+        });
+      }
+    }),
 
   // Cancel subscription
   cancelSubscription: protectedProcedure
