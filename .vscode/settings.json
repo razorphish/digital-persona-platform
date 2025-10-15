@@ -1,0 +1,10 @@
+{
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.automationProfile.windows": {
+    "path": "powershell.exe",
+    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass"]
+  },
+  "python.terminal.activateEnvironment": true,
+  "python.terminal.executeInFileDir": false
+}
+

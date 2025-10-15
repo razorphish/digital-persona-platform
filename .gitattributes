@@ -1,0 +1,39 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Shell scripts should always use LF (Unix-style) line endings
+*.sh text eol=lf
+
+# PowerShell scripts should use CRLF (Windows-style) line endings
+*.ps1 text eol=crlf
+
+# Batch scripts should use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# JSON, YAML, Markdown files
+*.json text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Source code files
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.py text eol=lf
+*.css text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+

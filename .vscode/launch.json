@@ -9,8 +9,8 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/web",
-      "program": "${workspaceFolder}/node_modules/.bin/next",
-      "args": ["dev", "-p", "4000"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "4000"],
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"],
       "preLaunchTask": "Clear Caches and Check Ports",
@@ -26,8 +26,8 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}/apps/web",
-      "program": "${workspaceFolder}/node_modules/.bin/next",
-      "args": ["dev", "-p", "4000"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "4000"],
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"],
       "preLaunchTask": "Clear Caches and Check Ports",
@@ -182,8 +182,10 @@
         "--reload"
       ],
       "cwd": "${workspaceFolder}/python-ml-service",
+      "python": "${workspaceFolder}/venv/Scripts/python.exe",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/python-ml-service"
+        "PYTHONPATH": "${workspaceFolder}/python-ml-service",
+        "VIRTUAL_ENV": "${workspaceFolder}/venv"
       },
       "console": "integratedTerminal"
     },

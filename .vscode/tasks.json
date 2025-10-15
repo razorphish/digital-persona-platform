@@ -4,7 +4,16 @@
     {
       "label": "Kill Port Conflicts",
       "type": "shell",
-      "command": "${workspaceFolder}/scripts/kill-port-conflicts.sh",
+      "windows": {
+        "command": "powershell",
+        "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/kill-port-conflicts.ps1"]
+      },
+      "linux": {
+        "command": "${workspaceFolder}/scripts/kill-port-conflicts.sh"
+      },
+      "osx": {
+        "command": "${workspaceFolder}/scripts/kill-port-conflicts.sh"
+      },
       "group": "build",
       "presentation": {
         "echo": true,
@@ -19,11 +28,27 @@
     {
       "label": "Check and Kill Frontend Port",
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "if lsof -Pi :4000 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4000 is in use. Killing processes...'; lsof -ti:4000 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4000 cleared'; else echo '✅ Port 4000 is available'; fi"
-      ],
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-ExecutionPolicy", "Bypass", "-Command",
+          "$conn = Get-NetTCPConnection -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue; if ($conn) { Write-Host '🔍 Port 4000 is in use. Killing processes...'; $conn | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1; Write-Host '✅ Port 4000 cleared' } else { Write-Host '✅ Port 4000 is available' }"
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "if lsof -Pi :4000 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4000 is in use. Killing processes...'; lsof -ti:4000 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4000 cleared'; else echo '✅ Port 4000 is available'; fi"
+        ]
+      },
+      "osx": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "if lsof -Pi :4000 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4000 is in use. Killing processes...'; lsof -ti:4000 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4000 cleared'; else echo '✅ Port 4000 is available'; fi"
+        ]
+      },
       "group": "build",
       "presentation": {
         "echo": true,
@@ -38,11 +63,27 @@
     {
       "label": "Check and Kill Backend Port", 
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "if lsof -Pi :4001 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4001 is in use. Killing processes...'; lsof -ti:4001 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4001 cleared'; else echo '✅ Port 4001 is available'; fi"
-      ],
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-ExecutionPolicy", "Bypass", "-Command",
+          "$conn = Get-NetTCPConnection -LocalPort 4001 -State Listen -ErrorAction SilentlyContinue; if ($conn) { Write-Host '🔍 Port 4001 is in use. Killing processes...'; $conn | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1; Write-Host '✅ Port 4001 cleared' } else { Write-Host '✅ Port 4001 is available' }"
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "if lsof -Pi :4001 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4001 is in use. Killing processes...'; lsof -ti:4001 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4001 cleared'; else echo '✅ Port 4001 is available'; fi"
+        ]
+      },
+      "osx": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "if lsof -Pi :4001 -sTCP:LISTEN -t >/dev/null 2>&1; then echo '🔍 Port 4001 is in use. Killing processes...'; lsof -ti:4001 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✅ Port 4001 cleared'; else echo '✅ Port 4001 is available'; fi"
+        ]
+      },
       "group": "build", 
       "presentation": {
         "echo": true,
@@ -56,12 +97,28 @@
     },
     {
       "label": "Clear All Development Ports",
-      "type": "shell", 
-      "command": "bash",
-      "args": [
-        "-c",
-        "echo '🧹 Clearing development ports (4000, 4001, 8001)...'; for port in 4000 4001 8001; do if lsof -Pi :\$port -sTCP:LISTEN -t >/dev/null 2>&1; then echo \"🔍 Killing processes on port \$port\"; lsof -ti:\$port | xargs kill -9 2>/dev/null || true; else echo \"✅ Port \$port is available\"; fi; done; sleep 2; echo '🎉 All ports cleared!'"
-      ],
+      "type": "shell",
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-ExecutionPolicy", "Bypass", "-Command",
+          "Write-Host '🧹 Clearing development ports (4000, 4001, 8001)...'; foreach ($port in 4000, 4001, 8001) { $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if ($conn) { Write-Host \"🔍 Killing processes on port $port\"; $conn | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } else { Write-Host \"✅ Port $port is available\" } }; Start-Sleep -Seconds 2; Write-Host '🎉 All ports cleared!'"
+        ]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "echo '🧹 Clearing development ports (4000, 4001, 8001)...'; for port in 4000 4001 8001; do if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then echo \"🔍 Killing processes on port $port\"; lsof -ti:$port | xargs kill -9 2>/dev/null || true; else echo \"✅ Port $port is available\"; fi; done; sleep 2; echo '🎉 All ports cleared!'"
+        ]
+      },
+      "osx": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "echo '🧹 Clearing development ports (4000, 4001, 8001)...'; for port in 4000 4001 8001; do if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then echo \"🔍 Killing processes on port $port\"; lsof -ti:$port | xargs kill -9 2>/dev/null || true; else echo \"✅ Port $port is available\"; fi; done; sleep 2; echo '🎉 All ports cleared!'"
+        ]
+      },
       "group": "build",
       "presentation": {
         "echo": true,
@@ -76,7 +133,16 @@
     {
       "label": "Interactive Port Cleanup",
       "type": "shell",
-      "command": "${workspaceFolder}/scripts/interactive-port-cleanup.sh",
+      "windows": {
+        "command": "powershell",
+        "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/interactive-port-cleanup.ps1"]
+      },
+      "linux": {
+        "command": "${workspaceFolder}/scripts/interactive-port-cleanup.sh"
+      },
+      "osx": {
+        "command": "${workspaceFolder}/scripts/interactive-port-cleanup.sh"
+      },
       "group": "build",
       "presentation": {
         "echo": true,
@@ -208,11 +274,24 @@
     {
       "label": "Clear Build Caches",
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "echo '🧹 Clearing build caches...'; rm -rf apps/web/.next apps/web/out apps/server/dist 2>/dev/null || true; echo '✅ Build caches cleared'"
-      ],
+      "windows": {
+        "command": "powershell",
+        "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/clear-build-caches.ps1"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "echo '🧹 Clearing build caches...'; rm -rf apps/web/.next apps/web/out apps/server/dist 2>/dev/null || true; echo '✅ Build caches cleared'"
+        ]
+      },
+      "osx": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "echo '🧹 Clearing build caches...'; rm -rf apps/web/.next apps/web/out apps/server/dist 2>/dev/null || true; echo '✅ Build caches cleared'"
+        ]
+      },
       "group": "build",
       "presentation": {
         "echo": true,

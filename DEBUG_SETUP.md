@@ -1,5 +1,7 @@
 # Debug Full Stack Setup Guide
 
+> **🌟 Cross-Platform Support**: This debug setup works on Windows, Mac, and Linux! See [CROSS_PLATFORM_DEBUG_SETUP.md](CROSS_PLATFORM_DEBUG_SETUP.md) for platform-specific details.
+
 ## Issues Fixed
 
 ### 1. Content-Security-Policy Error

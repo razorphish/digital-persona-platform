@@ -15,6 +15,7 @@ NC='\033[0m' # No Color
 # Ports to check
 FRONTEND_PORT=4000
 BACKEND_PORT=4001
+ML_PORT=8001
 
 # Helper functions
 log_info() {
@@ -132,6 +133,16 @@ main() {
         fi
     else
         log_success "Backend port $BACKEND_PORT is available"
+    fi
+    
+    # Check ML service port
+    if check_port $ML_PORT; then
+        conflicts_found=true
+        if ! prompt_user $ML_PORT "Python ML Service"; then
+            log_warning "ML service port $ML_PORT not cleared"
+        fi
+    else
+        log_success "ML service port $ML_PORT is available"
     fi
     
     # Final status

@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Ports to check
-PORTS=(4000 4001)
+PORTS=(4000 4001 8001)
 
 log_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
