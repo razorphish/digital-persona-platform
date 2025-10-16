@@ -157,3 +157,5 @@ out/
 
 # Local seed credentials
 data/.local-seed-users.md
+
+secrets.json

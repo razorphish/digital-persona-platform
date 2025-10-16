@@ -88,3 +88,4 @@ output "policy_text" {
   value       = aws_ecr_lifecycle_policy.cleanup.policy
 }
 
+

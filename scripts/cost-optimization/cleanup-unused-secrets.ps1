@@ -82,3 +82,4 @@ Write-Host "   Failed: $failed secrets" -ForegroundColor White
 Write-Host "   Expected Savings: ~`$4.40/month" -ForegroundColor Green
 Write-Host "=====================================" -ForegroundColor Gray
 
+

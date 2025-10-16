@@ -51,3 +51,4 @@ echo "  2. Add module to your environment config"
 echo "  3. Run: terraform init && terraform apply"
 echo "====================================="
 
+

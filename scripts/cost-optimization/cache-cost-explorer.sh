@@ -91,3 +91,4 @@ if [ "$1" = "--refresh" ]; then
     fetch_cost_data
 fi
 
+

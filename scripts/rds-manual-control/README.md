@@ -137,3 +137,4 @@ Monthly savings: ~$165
 
 **Pro Tip**: Set a calendar reminder at 6 PM to run the stop script! 🔔
 
+
