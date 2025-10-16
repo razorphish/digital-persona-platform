@@ -25,10 +25,9 @@ domain_name = "hibiji.com"
 # Cost Optimization Settings
 # =================================
 
-# RDS Scheduler - Automatically start/stop RDS to save costs
-# Set to true when IAM permissions are available
-# Set to false and use scripts/cost-optimization/deploy-rds-scheduler-manual.sh for manual deployment
-enable_rds_scheduler = false
+# RDS Scheduler - Deployed manually (not managed by Terraform)
+# Use: scripts/cost-optimization/deploy-rds-scheduler-manual.sh
+# Status: Active (dev-rds-scheduler Lambda function running)
 
 # Aurora Serverless Configuration
 aurora_min_capacity = 0.5   # Minimum ACU (Aurora Capacity Units)
@@ -63,7 +62,7 @@ frontend_image_tag = "latest"
 # =================================
 
 # Cost Optimization:
-# - enable_rds_scheduler: Saves 50-70% on RDS costs
+# - RDS Scheduler: Deployed manually (saves 50-70% on RDS costs)
 # - aurora_min_capacity: Lower = cheaper when idle
 # - lambda_memory_size: Lower = cheaper (but slower)
 # - log_retention_days: Lower = cheaper storage
@@ -74,5 +73,5 @@ frontend_image_tag = "latest"
 # - Set lambda_memory_size = 1024 or higher  
 # - Set log_retention_days = 30 or higher
 # - Set s3_lifecycle_expiration_days = 0 (disabled)
-# - Ensure enable_rds_scheduler = false (keep RDS running)
+# - RDS Scheduler should NOT be used (keep RDS running 24/7)
 
