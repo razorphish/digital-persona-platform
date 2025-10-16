@@ -295,3 +295,4 @@ Choose your deployment strategy:
 **Next**: Once deployed, proceed to Phase 3 for an additional $20/month savings with ECR lifecycle policies and configuration optimizations.
 
 
+
