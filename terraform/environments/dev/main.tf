@@ -405,19 +405,18 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
 
 # S3 Lifecycle policy for cost optimization
 resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
-  count  = var.s3_lifecycle_expiration_days > 0 ? 1 : 0
   bucket = aws_s3_bucket.uploads.id
 
   rule {
     id     = "dev_cost_optimization"
-    status = "Enabled"
+    status = var.s3_lifecycle_expiration_days > 0 ? "Enabled" : "Disabled"
 
     filter {
       prefix = ""
     }
 
     expiration {
-      days = var.s3_lifecycle_expiration_days
+      days = var.s3_lifecycle_expiration_days > 0 ? var.s3_lifecycle_expiration_days : 365
     }
 
     transition {
