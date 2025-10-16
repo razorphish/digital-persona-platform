@@ -137,6 +137,10 @@ test_*.txt
 tfplan
 tfplan.*
 
+# Lambda packages (build artifacts)
+lambda.zip
+*.zip
+
 # Template assets (not used in production)
 frontend/tailwind-plus-radiant/
 

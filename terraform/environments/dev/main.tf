@@ -965,19 +965,20 @@ output "ses_from_email" {
 }
 
 # RDS Scheduler outputs (conditional)
+# Note: These outputs use try() to safely handle when module is not deployed
 output "rds_scheduler_function_name" {
   description = "Name of the RDS scheduler Lambda function (for manual override)"
-  value       = var.enable_rds_scheduler ? module.rds_scheduler[0].lambda_function_name : "Not deployed via Terraform - see manual deployment script"
+  value       = try(module.rds_scheduler[0].lambda_function_name, "Not deployed via Terraform - use manual deployment")
 }
 
 output "rds_scheduler_start_schedule" {
   description = "Schedule for starting RDS (UTC)"
-  value       = var.enable_rds_scheduler ? module.rds_scheduler[0].start_schedule : "Not configured"
+  value       = try(module.rds_scheduler[0].start_schedule, "Not configured via Terraform")
 }
 
 output "rds_scheduler_stop_schedule" {
   description = "Schedule for stopping RDS (UTC)"
-  value       = var.enable_rds_scheduler ? module.rds_scheduler[0].stop_schedule : "Not configured"
+  value       = try(module.rds_scheduler[0].stop_schedule, "Not configured via Terraform")
 }
 
 output "rds_scheduler_enabled" {
