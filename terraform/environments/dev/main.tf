@@ -330,7 +330,7 @@ resource "aws_rds_cluster" "database" {
   database_name                = "digital_persona"
   master_username              = "dpp_admin"
   master_password              = random_password.database_password.result
-  backup_retention_period      = 7
+  backup_retention_period      = 3  # Optimized for cost savings (Phase 1)
   preferred_backup_window      = "07:00-09:00"
   preferred_maintenance_window = "sun:09:00-sun:10:00"
 
@@ -617,6 +617,28 @@ module "rds_proxy" {
   connection_borrow_timeout    = 120   # 2 minutes
   require_tls                  = false # Can be enabled for production
   log_retention_days           = 14
+}
+
+# RDS Scheduler - Automatic Start/Stop for Cost Optimization
+module "rds_scheduler" {
+  source = "../../modules/rds-scheduler"
+
+  cluster_identifier = aws_rds_cluster.database.cluster_identifier
+  environment        = var.environment
+
+  # Schedule: Start at 8 AM PST (3 PM UTC) Mon-Fri
+  start_schedule = "cron(0 15 ? * MON-FRI *)"
+
+  # Schedule: Stop at 6 PM PST (2 AM UTC next day) Mon-Fri
+  stop_schedule = "cron(0 2 ? * TUE-SAT *)"
+
+  # Enable scheduler for dev environment
+  enable_scheduler = true
+
+  tags = merge(local.common_tags, {
+    CostOptimization = "Enabled"
+    Component        = "RDSScheduler"
+  })
 }
 
 # Lambda Backend
@@ -931,4 +953,20 @@ output "ses_dkim_tokens" {
 output "ses_from_email" {
   description = "Verified sender email address"
   value       = module.ses_email.from_email
+}
+
+# RDS Scheduler outputs
+output "rds_scheduler_function_name" {
+  description = "Name of the RDS scheduler Lambda function (for manual override)"
+  value       = module.rds_scheduler.lambda_function_name
+}
+
+output "rds_scheduler_start_schedule" {
+  description = "Schedule for starting RDS (UTC)"
+  value       = module.rds_scheduler.start_schedule
+}
+
+output "rds_scheduler_stop_schedule" {
+  description = "Schedule for stopping RDS (UTC)"
+  value       = module.rds_scheduler.stop_schedule
 }

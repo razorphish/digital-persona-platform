@@ -659,6 +659,28 @@ module "rds_proxy" {
   log_retention_days           = var.log_retention_days
 }
 
+# RDS Scheduler - Automatic Start/Stop for Cost Optimization
+module "rds_scheduler" {
+  source = "../../modules/rds-scheduler"
+
+  cluster_identifier = aws_rds_cluster.database.cluster_identifier
+  environment        = var.environment
+
+  # Schedule: Start at 8 AM PST (3 PM UTC) Mon-Fri
+  start_schedule = "cron(0 15 ? * MON-FRI *)"
+
+  # Schedule: Stop at 6 PM PST (2 AM UTC next day) Mon-Fri
+  stop_schedule = "cron(0 2 ? * TUE-SAT *)"
+
+  # Enable scheduler for local test environment
+  enable_scheduler = true
+
+  tags = merge(local.common_tags, {
+    CostOptimization = "Enabled"
+    Component        = "RDSScheduler"
+  })
+}
+
 # Lambda Backend with cost-optimized settings
 module "lambda_backend" {
   source = "../../modules/lambda-backend"
