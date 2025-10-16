@@ -1,0 +1,78 @@
+# Digital Persona Platform - Development Environment
+# Terraform Variables Configuration
+#
+# Usage:
+#   1. Copy this file: cp terraform.tfvars.example terraform.tfvars
+#   2. Update values as needed
+#   3. Never commit terraform.tfvars (contains sensitive data)
+
+# =================================
+# Environment Configuration
+# =================================
+
+environment     = "dev"
+sub_environment = "dev01"  # Change for each sub-environment (dev01, dev02, etc.)
+project_name    = "dpp"
+aws_region      = "us-west-1"
+
+# =================================
+# Domain Configuration
+# =================================
+
+domain_name = "hibiji.com"
+
+# =================================
+# Cost Optimization Settings
+# =================================
+
+# RDS Scheduler - Automatically start/stop RDS to save costs
+# Set to true when IAM permissions are available
+# Set to false and use scripts/cost-optimization/deploy-rds-scheduler-manual.sh for manual deployment
+enable_rds_scheduler = false
+
+# Aurora Serverless Configuration
+aurora_min_capacity = 0.5   # Minimum ACU (Aurora Capacity Units)
+aurora_max_capacity = 2.0   # Maximum ACU
+aurora_auto_pause   = false # Set to true for Serverless v1 (not v2)
+aurora_pause_delay  = 300   # Minutes before auto-pause (v1 only)
+
+# Lambda Configuration
+lambda_memory_size = 512  # MB (128-10240)
+lambda_timeout     = 30   # seconds
+
+# Log Retention
+log_retention_days = 14  # CloudWatch Logs retention (1, 3, 5, 7, 14, 30, 60, 90, ...)
+
+# Budget Monitoring
+cost_budget_limit = 100  # USD per month
+alert_emails      = []   # ["your-email@example.com"]
+
+# S3 Lifecycle Policies
+s3_lifecycle_transition_days = 30   # Days before moving to Infrequent Access
+s3_lifecycle_expiration_days = 365  # Days before deletion (0 = disabled)
+
+# =================================
+# Image Tags (Legacy - Not Used in Serverless)
+# =================================
+
+image_tag          = "latest"
+frontend_image_tag = "latest"
+
+# =================================
+# Notes
+# =================================
+
+# Cost Optimization:
+# - enable_rds_scheduler: Saves 50-70% on RDS costs
+# - aurora_min_capacity: Lower = cheaper when idle
+# - lambda_memory_size: Lower = cheaper (but slower)
+# - log_retention_days: Lower = cheaper storage
+# - s3_lifecycle_*: Automatically manage old files
+
+# For production environments:
+# - Set aurora_min_capacity = 1.0 or higher
+# - Set lambda_memory_size = 1024 or higher  
+# - Set log_retention_days = 30 or higher
+# - Set s3_lifecycle_expiration_days = 0 (disabled)
+# - Ensure enable_rds_scheduler = false (keep RDS running)
+

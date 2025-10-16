@@ -17,6 +17,29 @@ chmod +x *.sh
 ./run-all-optimizations.sh
 ```
 
+## Quick Start
+
+### RDS Scheduler (Highest Impact)
+
+The RDS scheduler is the **most impactful** cost optimization, saving 50-70% on RDS costs.
+
+**Two deployment options:**
+
+1. **Manual Deployment** (current - limited IAM permissions):
+   ```bash
+   ./deploy-rds-scheduler-manual.sh
+   ```
+
+2. **Terraform Deployment** (future - requires full IAM permissions):
+   ```bash
+   cd ../../terraform/environments/dev
+   terraform apply -var="enable_rds_scheduler=true"
+   ```
+
+See [RDS Scheduler Deployment Guide](../../docs/RDS_SCHEDULER_DEPLOYMENT.md) for details.
+
+---
+
 ## Available Scripts
 
 ### Phase 1: Quick Wins

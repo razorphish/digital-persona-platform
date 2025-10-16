@@ -133,6 +133,12 @@ variable "cost_budget_limit" {
   default     = 100
 }
 
+variable "enable_rds_scheduler" {
+  description = "Enable RDS scheduler module (requires IAM permissions for Lambda and EventBridge)"
+  type        = bool
+  default     = false  # Set to false if IAM permissions are not available
+}
+
 variable "s3_lifecycle_transition_days" {
   description = "Days before S3 objects transition to IA storage"
   type        = number
@@ -620,7 +626,10 @@ module "rds_proxy" {
 }
 
 # RDS Scheduler - Automatic Start/Stop for Cost Optimization
+# Set enable_rds_scheduler=true in terraform.tfvars when IAM permissions are available
+# Otherwise, use scripts/cost-optimization/deploy-rds-scheduler-manual.sh for manual deployment
 module "rds_scheduler" {
+  count  = var.enable_rds_scheduler ? 1 : 0
   source = "../../modules/rds-scheduler"
 
   cluster_identifier = aws_rds_cluster.database.cluster_identifier
@@ -955,18 +964,23 @@ output "ses_from_email" {
   value       = module.ses_email.from_email
 }
 
-# RDS Scheduler outputs
+# RDS Scheduler outputs (conditional)
 output "rds_scheduler_function_name" {
   description = "Name of the RDS scheduler Lambda function (for manual override)"
-  value       = module.rds_scheduler.lambda_function_name
+  value       = var.enable_rds_scheduler ? module.rds_scheduler[0].lambda_function_name : "Not deployed via Terraform - see manual deployment script"
 }
 
 output "rds_scheduler_start_schedule" {
   description = "Schedule for starting RDS (UTC)"
-  value       = module.rds_scheduler.start_schedule
+  value       = var.enable_rds_scheduler ? module.rds_scheduler[0].start_schedule : "Not configured"
 }
 
 output "rds_scheduler_stop_schedule" {
   description = "Schedule for stopping RDS (UTC)"
-  value       = module.rds_scheduler.stop_schedule
+  value       = var.enable_rds_scheduler ? module.rds_scheduler[0].stop_schedule : "Not configured"
+}
+
+output "rds_scheduler_enabled" {
+  description = "Whether RDS scheduler is managed by Terraform"
+  value       = var.enable_rds_scheduler
 }
