@@ -42,7 +42,22 @@ cd "$MODULE_DIR"
 if [ -f "lambda.zip" ]; then
     rm lambda.zip
 fi
-zip -q lambda.zip lambda.py
+
+# Try multiple methods to create zip file (Windows compatibility)
+if command -v zip &> /dev/null; then
+    # Method 1: Use zip command (Linux/Mac)
+    zip -q lambda.zip lambda.py
+elif command -v powershell.exe &> /dev/null; then
+    # Method 2: Use PowerShell (Windows)
+    powershell.exe -Command "Compress-Archive -Path 'lambda.py' -DestinationPath 'lambda.zip' -Force"
+elif command -v python &> /dev/null; then
+    # Method 3: Use Python (cross-platform)
+    python -c "import zipfile; z = zipfile.ZipFile('lambda.zip', 'w'); z.write('lambda.py'); z.close()"
+else
+    echo "❌ Error: No zip utility found (zip, powershell, or python required)"
+    exit 1
+fi
+
 echo "✅ Lambda package created"
 
 # Step 2: Create IAM role (requires permissions)
