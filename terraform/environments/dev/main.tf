@@ -133,11 +133,9 @@ variable "cost_budget_limit" {
   default     = 100
 }
 
-variable "enable_rds_scheduler" {
-  description = "Enable RDS scheduler module (requires IAM permissions for Lambda and EventBridge)"
-  type        = bool
-  default     = false  # Set to false if IAM permissions are not available
-}
+# Note: enable_rds_scheduler variable removed - RDS scheduler module is commented out
+# To enable RDS scheduler: uncomment the module in this file (requires full IAM permissions)
+# Or use manual deployment: scripts/cost-optimization/deploy-rds-scheduler-manual.sh
 
 variable "s3_lifecycle_transition_days" {
   description = "Days before S3 objects transition to IA storage"
