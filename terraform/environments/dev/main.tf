@@ -626,29 +626,33 @@ module "rds_proxy" {
 }
 
 # RDS Scheduler - Automatic Start/Stop for Cost Optimization
-# Set enable_rds_scheduler=true in terraform.tfvars when IAM permissions are available
-# Otherwise, use scripts/cost-optimization/deploy-rds-scheduler-manual.sh for manual deployment
-module "rds_scheduler" {
-  count  = var.enable_rds_scheduler ? 1 : 0
-  source = "../../modules/rds-scheduler"
+# DISABLED BY DEFAULT - Deployed manually due to IAM permission constraints
+# To enable via Terraform: set enable_rds_scheduler=true in terraform.tfvars (requires full IAM permissions)
+# For manual deployment: use scripts/cost-optimization/deploy-rds-scheduler-manual.sh
 
-  cluster_identifier = aws_rds_cluster.database.cluster_identifier
-  environment        = var.environment
-
-  # Schedule: Start at 8 AM PST (3 PM UTC) Mon-Fri
-  start_schedule = "cron(0 15 ? * MON-FRI *)"
-
-  # Schedule: Stop at 6 PM PST (2 AM UTC next day) Mon-Fri
-  stop_schedule = "cron(0 2 ? * TUE-SAT *)"
-
-  # Enable scheduler for dev environment
-  enable_scheduler = true
-
-  tags = merge(local.common_tags, {
-    CostOptimization = "Enabled"
-    Component        = "RDSScheduler"
-  })
-}
+# Note: Module commented out to avoid Terraform state refresh errors with conditional count
+# Uncomment when IAM permissions are available and you want to manage via Terraform
+#
+# module "rds_scheduler" {
+#   source = "../../modules/rds-scheduler"
+#
+#   cluster_identifier = aws_rds_cluster.database.cluster_identifier
+#   environment        = var.environment
+#
+#   # Schedule: Start at 8 AM PST (3 PM UTC) Mon-Fri
+#   start_schedule = "cron(0 15 ? * MON-FRI *)"
+#
+#   # Schedule: Stop at 6 PM PST (2 AM UTC next day) Mon-Fri
+#   stop_schedule = "cron(0 2 ? * TUE-SAT *)"
+#
+#   # Enable scheduler for dev environment
+#   enable_scheduler = true
+#
+#   tags = merge(local.common_tags, {
+#     CostOptimization = "Enabled"
+#     Component        = "RDSScheduler"
+#   })
+# }
 
 # Lambda Backend
 module "lambda_backend" {
@@ -964,24 +968,20 @@ output "ses_from_email" {
   value       = module.ses_email.from_email
 }
 
-# RDS Scheduler outputs (conditional)
-# Note: These outputs use try() to safely handle when module is not deployed
-output "rds_scheduler_function_name" {
-  description = "Name of the RDS scheduler Lambda function (for manual override)"
-  value       = try(module.rds_scheduler[0].lambda_function_name, "Not deployed via Terraform - use manual deployment")
-}
-
-output "rds_scheduler_start_schedule" {
-  description = "Schedule for starting RDS (UTC)"
-  value       = try(module.rds_scheduler[0].start_schedule, "Not configured via Terraform")
-}
-
-output "rds_scheduler_stop_schedule" {
-  description = "Schedule for stopping RDS (UTC)"
-  value       = try(module.rds_scheduler[0].stop_schedule, "Not configured via Terraform")
-}
-
-output "rds_scheduler_enabled" {
-  description = "Whether RDS scheduler is managed by Terraform"
-  value       = var.enable_rds_scheduler
-}
+# RDS Scheduler outputs (commented out - module is disabled)
+# Uncomment when RDS scheduler module is enabled in Terraform
+#
+# output "rds_scheduler_function_name" {
+#   description = "Name of the RDS scheduler Lambda function (for manual override)"
+#   value       = module.rds_scheduler.lambda_function_name
+# }
+#
+# output "rds_scheduler_start_schedule" {
+#   description = "Schedule for starting RDS (UTC)"
+#   value       = module.rds_scheduler.start_schedule
+# }
+#
+# output "rds_scheduler_stop_schedule" {
+#   description = "Schedule for stopping RDS (UTC)"
+#   value       = module.rds_scheduler.stop_schedule
+# }
