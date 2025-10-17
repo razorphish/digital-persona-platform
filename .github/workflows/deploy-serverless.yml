@@ -1147,26 +1147,40 @@ jobs:
           echo ""
           echo "✅ SSL certificate management configured!"
 
-      - name: Proactive Resource Detection & Import (Phase 3.1a)
+      - name: Proactive Resource Detection & Import (Phase 3.1a + 3.1b)
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
           ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
           AWS_REGION: ${{ env.AWS_REGION }}
+          PROJECT_NAME: ${{ env.PROJECT_NAME }}
         run: |
-          echo "🔍 Step 3.5: Proactive Resource Detection (Phase 3.1a)"
+          echo "🔍 Step 3.5: Proactive Resource Detection (Phase 3.1a + 3.1b)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           echo "Goal: Scan AWS for existing resources and import them BEFORE terraform apply"
           echo "Result: No 'already exists' errors, truly idempotent deployment"
           echo ""
           
-          # Run proactive S3 detection script
+          # Run proactive S3 detection script (Phase 3.1a)
           if [ -f "../../../scripts/proactive-import-s3.sh" ]; then
-            echo "Running proactive S3 bucket detection..."
+            echo "📦 Running proactive S3 bucket detection (Phase 3.1a)..."
             bash ../../../scripts/proactive-import-s3.sh
+            echo ""
           else
-            echo "⚠️  Proactive import script not found, skipping..."
+            echo "⚠️  S3 proactive import script not found, skipping..."
             echo "   This is normal if script hasn't been committed yet"
+            echo ""
+          fi
+          
+          # Run proactive Security Group detection script (Phase 3.1b)
+          if [ -f "../../../scripts/proactive-import-sg.sh" ]; then
+            echo "🔒 Running proactive Security Group detection (Phase 3.1b)..."
+            bash ../../../scripts/proactive-import-sg.sh
+            echo ""
+          else
+            echo "⚠️  Security Group proactive import script not found, skipping..."
+            echo "   This is normal if script hasn't been committed yet"
+            echo ""
           fi
           
           echo ""
