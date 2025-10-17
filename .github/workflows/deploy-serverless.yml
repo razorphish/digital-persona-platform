@@ -391,10 +391,10 @@ jobs:
           if [ "$STATE_RESOURCES" -eq 0 ]; then
             echo "🆕 Fresh deployment detected - using targeted plan for certificates"
             echo "📋 Planning certificates first to avoid for_each issues with unknown values..."
-            terraform plan -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars" -out=tfplan
+            terraform plan -refresh=false -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars" -out=tfplan
           else
-            echo "📋 Existing deployment - using full plan"
-            terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+            echo "📋 Existing deployment - using full plan with refresh disabled (state corruption workaround)"
+            terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan
           fi
 
       - name: Handle Existing Resources
@@ -1169,7 +1169,7 @@ jobs:
 
                     # Run terraform plan and parse output to detect changes
           echo "📊 Running terraform plan to detect changes..."
-          terraform plan -var-file="environment.auto.tfvars" -out=tfplan > plan_output.txt 2>&1
+          terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan > plan_output.txt 2>&1
           PLAN_EXIT_CODE=$?
 
           # Show plan output
@@ -1195,11 +1195,11 @@ jobs:
               echo "🆕 Fresh deployment detected - using two-stage apply for certificates"
               echo "📋 Stage 1: Creating ACM certificates first..."
               
-              if terraform apply -auto-approve -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars"; then
+              if terraform apply -refresh=false -auto-approve -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars"; then
                 echo "✅ Stage 1 completed: Certificates created"
                 echo "📋 Stage 2: Creating remaining resources..."
                 # Refresh plan for stage 2
-                terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+                terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan
               else
                 echo "⚠️  Stage 1 failed, but continuing with full apply..."
               fi
@@ -1210,7 +1210,7 @@ jobs:
             for attempt in 1 2 3; do
               echo "🎯 Attempt $attempt/3: Full Terraform apply..."
               
-              if terraform apply -auto-approve -lock-timeout=600s tfplan; then
+              if terraform apply -refresh=false -auto-approve -lock-timeout=600s tfplan; then
                 echo "✅ Full Terraform apply completed successfully!"
                 APPLY_SUCCESS="true"
                 break
@@ -1224,7 +1224,7 @@ jobs:
                   
                   # Refresh the plan for the retry
                   echo "🔄 Refreshing Terraform plan for retry..."
-                  terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+                  terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan
                 else
                   echo "💥 All apply attempts failed!"
                   echo "🔍 Common solutions:"
