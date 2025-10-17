@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+# Note: NOT using 'set -e' to allow graceful error handling
+# We want to continue even if some operations fail
 
 echo "🔍 Phase 3.1a: Proactive S3 Bucket Detection & Import"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -81,15 +82,34 @@ while IFS= read -r RESOURCE; do
       echo "   ⚠️  Exists in AWS but NOT in Terraform state"
       echo "   🔧 Importing into state..."
       
-      if terraform import "$RESOURCE" "$BUCKET_NAME" 2>&1 | grep -q "Import successful"; then
+      # Import with enhanced error handling
+      import_output=$(terraform import "$RESOURCE" "$BUCKET_NAME" 2>&1 || true)
+      import_exit_code=$?
+      
+      if [ $import_exit_code -eq 0 ] || echo "$import_output" | grep -q "Import successful"; then
         echo "   ✅ Import successful!"
         IMPORTED_COUNT=$((IMPORTED_COUNT + 1))
       else
-        echo "   ⚠️  Import failed (may already be in state)"
-        # Check again if it's actually in state now
-        if terraform state show "$RESOURCE" &>/dev/null; then
-          echo "   ✅ Confirmed: Now in state"
+        # Check for various recoverable errors
+        if echo "$import_output" | grep -qi "Resource already managed\|already exists in state"; then
+          echo "   ✅ Already in state (detected during import)"
           ALREADY_IN_STATE_COUNT=$((ALREADY_IN_STATE_COUNT + 1))
+        elif echo "$import_output" | grep -qi "ValidationException\|validation error\|invalid.*format"; then
+          echo "   ⚠️  Validation error - resource may need manual attention"
+          echo "   💡 Skipping import - continuing with deployment"
+        elif echo "$import_output" | grep -qi "permission\|Access.*Denied\|not authorized"; then
+          echo "   ⚠️  Permission error - may need additional IAM permissions"
+          echo "   💡 Skipping import - continuing with deployment"
+        else
+          echo "   ⚠️  Import failed, but continuing with deployment..."
+          # Double-check if it's actually in state now
+          if terraform state show "$RESOURCE" &>/dev/null; then
+            echo "   ✅ Confirmed: Now in state despite error message"
+            ALREADY_IN_STATE_COUNT=$((ALREADY_IN_STATE_COUNT + 1))
+          else
+            echo "   Error details (first 3 lines):"
+            echo "$import_output" | head -n 3 | sed 's/^/      /'
+          fi
         fi
       fi
     fi

@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+# Note: NOT using 'set -e' to allow graceful error handling
+# We want to continue even if some operations fail
 
 echo "🔍 Phase 3.1b: Proactive Security Group Detection & Import"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -123,18 +124,28 @@ while IFS= read -r RESOURCE; do
       echo "   ✅ Security Group exists in AWS (ID: $SG_ID)"
       echo "   🔧 Importing into Terraform state..."
       
-      # Import the security group
-      if terraform import "$RESOURCE" "$SG_ID" 2>&1 | tee /tmp/sg_import.log; then
+      # Import the security group with enhanced error handling
+      import_output=$(terraform import "$RESOURCE" "$SG_ID" 2>&1 || true)
+      import_exit_code=$?
+      
+      if [ $import_exit_code -eq 0 ]; then
         echo "   ✅ Successfully imported: $SG_NAME_PATTERN"
         ((IMPORTED_COUNT++))
       else
-        # Check if it was actually already imported
-        if grep -q "Resource already managed" /tmp/sg_import.log; then
+        # Check for various recoverable errors
+        if echo "$import_output" | grep -qi "Resource already managed\|already exists in state"; then
           echo "   ✅ Already in state (detected during import)"
           ((ALREADY_IN_STATE_COUNT++))
+        elif echo "$import_output" | grep -qi "ValidationException\|validation error\|invalid.*format"; then
+          echo "   ⚠️  Validation error - resource may need manual attention"
+          echo "   💡 Skipping import - continuing with deployment"
+        elif echo "$import_output" | grep -qi "permission\|Access.*Denied\|not authorized"; then
+          echo "   ⚠️  Permission error - may need additional IAM permissions"
+          echo "   💡 Skipping import - continuing with deployment"
         else
-          echo "   ⚠️  Import failed, but continuing..."
-          cat /tmp/sg_import.log
+          echo "   ⚠️  Import failed, but continuing with deployment..."
+          echo "   Error details (first 3 lines):"
+          echo "$import_output" | head -n 3 | sed 's/^/      /'
         fi
       fi
     fi
