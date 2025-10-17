@@ -386,9 +386,16 @@ jobs:
 
           echo "📋 Step 3: Terraform Planning..."
 
-          # Skip state refresh check due to state corruption - always use full plan
-          echo "📋 Using full plan with refresh disabled (state corruption workaround)"
-          terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan
+          # Check if this is a fresh deployment (empty state)
+          STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
+          if [ "$STATE_RESOURCES" -eq 0 ]; then
+            echo "🆕 Fresh deployment detected - using targeted plan for certificates"
+            echo "📋 Planning certificates first to avoid for_each issues with unknown values..."
+            terraform plan -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars" -out=tfplan
+          else
+            echo "📋 Existing deployment - using full plan"
+            terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+          fi
 
       - name: Handle Existing Resources
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
@@ -399,9 +406,9 @@ jobs:
         run: |
           echo "📥 Step 3: Handling existing AWS resources..."
 
-          # Skip state check due to corruption - assume existing resources
-          echo "🔍 Checking Terraform state... (skipped due to corruption workaround)"
-          STATE_RESOURCES=1
+          # Check if Terraform state exists and has resources
+          echo "🔍 Checking Terraform state..."
+          STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
 
           if [ "$STATE_RESOURCES" -eq 0 ]; then
             echo "✅ State is empty - this is a fresh deployment"
@@ -409,7 +416,7 @@ jobs:
             echo "STATE_IS_EMPTY=true" >> $GITHUB_ENV
             exit 0
           else
-            echo "📦 Assuming existing resources in state - proceeding with import checks"
+            echo "📦 State contains $STATE_RESOURCES resources - proceeding with import checks"
             echo "STATE_IS_EMPTY=false" >> $GITHUB_ENV
           fi
 
@@ -511,8 +518,8 @@ jobs:
         run: |
           echo "🔄 Checking if import is needed..."
 
-          # Skip state check due to corruption
-          STATE_RESOURCES=1
+          # Check if state is empty
+          STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
           if [ "$STATE_RESOURCES" -eq 0 ]; then
             echo "✅ State is empty - skipping import phase"
             echo "ℹ️  Terraform will create all resources fresh"
@@ -530,7 +537,7 @@ jobs:
 
           # List current state to identify potential conflicts
           echo "📋 Current Terraform state entries:"
-          echo "  (State list disabled due to corruption workaround)"
+          terraform state list | grep -E "(lambda_logs|ml_batch_logs|api_gateway)" | head -10 || echo "  No matching entries found"
 
           # Remove any orphaned or conflicting state entries for resources we're about to import
           problematic_resources=(
@@ -661,7 +668,7 @@ jobs:
               # Check for specific error patterns and handle them
               if echo "$import_output" | grep -q "resource already exists in state"; then
                 echo "  🔍 Resource conflict detected - checking state..."
-                echo "     (State list disabled due to corruption workaround)"
+                terraform state list | grep -E "$resource_name" || echo "     No matching resources found in state"
                 
                 # Try to remove conflicting state entries
                 echo "  🧹 Attempting to resolve state conflict..."
@@ -1157,12 +1164,12 @@ jobs:
           # The .terraform directory and state are already initialized from Import step
           echo "✅ Using existing Terraform initialization with imported resources from previous step"
 
-          # Skip state verification due to corruption
-          echo "📊 State verification skipped (corruption workaround)"
+          # Verify state is preserved
+          echo "📊 Resources in state: $(terraform state list 2>/dev/null | wc -l)"
 
                     # Run terraform plan and parse output to detect changes
           echo "📊 Running terraform plan to detect changes..."
-          terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan > plan_output.txt 2>&1
+          terraform plan -var-file="environment.auto.tfvars" -out=tfplan > plan_output.txt 2>&1
           PLAN_EXIT_CODE=$?
 
           # Show plan output
@@ -1182,17 +1189,17 @@ jobs:
             echo "🚀 Changes detected! Applying Terraform configuration..."
             echo "📊 Resources will be created/modified"
 
-            # Assume existing deployment (state check disabled due to corruption)
-            STATE_RESOURCES=1
+            # Check if this is a fresh deployment (empty state)
+            STATE_RESOURCES=$(terraform state list 2>/dev/null | wc -l)
             if [ "$STATE_RESOURCES" -eq 0 ]; then
               echo "🆕 Fresh deployment detected - using two-stage apply for certificates"
               echo "📋 Stage 1: Creating ACM certificates first..."
               
-              if terraform apply -refresh=false -auto-approve -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars"; then
+              if terraform apply -auto-approve -target=aws_acm_certificate.website -target=aws_acm_certificate.api -var-file="environment.auto.tfvars"; then
                 echo "✅ Stage 1 completed: Certificates created"
                 echo "📋 Stage 2: Creating remaining resources..."
                 # Refresh plan for stage 2
-                terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan
+                terraform plan -var-file="environment.auto.tfvars" -out=tfplan
               else
                 echo "⚠️  Stage 1 failed, but continuing with full apply..."
               fi
@@ -1203,7 +1210,7 @@ jobs:
             for attempt in 1 2 3; do
               echo "🎯 Attempt $attempt/3: Full Terraform apply..."
               
-              if terraform apply -refresh=false -auto-approve -lock-timeout=600s tfplan; then
+              if terraform apply -auto-approve -lock-timeout=600s tfplan; then
                 echo "✅ Full Terraform apply completed successfully!"
                 APPLY_SUCCESS="true"
                 break
@@ -1217,7 +1224,7 @@ jobs:
                   
                   # Refresh the plan for the retry
                   echo "🔄 Refreshing Terraform plan for retry..."
-                  terraform plan -refresh=false -var-file="environment.auto.tfvars" -out=tfplan
+                  terraform plan -var-file="environment.auto.tfvars" -out=tfplan
                 else
                   echo "💥 All apply attempts failed!"
                   echo "🔍 Common solutions:"
