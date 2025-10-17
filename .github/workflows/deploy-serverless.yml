@@ -1147,14 +1147,14 @@ jobs:
           echo ""
           echo "✅ SSL certificate management configured!"
 
-      - name: Proactive Resource Detection & Import (Phase 3.1a + 3.1b)
+      - name: Proactive Resource Detection & Import (Phase 3.1a + 3.1b + 3.1c)
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
           ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
           AWS_REGION: ${{ env.AWS_REGION }}
           PROJECT_NAME: ${{ env.PROJECT_NAME }}
         run: |
-          echo "🔍 Step 3.5: Proactive Resource Detection (Phase 3.1a + 3.1b)"
+          echo "🔍 Step 3.5: Proactive Resource Detection (Phase 3.1a + 3.1b + 3.1c)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           echo "Goal: Scan AWS for existing resources and import them BEFORE terraform apply"
@@ -1179,6 +1179,17 @@ jobs:
             echo ""
           else
             echo "⚠️  Security Group proactive import script not found, skipping..."
+            echo "   This is normal if script hasn't been committed yet"
+            echo ""
+          fi
+          
+          # Run proactive Lambda Permission detection script (Phase 3.1c)
+          if [ -f "../../../scripts/proactive-import-lambda-permissions.sh" ]; then
+            echo "⚡ Running proactive Lambda Permission detection (Phase 3.1c)..."
+            bash ../../../scripts/proactive-import-lambda-permissions.sh
+            echo ""
+          else
+            echo "⚠️  Lambda Permission proactive import script not found, skipping..."
             echo "   This is normal if script hasn't been committed yet"
             echo ""
           fi
