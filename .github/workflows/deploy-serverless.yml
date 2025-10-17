@@ -1210,13 +1210,50 @@ jobs:
             for attempt in 1 2 3; do
               echo "🎯 Attempt $attempt/3: Full Terraform apply..."
               
-              if terraform apply -auto-approve -lock-timeout=600s tfplan; then
+              # Capture terraform apply output to check for specific errors
+              APPLY_OUTPUT=$(terraform apply -auto-approve -lock-timeout=600s tfplan 2>&1)
+              APPLY_EXIT_CODE=$?
+              
+              if [ $APPLY_EXIT_CODE -eq 0 ]; then
+                echo "$APPLY_OUTPUT"
                 echo "✅ Full Terraform apply completed successfully!"
                 APPLY_SUCCESS="true"
                 break
               else
-                APPLY_EXIT_CODE=$?
+                echo "$APPLY_OUTPUT"
                 echo "❌ Attempt $attempt failed with exit code: $APPLY_EXIT_CODE"
+                
+                # Check for stopped RDS cluster error
+                if echo "$APPLY_OUTPUT" | grep -q "InvalidDBClusterStateFault.*cannot be in the stopped state"; then
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo "⚠️  RDS CLUSTER IS STOPPED"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  echo "🔍 Issue: Your RDS cluster is in 'stopped' state."
+                  echo "   Terraform cannot modify a stopped cluster."
+                  echo ""
+                  echo "💡 This is likely caused by:"
+                  echo "   • RDS scheduler stopped the database (cost optimization)"
+                  echo "   • Manual stop via AWS console"
+                  echo ""
+                  echo "🔧 To fix this:"
+                  echo "   1. Start the RDS cluster:"
+                  echo "      aws rds start-db-cluster --db-cluster-identifier \$ENVIRONMENT-\$SUB_ENVIRONMENT-\$PROJECT_NAME-cluster"
+                  echo ""
+                  echo "   2. Wait for cluster to be available (~5-10 minutes):"
+                  echo "      aws rds wait db-cluster-available --db-cluster-identifier \$ENVIRONMENT-\$SUB_ENVIRONMENT-\$PROJECT_NAME-cluster"
+                  echo ""
+                  echo "   3. Re-run this deployment"
+                  echo ""
+                  echo "⏰ Alternative: Schedule deployments during RDS 'running' hours"
+                  echo "   (8 AM - 6 PM PST if using RDS scheduler)"
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  # Skip retries for stopped cluster - they won't help
+                  break
+                fi
                 
                 if [ $attempt -lt 3 ]; then
                   echo "⏳ Waiting 30 seconds before retry..."
