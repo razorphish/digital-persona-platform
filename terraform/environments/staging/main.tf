@@ -230,7 +230,7 @@ resource "aws_rds_cluster" "database" {
   database_name                = "digital_persona"
   master_username              = "dpp_admin"
   master_password              = random_password.database_password.result
-  backup_retention_period      = 5  # Staging: slightly longer retention than dev/qa
+  backup_retention_period      = 7
   preferred_backup_window      = "07:00-09:00"
   preferred_maintenance_window = "sun:09:00-sun:10:00"
 
@@ -504,28 +504,6 @@ module "rds_proxy" {
   connection_borrow_timeout    = 120   # 2 minutes
   require_tls                  = false # Can be enabled for production
   log_retention_days           = 14
-}
-
-# RDS Scheduler - Automatic Start/Stop for Cost Optimization
-module "rds_scheduler" {
-  source = "../../modules/rds-scheduler"
-
-  cluster_identifier = aws_rds_cluster.database.cluster_identifier
-  environment        = var.environment
-
-  # Schedule: Start at 7 AM PST (2 PM UTC) Mon-Fri (earlier for pre-prod testing)
-  start_schedule = "cron(0 14 ? * MON-FRI *)"
-
-  # Schedule: Stop at 8 PM PST (4 AM UTC next day) Mon-Fri (later for testing)
-  stop_schedule = "cron(0 4 ? * TUE-SAT *)"
-
-  # Enable scheduler for staging environment
-  enable_scheduler = true
-
-  tags = merge(local.common_tags, {
-    CostOptimization = "Enabled"
-    Component        = "RDSScheduler"
-  })
 }
 
 # Lambda Backend

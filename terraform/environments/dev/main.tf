@@ -133,8 +133,6 @@ variable "cost_budget_limit" {
   default     = 100
 }
 
-# Note: RDS scheduler managed manually - see scripts/cost-optimization/
-
 variable "s3_lifecycle_transition_days" {
   description = "Days before S3 objects transition to IA storage"
   type        = number
@@ -158,6 +156,7 @@ locals {
     ManagedBy      = "Terraform"
     Architecture   = "Serverless"
     CostOptimized  = "true"
+    CreatedAt      = timestamp()
   }
 
   # Domain configuration
@@ -331,7 +330,7 @@ resource "aws_rds_cluster" "database" {
   database_name                = "digital_persona"
   master_username              = "dpp_admin"
   master_password              = random_password.database_password.result
-  backup_retention_period      = 3  # Optimized for cost savings (Phase 1)
+  backup_retention_period      = 7
   preferred_backup_window      = "07:00-09:00"
   preferred_maintenance_window = "sun:09:00-sun:10:00"
 
@@ -404,18 +403,19 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
 
 # S3 Lifecycle policy for cost optimization
 resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
+  count  = var.s3_lifecycle_expiration_days > 0 ? 1 : 0
   bucket = aws_s3_bucket.uploads.id
 
   rule {
     id     = "dev_cost_optimization"
-    status = var.s3_lifecycle_expiration_days > 0 ? "Enabled" : "Disabled"
+    status = "Enabled"
 
     filter {
       prefix = ""
     }
 
     expiration {
-      days = var.s3_lifecycle_expiration_days > 0 ? var.s3_lifecycle_expiration_days : 365
+      days = var.s3_lifecycle_expiration_days
     }
 
     transition {
@@ -618,14 +618,6 @@ module "rds_proxy" {
   require_tls                  = false # Can be enabled for production
   log_retention_days           = 14
 }
-
-# =================================
-# RDS Scheduler - DEPLOYED MANUALLY
-# =================================
-# RDS scheduler is deployed and managed outside of Terraform using AWS CLI
-# Deployment script: scripts/cost-optimization/deploy-rds-scheduler-manual.sh
-# Status: Active (dev-rds-scheduler Lambda function)
-# Note: Removed from Terraform to avoid CI/CD pipeline errors
 
 # Lambda Backend
 module "lambda_backend" {
@@ -940,6 +932,3 @@ output "ses_from_email" {
   description = "Verified sender email address"
   value       = module.ses_email.from_email
 }
-
-# Note: RDS scheduler outputs removed - managed manually outside Terraform
-# Function name: dev-rds-scheduler (deployed via AWS CLI)
