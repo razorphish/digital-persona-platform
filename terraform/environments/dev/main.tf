@@ -158,7 +158,6 @@ locals {
     ManagedBy      = "Terraform"
     Architecture   = "Serverless"
     CostOptimized  = "true"
-    CreatedAt      = timestamp()
   }
 
   # Domain configuration
