@@ -1210,17 +1210,21 @@ jobs:
             for attempt in 1 2 3; do
               echo "🎯 Attempt $attempt/3: Full Terraform apply..."
               
-              # Capture terraform apply output to check for specific errors
-              APPLY_OUTPUT=$(terraform apply -auto-approve -lock-timeout=600s tfplan 2>&1)
-              APPLY_EXIT_CODE=$?
+              # Stream output in real-time while also capturing for error detection
+              # Use tee to show output immediately instead of buffering everything
+              set +e  # Don't exit on error
+              terraform apply -auto-approve -lock-timeout=600s tfplan 2>&1 | tee /tmp/terraform-apply-output.log
+              APPLY_EXIT_CODE=${PIPESTATUS[0]}
+              set -e
+              
+              # Read the captured output for error detection
+              APPLY_OUTPUT=$(cat /tmp/terraform-apply-output.log 2>/dev/null || echo "")
               
               if [ $APPLY_EXIT_CODE -eq 0 ]; then
-                echo "$APPLY_OUTPUT"
                 echo "✅ Full Terraform apply completed successfully!"
                 APPLY_SUCCESS="true"
                 break
               else
-                echo "$APPLY_OUTPUT"
                 echo "❌ Attempt $attempt failed with exit code: $APPLY_EXIT_CODE"
                 
                 # Check for stopped RDS cluster error
