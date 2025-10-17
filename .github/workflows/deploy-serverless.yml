@@ -1259,6 +1259,165 @@ jobs:
                   break
                 fi
                 
+                # Check for "resource already exists" errors and provide helpful guidance
+                RESOURCE_EXISTS=false
+                
+                # S3 Bucket already exists
+                if echo "$APPLY_OUTPUT" | grep -q "BucketAlreadyOwnedByYou\|BucketAlreadyExists"; then
+                  RESOURCE_EXISTS=true
+                  BUCKET_NAME=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=creating S3 Bucket \(|bucket \')[^')]+(?=\)|')")
+                  RESOURCE_TYPE=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=resource \")[^\"]+(?=\" \")" | grep s3_bucket | head -1)
+                  
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo "⚠️  RESOURCE ALREADY EXISTS: S3 Bucket"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  echo "🔍 Issue: S3 bucket already exists in AWS but not in Terraform state"
+                  echo "   Bucket: $BUCKET_NAME"
+                  echo ""
+                  echo "💡 This usually means:"
+                  echo "   • Previous deployment was interrupted"
+                  echo "   • Resource was created manually"
+                  echo "   • Terraform state was cleared/corrupted"
+                  echo ""
+                  echo "🔧 To fix this, import the bucket into Terraform state:"
+                  if [ -n "$RESOURCE_TYPE" ]; then
+                    echo "   terraform import $RESOURCE_TYPE $BUCKET_NAME"
+                  else
+                    echo "   terraform import aws_s3_bucket.<name> $BUCKET_NAME"
+                  fi
+                  echo ""
+                  echo "📋 Or run from repo root:"
+                  echo "   cd terraform/environments/$ENVIRONMENT"
+                  echo "   terraform import <resource> $BUCKET_NAME"
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                fi
+                
+                # Security Group already exists
+                if echo "$APPLY_OUTPUT" | grep -q "InvalidGroup\.Duplicate"; then
+                  RESOURCE_EXISTS=true
+                  SG_NAME=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=security group ')[^']+(?=')" | head -1)
+                  VPC_ID=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=VPC ')[^']+(?=')" | head -1)
+                  
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo "⚠️  RESOURCE ALREADY EXISTS: Security Group"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  echo "🔍 Issue: Security group already exists in VPC"
+                  echo "   Name: $SG_NAME"
+                  echo "   VPC: $VPC_ID"
+                  echo ""
+                  echo "💡 This usually means:"
+                  echo "   • Security group exists but not in Terraform state"
+                  echo "   • Previous deployment created it"
+                  echo "   • Manual creation in AWS console"
+                  echo ""
+                  echo "🔧 To fix this:"
+                  echo "   1. Find the security group ID:"
+                  echo "      aws ec2 describe-security-groups --filters Name=group-name,Values=$SG_NAME Name=vpc-id,Values=$VPC_ID"
+                  echo ""
+                  echo "   2. Import it (replace sg-xxxxx with actual ID):"
+                  echo "      terraform import aws_security_group.<name> sg-xxxxx"
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                fi
+                
+                # RDS Instance/Cluster already exists
+                if echo "$APPLY_OUTPUT" | grep -q "DBInstanceAlreadyExists\|DBClusterAlreadyExists"; then
+                  RESOURCE_EXISTS=true
+                  DB_ID=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=DB instance |DB Cluster \()[^)]+(?=\))" | head -1)
+                  
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo "⚠️  RESOURCE ALREADY EXISTS: RDS Database"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  echo "🔍 Issue: RDS database already exists"
+                  echo "   Identifier: $DB_ID"
+                  echo ""
+                  echo "💡 This usually means:"
+                  echo "   • Database exists but not in Terraform state"
+                  echo "   • Previous deployment created it"
+                  echo ""
+                  echo "🔧 To fix this, import the database:"
+                  if echo "$APPLY_OUTPUT" | grep -q "DBClusterAlreadyExists"; then
+                    echo "   terraform import aws_rds_cluster.database $DB_ID"
+                  else
+                    echo "   terraform import aws_rds_cluster_instance.database $DB_ID"
+                  fi
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                fi
+                
+                # Lambda Permission already exists
+                if echo "$APPLY_OUTPUT" | grep -q "ResourceConflictException.*statement id.*already exists"; then
+                  RESOURCE_EXISTS=true
+                  LAMBDA_NAME=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=Lambda Permission \()[^/]+(?=/)" | head -1)
+                  STMT_ID=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=statement id \()[^)]+(?=\))" | head -1)
+                  
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo "⚠️  RESOURCE ALREADY EXISTS: Lambda Permission"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  echo "🔍 Issue: Lambda permission already exists"
+                  echo "   Function: $LAMBDA_NAME"
+                  echo "   Statement ID: $STMT_ID"
+                  echo ""
+                  echo "💡 This usually means:"
+                  echo "   • Permission exists but not in Terraform state"
+                  echo "   • Previous deployment created it"
+                  echo ""
+                  echo "🔧 To fix this, import the permission:"
+                  echo "   terraform import module.<module_name>.aws_lambda_permission.<name> $LAMBDA_NAME/$STMT_ID"
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                fi
+                
+                # DB Proxy already exists
+                if echo "$APPLY_OUTPUT" | grep -q "DBProxyAlreadyExistsFault"; then
+                  RESOURCE_EXISTS=true
+                  PROXY_NAME=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=DBProxy ')[^']+(?=')" | head -1)
+                  
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo "⚠️  RESOURCE ALREADY EXISTS: RDS Proxy"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  echo "🔍 Issue: RDS Proxy already exists"
+                  echo "   Name: $PROXY_NAME"
+                  echo ""
+                  echo "💡 This usually means:"
+                  echo "   • Proxy exists but not in Terraform state"
+                  echo ""
+                  echo "🔧 To fix this, import the proxy:"
+                  echo "   terraform import module.rds_proxy.aws_db_proxy.main $PROXY_NAME"
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                fi
+                
+                # If we detected a resource exists error, provide general guidance
+                if [ "$RESOURCE_EXISTS" = true ]; then
+                  echo "💡 General Fix Process:"
+                  echo "   1. Note the resource identifier from the error above"
+                  echo "   2. SSH/connect to a machine with Terraform access"
+                  echo "   3. cd terraform/environments/$ENVIRONMENT"
+                  echo "   4. Run the suggested import command"
+                  echo "   5. Commit and push the updated state"
+                  echo "   6. Re-run this deployment"
+                  echo ""
+                  echo "🚀 Future: This will be automated in Phase 1.2!"
+                  echo ""
+                fi
+                
                 if [ $attempt -lt 3 ]; then
                   echo "⏳ Waiting 30 seconds before retry..."
                   sleep 30
