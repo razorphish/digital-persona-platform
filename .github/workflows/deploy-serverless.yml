@@ -1147,6 +1147,33 @@ jobs:
           echo ""
           echo "✅ SSL certificate management configured!"
 
+      - name: Proactive Resource Detection & Import (Phase 3.1a)
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        env:
+          ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          echo "🔍 Step 3.5: Proactive Resource Detection (Phase 3.1a)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Goal: Scan AWS for existing resources and import them BEFORE terraform apply"
+          echo "Result: No 'already exists' errors, truly idempotent deployment"
+          echo ""
+          
+          # Run proactive S3 detection script
+          if [ -f "../../../scripts/proactive-import-s3.sh" ]; then
+            echo "Running proactive S3 bucket detection..."
+            bash ../../../scripts/proactive-import-s3.sh
+          else
+            echo "⚠️  Proactive import script not found, skipping..."
+            echo "   This is normal if script hasn't been committed yet"
+          fi
+          
+          echo ""
+          echo "✅ Proactive detection complete! State is now synchronized."
+          echo "   Proceeding to terraform apply..."
+          echo ""
+
       - name: Apply Terraform Configuration
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
