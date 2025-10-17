@@ -1262,10 +1262,10 @@ jobs:
                 # Check for "resource already exists" errors and provide helpful guidance
                 RESOURCE_EXISTS=false
                 
-                # S3 Bucket already exists
+                # S3 Bucket already exists - AUTO-IMPORT (Phase 1.2)
                 if echo "$APPLY_OUTPUT" | grep -q "BucketAlreadyOwnedByYou\|BucketAlreadyExists"; then
                   RESOURCE_EXISTS=true
-                  BUCKET_NAME=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=creating S3 Bucket \(|bucket \')[^')]+(?=\)|')")
+                  BUCKET_NAME=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=creating S3 Bucket \(|bucket \')[^')]+(?=\)|')" | head -1)
                   RESOURCE_TYPE=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=resource \")[^\"]+(?=\" \")" | grep s3_bucket | head -1)
                   
                   echo ""
@@ -1281,17 +1281,32 @@ jobs:
                   echo "   • Resource was created manually"
                   echo "   • Terraform state was cleared/corrupted"
                   echo ""
-                  echo "🔧 To fix this, import the bucket into Terraform state:"
-                  if [ -n "$RESOURCE_TYPE" ]; then
-                    echo "   terraform import $RESOURCE_TYPE $BUCKET_NAME"
+                  
+                  # AUTO-FIX: Import the bucket automatically
+                  if [ -n "$BUCKET_NAME" ] && [ -n "$RESOURCE_TYPE" ]; then
+                    echo "🔧 AUTO-FIXING: Importing S3 bucket into Terraform state..."
+                    echo "   Running: terraform import $RESOURCE_TYPE $BUCKET_NAME"
+                    echo ""
+                    
+                    if terraform import "$RESOURCE_TYPE" "$BUCKET_NAME" 2>&1 | tee /tmp/s3-import.log; then
+                      echo ""
+                      echo "✅ Import successful! Bucket is now in Terraform state."
+                      echo "🔄 Will retry terraform apply on next attempt..."
+                      echo ""
+                    else
+                      echo ""
+                      echo "❌ Auto-import failed. Manual import required:"
+                      echo "   terraform import $RESOURCE_TYPE $BUCKET_NAME"
+                      echo ""
+                      cat /tmp/s3-import.log || true
+                    fi
                   else
+                    echo "🔧 Could not auto-import (missing bucket name or resource type)"
+                    echo "   Manual import required:"
                     echo "   terraform import aws_s3_bucket.<name> $BUCKET_NAME"
+                    echo ""
                   fi
-                  echo ""
-                  echo "📋 Or run from repo root:"
-                  echo "   cd terraform/environments/$ENVIRONMENT"
-                  echo "   terraform import <resource> $BUCKET_NAME"
-                  echo ""
+                  
                   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                   echo ""
                 fi
@@ -1406,7 +1421,7 @@ jobs:
                 
                 # If we detected a resource exists error, provide general guidance
                 if [ "$RESOURCE_EXISTS" = true ]; then
-                  echo "💡 General Fix Process:"
+                  echo "💡 General Fix Process (for non-automated resources):"
                   echo "   1. Note the resource identifier from the error above"
                   echo "   2. SSH/connect to a machine with Terraform access"
                   echo "   3. cd terraform/environments/$ENVIRONMENT"
@@ -1414,7 +1429,8 @@ jobs:
                   echo "   5. Commit and push the updated state"
                   echo "   6. Re-run this deployment"
                   echo ""
-                  echo "🚀 Future: This will be automated in Phase 1.2!"
+                  echo "✅ Automated: S3 Buckets (auto-imported above)"
+                  echo "🚀 Coming Soon: Security Groups, RDS resources (Phase 1.3+)"
                   echo ""
                 fi
                 
