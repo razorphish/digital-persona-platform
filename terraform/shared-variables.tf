@@ -85,6 +85,40 @@ variable "alert_emails" {
 }
 
 # =================================
+# VPC CONFIGURATION VARIABLES
+# =================================
+
+variable "vpc_cidr_block" {
+  description = "VPC CIDR block for the platform"
+  type        = string
+  default     = "10.0.0.0/16"
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr_block, 0))
+    error_message = "VPC CIDR block must be a valid CIDR notation"
+  }
+}
+
+variable "private_subnet_cidrs" {
+  description = "Private subnet CIDR blocks"
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+  validation {
+    condition     = length(var.private_subnet_cidrs) >= 2
+    error_message = "At least 2 private subnets are required for high availability"
+  }
+}
+
+variable "public_subnet_cidrs" {
+  description = "Public subnet CIDR blocks"
+  type        = list(string)
+  default     = ["10.0.10.0/24", "10.0.11.0/24"]
+  validation {
+    condition     = length(var.public_subnet_cidrs) >= 2
+    error_message = "At least 2 public subnets are required for high availability"
+  }
+}
+
+# =================================
 # COST OPTIMIZATION VARIABLES
 # =================================
 

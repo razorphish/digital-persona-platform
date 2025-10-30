@@ -11,6 +11,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 
   backend "s3" {
@@ -31,7 +35,7 @@ provider "aws" {
   # }
 }
 
-# Variables
+# Include shared variables
 variable "sub_environment" {
   description = "Sub-environment name (e.g., dev01, dev02)"
   type        = string
@@ -60,6 +64,30 @@ variable "project_name" {
   description = "Project name"
   type        = string
   default     = "dpp"
+}
+
+variable "vpc_id" {
+  description = "VPC ID to use (optional, defaults to dev-dev01-dpp-vpc)"
+  type        = string
+  default     = ""
+}
+
+variable "vpc_cidr_block" {
+  description = "VPC CIDR block for DPP platform"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "private_subnet_cidrs" {
+  description = "Private subnet CIDR blocks for DPP platform"
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+}
+
+variable "public_subnet_cidrs" {
+  description = "Public subnet CIDR blocks for DPP platform"
+  type        = list(string)
+  default     = ["10.0.10.0/24", "10.0.11.0/24"]
 }
 
 # Legacy ECR variables removed - ECR repositories are now created dynamically by modules
@@ -153,10 +181,14 @@ locals {
     Environment    = var.environment
     SubEnvironment = var.sub_environment
     Project        = var.project_name
+    Platform       = "DPP" # Platform-specific tag for isolation
     ManagedBy      = "Terraform"
     Architecture   = "Serverless"
     CostOptimized  = "true"
-    CreatedAt      = timestamp()
+    Owner          = "DPP-Team" # Platform ownership
+    DataClass      = "Internal" # Data classification
+    Backup         = "Required" # Backup requirements
+    Compliance     = "SOC2"     # Compliance requirements
   }
 
   # Domain configuration
@@ -276,7 +308,12 @@ resource "random_password" "database_password" {
 # Database subnet group
 resource "aws_db_subnet_group" "database" {
   name       = "${local.resource_prefix}-db-subnet-group"
-  subnet_ids = [aws_subnet.private[0].id, aws_subnet.private[1].id]
+  subnet_ids = [data.aws_subnet.private[0].id, data.aws_subnet.private[1].id]
+
+  # Ensure subnets are created before DB subnet group
+  depends_on = [
+    aws_subnet.dpp_private
+  ]
 
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-db-subnet-group"
@@ -284,22 +321,21 @@ resource "aws_db_subnet_group" "database" {
   })
 
   lifecycle {
-    # Prevent recreation if subnet group already exists
-    ignore_changes = [name]
+    create_before_destroy = true
   }
 }
 
 # Database security group
 resource "aws_security_group" "database" {
   name_prefix = "${local.resource_prefix}-db-"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
   description = "Security group for ${local.resource_prefix} database"
 
   ingress {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    cidr_blocks = [data.aws_vpc.main.cidr_block]
     description = "PostgreSQL access from VPC"
   }
 
@@ -351,7 +387,8 @@ resource "aws_rds_cluster" "database" {
   })
 
   lifecycle {
-    ignore_changes = [engine_version]
+    ignore_changes        = [engine_version, cluster_identifier, master_password, database_name, master_username, vpc_security_group_ids, db_subnet_group_name]
+    create_before_destroy = true
   }
 }
 
@@ -382,6 +419,13 @@ resource "aws_s3_bucket" "uploads" {
     Type    = "S3Bucket"
     Purpose = "FileUploads"
   })
+
+  lifecycle {
+    # Prevent recreation if bucket already exists
+    ignore_changes = [bucket]
+    # Use create_before_destroy to avoid conflicts
+    create_before_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "uploads" {
@@ -453,12 +497,17 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
 }
 
 # =================================
-# Simplified VPC (for database only)
+# VPC Configuration (Dedicated DPP VPC)
 # =================================
 
-# VPC
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
+# Data source for availability zones
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# Create dedicated DPP VPC with platform-specific CIDR blocks
+resource "aws_vpc" "dpp_vpc" {
+  cidr_block           = var.vpc_cidr_block
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -468,9 +517,9 @@ resource "aws_vpc" "main" {
   })
 }
 
-# Internet Gateway
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
+# Internet Gateway for DPP VPC
+resource "aws_internet_gateway" "dpp_igw" {
+  vpc_id = aws_vpc.dpp_vpc.id
 
   tags = merge(local.common_tags, {
     Name = "${local.resource_prefix}-igw"
@@ -478,22 +527,123 @@ resource "aws_internet_gateway" "main" {
   })
 }
 
-# Data source for availability zones
-data "aws_availability_zones" "available" {
-  state = "available"
-}
+# Private subnets for DPP VPC
+resource "aws_subnet" "dpp_private" {
+  count = length(var.private_subnet_cidrs)
 
-# Private Subnets (for database)
-resource "aws_subnet" "private" {
-  count             = 2
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 4, count.index + 2)
+  vpc_id            = aws_vpc.dpp_vpc.id
+  cidr_block        = var.private_subnet_cidrs[count.index]
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-private-${count.index + 1}"
+    Name = "${local.resource_prefix}-private-subnet-${count.index + 1}"
     Type = "PrivateSubnet"
+    Tier = "Private"
   })
+}
+
+# Public subnets for DPP VPC
+resource "aws_subnet" "dpp_public" {
+  count = length(var.public_subnet_cidrs)
+
+  vpc_id                  = aws_vpc.dpp_vpc.id
+  cidr_block              = var.public_subnet_cidrs[count.index]
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-public-subnet-${count.index + 1}"
+    Type = "PublicSubnet"
+    Tier = "Public"
+  })
+}
+
+# NAT Gateway for private subnet internet access
+resource "aws_eip" "dpp_nat_eip" {
+  count = length(var.public_subnet_cidrs)
+
+  domain     = "vpc"
+  depends_on = [aws_internet_gateway.dpp_igw]
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-nat-eip-${count.index + 1}"
+    Type = "ElasticIP"
+  })
+}
+
+resource "aws_nat_gateway" "dpp_nat" {
+  count = length(var.public_subnet_cidrs)
+
+  allocation_id = aws_eip.dpp_nat_eip[count.index].id
+  subnet_id     = aws_subnet.dpp_public[count.index].id
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-nat-gateway-${count.index + 1}"
+    Type = "NATGateway"
+  })
+
+  depends_on = [aws_internet_gateway.dpp_igw]
+}
+
+# Route table for public subnets
+resource "aws_route_table" "dpp_public" {
+  vpc_id = aws_vpc.dpp_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.dpp_igw.id
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-public-rt"
+    Type = "RouteTable"
+    Tier = "Public"
+  })
+}
+
+# Route table for private subnets
+resource "aws_route_table" "dpp_private" {
+  count = length(var.private_subnet_cidrs)
+
+  vpc_id = aws_vpc.dpp_vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.dpp_nat[count.index].id
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.resource_prefix}-private-rt-${count.index + 1}"
+    Type = "RouteTable"
+    Tier = "Private"
+  })
+}
+
+# Associate public subnets with public route table
+resource "aws_route_table_association" "dpp_public" {
+  count = length(var.public_subnet_cidrs)
+
+  subnet_id      = aws_subnet.dpp_public[count.index].id
+  route_table_id = aws_route_table.dpp_public.id
+}
+
+# Associate private subnets with private route tables
+resource "aws_route_table_association" "dpp_private" {
+  count = length(var.private_subnet_cidrs)
+
+  subnet_id      = aws_subnet.dpp_private[count.index].id
+  route_table_id = aws_route_table.dpp_private[count.index].id
+}
+
+# Data source for the created VPC (for backward compatibility)
+data "aws_vpc" "main" {
+  id = aws_vpc.dpp_vpc.id
+}
+
+# Data source for private subnets (for backward compatibility)
+data "aws_subnet" "private" {
+  count = length(var.private_subnet_cidrs)
+  id    = aws_subnet.dpp_private[count.index].id
 }
 
 # =================================
@@ -551,7 +701,7 @@ resource "aws_acm_certificate_validation" "website" {
   timeouts {
     create = "10m"
   }
-  
+
   # Allow validation to proceed without waiting for DNS records
   # DNS records will be created manually or via workflow
   lifecycle {
@@ -567,7 +717,7 @@ resource "aws_acm_certificate_validation" "api" {
   timeouts {
     create = "10m"
   }
-  
+
   lifecycle {
     create_before_destroy = true
   }
@@ -601,8 +751,8 @@ module "rds_proxy" {
   common_tags     = local.common_tags
 
   # Network configuration
-  vpc_id                      = aws_vpc.main.id
-  subnet_ids                  = aws_subnet.private[*].id
+  vpc_id                      = data.aws_vpc.main.id
+  subnet_ids                  = [data.aws_subnet.private[0].id, data.aws_subnet.private[1].id]
   lambda_security_group_ids   = [aws_security_group.lambda.id]
   database_security_group_ids = [aws_security_group.database.id]
 
@@ -647,17 +797,17 @@ module "lambda_backend" {
 
   # VPC configuration for database access
   vpc_config = {
-    subnet_ids         = aws_subnet.private[*].id
+    subnet_ids         = [data.aws_subnet.private[0].id, data.aws_subnet.private[1].id]
     security_group_ids = [aws_security_group.lambda.id]
   }
 
   log_retention_days = var.log_retention_days
 
   # Email configuration
-  domain_name        = var.domain_name
-  frontend_url       = "https://${module.s3_website.cloudfront_domain_name}"
-  ses_identity_arn   = module.ses_email.domain_identity_arn
-  from_email         = "noreply@${var.domain_name}"
+  domain_name      = var.domain_name
+  frontend_url     = "https://${module.s3_website.cloudfront_domain_name}"
+  ses_identity_arn = module.ses_email.domain_identity_arn
+  from_email       = "noreply@${var.domain_name}"
 }
 
 # SES Email Service
@@ -679,7 +829,7 @@ module "ses_email" {
 # Lambda security group
 resource "aws_security_group" "lambda" {
   name_prefix = "${local.resource_prefix}-lambda-"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
   description = "Security group for ${local.resource_prefix} Lambda functions"
 
   egress {
@@ -746,24 +896,27 @@ module "api_gateway" {
 
 # DNS Records for this sub-environment
 resource "aws_route53_record" "website" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.website_domain # dev01.hibiji.com
-  type    = "CNAME"
-  ttl     = 300
-  records = [module.s3_website.cloudfront_domain_name]
+  zone_id         = data.aws_route53_zone.main.zone_id
+  name            = local.website_domain # dev01.hibiji.com
+  type            = "CNAME"
+  ttl             = 300
+  records         = [module.s3_website.cloudfront_domain_name]
+  allow_overwrite = true
 
   # Add lifecycle to prevent conflicts
   lifecycle {
-    ignore_changes = [records]
+    ignore_changes        = [records]
+    create_before_destroy = true
   }
 }
 
 resource "aws_route53_record" "api" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.api_domain # dev01-api.hibiji.com
-  type    = "CNAME"
-  ttl     = 300
-  records = [module.api_gateway.custom_domain_target_name]
+  zone_id         = data.aws_route53_zone.main.zone_id
+  name            = local.api_domain # dev01-api.hibiji.com
+  type            = "CNAME"
+  ttl             = 300
+  records         = [module.api_gateway.custom_domain_target_name]
+  allow_overwrite = true
 
   # Add lifecycle to prevent conflicts
   lifecycle {
@@ -837,8 +990,8 @@ module "aws_batch_ml" {
   common_tags     = local.common_tags
 
   # Network configuration
-  vpc_id     = aws_vpc.main.id
-  subnet_ids = aws_subnet.private[*].id
+  vpc_id     = data.aws_vpc.main.id
+  subnet_ids = [data.aws_subnet.private[0].id, data.aws_subnet.private[1].id]
 
   # Database configuration
   database_secret_arn = aws_secretsmanager_secret.database_password.arn
