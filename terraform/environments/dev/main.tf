@@ -73,21 +73,21 @@ variable "vpc_id" {
 }
 
 variable "vpc_cidr_block" {
-  description = "VPC CIDR block for DPP platform"
+  description = "VPC CIDR block for DPP platform (dedicated VPC, mutually exclusive from VWR)"
   type        = string
-  default     = "10.0.0.0/16"
+  default     = "10.1.0.0/16" # DPP uses 10.1.x.x, VWR uses 10.0.x.x for complete isolation
 }
 
 variable "private_subnet_cidrs" {
   description = "Private subnet CIDR blocks for DPP platform"
   type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+  default     = ["10.1.1.0/24", "10.1.2.0/24"] # DPP private subnets in dedicated VPC
 }
 
 variable "public_subnet_cidrs" {
   description = "Public subnet CIDR blocks for DPP platform"
   type        = list(string)
-  default     = ["10.0.10.0/24", "10.0.11.0/24"]
+  default     = ["10.1.10.0/24", "10.1.11.0/24"] # DPP public subnets in dedicated VPC
 }
 
 # Legacy ECR variables removed - ECR repositories are now created dynamically by modules
