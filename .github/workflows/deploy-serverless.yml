@@ -508,6 +508,34 @@ jobs:
             fi
           fi
 
+          # Check and import existing RDS Proxy if it exists
+          RDS_PROXY_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-rds-proxy"
+          echo "🔍 Checking for existing RDS Proxy: $RDS_PROXY_NAME"
+
+          if aws rds describe-db-proxies --db-proxy-name "$RDS_PROXY_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "📦 RDS Proxy exists: $RDS_PROXY_NAME"
+            
+            # Robust check if already in Terraform state
+            echo "🔍 Checking Terraform state for RDS Proxy..."
+            
+            if terraform state show module.rds_proxy.aws_db_proxy.main >/dev/null 2>&1; then
+              echo "✅ RDS Proxy already managed by Terraform, skipping import"
+              echo "📋 Current state:"
+              terraform state show module.rds_proxy.aws_db_proxy.main | head -5
+            else
+              echo "📥 RDS Proxy not in Terraform state, importing..."
+              if terraform import module.rds_proxy.aws_db_proxy.main "$RDS_PROXY_NAME"; then
+                echo "✅ Successfully imported RDS Proxy"
+              else
+                echo "❌ Failed to import RDS Proxy"
+                echo "🔍 Debug: Checking if resource was already in state..."
+                terraform state show module.rds_proxy.aws_db_proxy.main >/dev/null 2>&1 && echo "   Resource now exists in state" || echo "   Resource still not in state"
+              fi
+            fi
+          else
+            echo "✅ RDS Proxy does not exist, will be created"
+          fi
+
           echo "✅ Resource conflict handling completed"
 
       - name: Import Existing Resources
@@ -1402,6 +1430,54 @@ jobs:
                   echo "   2. Import it (replace sg-xxxxx with actual ID):"
                   echo "      terraform import aws_security_group.<name> sg-xxxxx"
                   echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                fi
+                
+                # RDS Proxy already exists - AUTO-IMPORT
+                if echo "$APPLY_OUTPUT" | grep -q "DBProxyAlreadyExistsFault"; then
+                  RESOURCE_EXISTS=true
+                  PROXY_NAME=$(echo "$APPLY_OUTPUT" | grep -oP "(?<=DBProxy ')[^']+(?=')" | head -1)
+                  
+                  echo ""
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo "⚠️  RESOURCE ALREADY EXISTS: RDS Proxy"
+                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                  echo ""
+                  echo "🔍 Issue: RDS Proxy already exists in AWS but not in Terraform state"
+                  echo "   Proxy: $PROXY_NAME"
+                  echo ""
+                  echo "💡 This usually means:"
+                  echo "   • Proxy exists but not in Terraform state"
+                  echo "   • Previous deployment was interrupted"
+                  echo "   • Resource was created manually"
+                  echo ""
+                  
+                  # AUTO-FIX: Import the proxy automatically
+                  if [ -n "$PROXY_NAME" ]; then
+                    echo "🔧 AUTO-FIXING: Importing RDS Proxy into Terraform state..."
+                    echo "   Running: terraform import module.rds_proxy.aws_db_proxy.main $PROXY_NAME"
+                    echo ""
+                    
+                    if terraform import module.rds_proxy.aws_db_proxy.main "$PROXY_NAME" 2>&1 | tee /tmp/rds-proxy-import.log; then
+                      echo ""
+                      echo "✅ Import successful! RDS Proxy is now in Terraform state."
+                      echo "🔄 Will retry terraform apply on next attempt..."
+                      echo ""
+                    else
+                      echo ""
+                      echo "❌ Auto-import failed. Manual import required:"
+                      echo "   terraform import module.rds_proxy.aws_db_proxy.main $PROXY_NAME"
+                      echo ""
+                      cat /tmp/rds-proxy-import.log || true
+                    fi
+                  else
+                    echo "🔧 Could not auto-import (missing proxy name)"
+                    echo "   Manual import required:"
+                    echo "   terraform import module.rds_proxy.aws_db_proxy.main dev-dev01-dpp-rds-proxy"
+                    echo ""
+                  fi
+                  
                   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                   echo ""
                 fi
