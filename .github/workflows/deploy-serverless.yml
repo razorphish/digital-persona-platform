@@ -1700,13 +1700,43 @@ jobs:
         run: |
           echo "📦 Creating Lambda deployment package from bundled output..."
 
+          # Verify index.js exists (Lambda handler expects index.handler)
+          if [ ! -f "./index.js" ]; then
+            echo "❌ ERROR: index.js not found in current directory"
+            echo "📁 Current directory contents:"
+            ls -la
+            exit 1
+          fi
+          echo "✅ Verified: index.js found"
+
           # Create deployment zip from current directory (which contains the bundled output)
+          # Exclude workspace files that shouldn't be in Lambda package
           echo "📦 Creating deployment zip from bundled files..."
-          zip -r lambda-deployment.zip . -x "*.DS_Store*" "*.git*"
+          zip -r lambda-deployment.zip . \
+            -x "*.DS_Store*" \
+            -x "*.git*" \
+            -x ".github/*" \
+            -x "apps/*" \
+            -x "packages/*" \
+            -x "terraform/*" \
+            -x "*.md" \
+            -x "*.txt" \
+            -x "*.sh" \
+            -x "node_modules/*" \
+            -x ".turbo/*"
 
           echo "✅ Lambda deployment package created successfully"
-          echo "📊 Package contents:"
-          unzip -l lambda-deployment.zip
+          echo "📊 Package contents (first 20 files):"
+          unzip -l lambda-deployment.zip | head -25
+          
+          # Verify index.js is in the zip
+          if unzip -l lambda-deployment.zip | grep -q "index\.js"; then
+            echo "✅ Verified: index.js is in deployment package"
+          else
+            echo "⚠️ WARNING: index.js not found in zip package"
+            echo "📁 Full zip contents:"
+            unzip -l lambda-deployment.zip
+          fi
 
       - name: Deploy Lambda function
         run: |
