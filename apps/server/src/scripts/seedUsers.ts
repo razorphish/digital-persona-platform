@@ -374,6 +374,7 @@ async function createPersonas(usersCreated: CreatedUser[]) {
           ${true},
           ${true}
         )
+        on conflict do nothing
       `);
     }
   }
@@ -411,7 +412,20 @@ async function createFollows(usersCreated: CreatedUser[]) {
       notifyOnUpdates: Math.random() < 0.25,
     }));
 
-    await db.insert(userFollows).values(rows);
+    // Use conflict handling to skip duplicates if seeding runs multiple times
+    try {
+      await db.insert(userFollows).values(rows).onConflictDoNothing();
+    } catch (e) {
+      // If onConflictDoNothing not available, try inserting individually with try-catch
+      for (const row of rows) {
+        try {
+          await db.insert(userFollows).values([row]);
+        } catch (err) {
+          // Skip duplicate follows
+          console.log(`Skipping duplicate follow: ${row.followerId} -> ${row.followingId}`);
+        }
+      }
+    }
   }
 }
 
@@ -458,7 +472,20 @@ async function createLikes(usersCreated: CreatedUser[]) {
       likeType: pick(LIKE_TYPES),
       discoveredVia: pick(DISCOVERED_VIA),
     }));
-    await db.insert(personaLikes).values(rows);
+    // Use conflict handling to skip duplicates if seeding runs multiple times
+    try {
+      await db.insert(personaLikes).values(rows).onConflictDoNothing();
+    } catch (e) {
+      // If onConflictDoNothing not available, try inserting individually with try-catch
+      for (const row of rows) {
+        try {
+          await db.insert(personaLikes).values([row]);
+        } catch (err) {
+          // Skip duplicate likes
+          console.log(`Skipping duplicate like: user ${row.userId} -> persona ${row.personaId}`);
+        }
+      }
+    }
   }
 }
 
@@ -507,7 +534,20 @@ async function createPersonaFollowers(usersCreated: CreatedUser[]) {
       retainHistoricalData: true,
     }));
 
-    await db.insert(userConnections).values(rows);
+    // Use conflict handling to skip duplicates if seeding runs multiple times
+    try {
+      await db.insert(userConnections).values(rows).onConflictDoNothing();
+    } catch (e) {
+      // If onConflictDoNothing not available, try inserting individually with try-catch
+      for (const row of rows) {
+        try {
+          await db.insert(userConnections).values([row]);
+        } catch (err) {
+          // Skip duplicate connections
+          console.log(`Skipping duplicate connection: ${row.requesterId} -> persona ${row.targetPersonaId}`);
+        }
+      }
+    }
   }
 }
 
@@ -557,7 +597,18 @@ async function ensureFirst100PersonaFollowing(usersCreated: CreatedUser[]) {
       }));
 
     if (rows.length > 0) {
-      await db.insert(userConnections).values(rows);
+      try {
+        await db.insert(userConnections).values(rows).onConflictDoNothing();
+      } catch (e) {
+        // Fallback: insert individually to handle duplicates
+        for (const row of rows) {
+          try {
+            await db.insert(userConnections).values([row]);
+          } catch (err) {
+            console.log(`Skipping duplicate connection: ${row.requesterId} -> persona ${row.targetPersonaId}`);
+          }
+        }
+      }
     }
   }
 }
@@ -604,7 +655,18 @@ async function ensureFirst100PersonaFollowers(usersCreated: CreatedUser[]) {
         }));
 
       if (rows.length > 0) {
-        await db.insert(userConnections).values(rows);
+        try {
+          await db.insert(userConnections).values(rows).onConflictDoNothing();
+        } catch (e) {
+          // Fallback: insert individually to handle duplicates
+          for (const row of rows) {
+            try {
+              await db.insert(userConnections).values([row]);
+            } catch (err) {
+              console.log(`Skipping duplicate connection: ${row.requesterId} -> persona ${row.targetPersonaId}`);
+            }
+          }
+        }
       }
     }
   }
@@ -643,7 +705,18 @@ async function ensureFirst100CreatorFollows(usersCreated: CreatedUser[]) {
       }));
 
     if (rows.length > 0) {
-      await db.insert(userFollows).values(rows);
+      try {
+        await db.insert(userFollows).values(rows).onConflictDoNothing();
+      } catch (e) {
+        // Fallback: insert individually to handle duplicates
+        for (const row of rows) {
+          try {
+            await db.insert(userFollows).values([row]);
+          } catch (err) {
+            console.log(`Skipping duplicate follow: ${row.followerId} -> ${row.followingId}`);
+          }
+        }
+      }
     }
   }
 }
@@ -711,7 +784,18 @@ async function ensureSyntheticFeedItems(
     if (rows.length > 0) {
       // Clear and insert deterministic set
       await db.delete(feedItems).where(eq(feedItems.userId, u.id));
-      await db.insert(feedItems).values(rows.slice(0, minItems));
+      try {
+        await db.insert(feedItems).values(rows.slice(0, minItems)).onConflictDoNothing();
+      } catch (e) {
+        // Fallback: insert individually to handle duplicates
+        for (const row of rows.slice(0, minItems)) {
+          try {
+            await db.insert(feedItems).values([row]);
+          } catch (err) {
+            console.log(`Skipping duplicate feed item for user ${u.id}`);
+          }
+        }
+      }
     }
   }
 }
@@ -755,18 +839,22 @@ async function seedTrendingMetricsAndReviews(usersCreated: CreatedUser[]) {
       .where(eq(discoveryMetrics.personaId, p.id));
 
     if ((updated as any).rowCount === 0) {
-      await db.insert(discoveryMetrics).values({
-        personaId: p.id,
-        viewsLast24h: views24,
-        viewsLast7d: views7,
-        viewsLast30d: views30,
-        likesLast24h: likes24,
-        likesLast7d: likes7,
-        likesLast30d: likes30,
-        subscriptionsLast24h: subs24,
-        subscriptionsLast7d: subs7,
-        subscriptionsLast30d: subs30,
-      });
+      try {
+        await db.insert(discoveryMetrics).values({
+          personaId: p.id,
+          viewsLast24h: views24,
+          viewsLast7d: views7,
+          viewsLast30d: views30,
+          likesLast24h: likes24,
+          likesLast7d: likes7,
+          likesLast30d: likes30,
+          subscriptionsLast24h: subs24,
+          subscriptionsLast7d: subs7,
+          subscriptionsLast30d: subs30,
+        }).onConflictDoNothing();
+      } catch (e) {
+        console.log(`Skipping duplicate discovery metrics for persona ${p.id}`);
+      }
     }
   }
 
@@ -791,7 +879,18 @@ async function seedTrendingMetricsAndReviews(usersCreated: CreatedUser[]) {
       isPublic: true,
       moderationStatus: "approved" as const,
     }));
-    await db.insert(personaReviews).values(rows);
+    try {
+      await db.insert(personaReviews).values(rows).onConflictDoNothing();
+    } catch (e) {
+      // Fallback: insert individually to handle duplicates
+      for (const row of rows) {
+        try {
+          await db.insert(personaReviews).values([row]);
+        } catch (err) {
+          console.log(`Skipping duplicate review: user ${row.userId} -> persona ${row.personaId}`);
+        }
+      }
+    }
   }
 }
 function shuffle<T>(arr: T[]): T[] {
