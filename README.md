@@ -208,7 +208,7 @@ digital-persona-platform/
 │   ├── database/              # Drizzle schema and config
 │   └── shared/                # Shared types and utilities
 ├── .vscode/                   # VS Code debug configurations
-├── scripts/                   # Port cleanup and automation scripts
+├── scripts/                   # Development tools and AWS environment cleanup
 ├── docs/                      # Comprehensive documentation
 ├── docker-compose*.yml        # Docker configurations
 ├── docker-start.sh           # Docker startup script
@@ -253,6 +253,71 @@ Automatic port cleanup for smooth development:
 ./scripts/interactive-port-cleanup.sh
 ```
 
+### Environment Cleanup
+
+Dynamic AWS environment cleanup for sub-environments (qa10, dev01, staging33, etc.):
+
+#### Local Script Usage
+
+```bash
+# Clean up specific environment (with confirmation)
+./scripts/dynamic-cleanup-environment.sh qa10
+
+# Force cleanup (skip confirmation - for CI/CD)
+FORCE_CLEANUP=true ./scripts/dynamic-cleanup-environment.sh qa10
+
+# Examples for different environments
+./scripts/dynamic-cleanup-environment.sh dev05   # Clean dev05
+./scripts/dynamic-cleanup-environment.sh qa03    # Clean qa03
+./scripts/dynamic-cleanup-environment.sh staging01  # Clean staging01
+```
+
+#### GitHub Actions Workflow
+
+Use the automated cleanup workflow via GitHub Actions:
+
+```bash
+# Trigger via GitHub CLI (dry run first)
+gh workflow run cleanup-subenv.yml \
+  --field environment=qa10 \
+  --field force_cleanup=true \
+  --field dry_run=true
+
+# Actual cleanup (removes resources)
+gh workflow run cleanup-subenv.yml \
+  --field environment=qa10 \
+  --field force_cleanup=true \
+  --field dry_run=false
+```
+
+Or via GitHub web interface:
+
+1. Go to **Actions** → **Cleanup Sub-Environment**
+2. Set parameters:
+   - `environment`: Target environment (e.g., `qa10`)
+   - `force_cleanup`: `true` (required for execution)
+   - `dry_run`: `true` for testing, `false` for actual cleanup
+
+#### What Gets Cleaned Up
+
+The cleanup process removes **ALL** resources for the specified environment:
+
+- 🗑️ **AWS Infrastructure**: VPC, subnets, security groups, internet gateways
+- 🗑️ **Serverless Resources**: Lambda functions, API Gateway, CloudWatch logs
+- 🗑️ **Storage**: S3 buckets (with versioned object cleanup), RDS clusters
+- 🗑️ **AI/ML Services**: AWS Batch compute environments, job queues, SQS queues, ECR repositories
+- 🗑️ **Networking**: Route53 DNS records, RDS Proxy endpoints
+- 🗑️ **Security**: IAM roles, policies, instance profiles, Secrets Manager secrets
+
+#### Safety Features
+
+- ✅ **Environment Isolation**: Only targets resources matching `MAIN_ENV-TARGET_ENV-dpp*` pattern
+- ✅ **Explicit Confirmation**: Requires typing `DELETE qa10` to confirm (local script)
+- ✅ **Parameter Validation**: Script fails if no environment specified
+- ✅ **Dynamic Queries**: Uses AWS `starts_with()` filters, no hard-coded resource names
+- ✅ **Comprehensive Verification**: Checks remaining resources after cleanup
+- ✅ **Timeout Protection**: Prevents hanging with 10-15 minute timeouts
+
 ### Useful Commands
 
 ```bash
@@ -293,6 +358,19 @@ npm run test          # Run test suite
 
 - **Problem**: `password authentication failed`
 - **Solution**: Verify PostgreSQL container is running and `DATABASE_URL` is correct
+
+#### AWS Environment Issues
+
+- **Problem**: Sub-environment resources left over after branch deletion
+- **Solution**: Use cleanup scripts to remove orphaned AWS resources:
+
+  ```bash
+  # Check what would be deleted first
+  gh workflow run cleanup-subenv.yml --field environment=qa05 --field dry_run=true --field force_cleanup=true
+
+  # Clean up the environment
+  ./scripts/dynamic-cleanup-environment.sh qa05
+  ```
 
 #### Docker Issues
 
@@ -380,6 +458,49 @@ docker exec -it dpp-postgres psql -U dpp_user -d digital_persona
 - [ ] Computer vision capabilities
 - [ ] Mobile app development
 - [ ] Advanced AI learning capabilities
+
+## 🚀 Production Readiness TODOs
+
+### 🔐 SSL Certificate Management
+
+**Current Status**: Using AWS default certificates (working but unprofessional URLs)  
+**Production Need**: Custom domain SSL certificates for professional deployment
+
+**📋 Implementation Plan:**
+
+- [ ] **Wildcard SSL Certificates** (Recommended AWS Best Practice)
+  - `*.hibiji.com` → All environment websites (qa10.hibiji.com, dev01.hibiji.com)
+  - `*-api.hibiji.com` → All API endpoints (qa10-api.hibiji.com, dev01-api.hibiji.com)
+  - `hibiji.com` → Production apex domain
+
+**💰 Benefits:**
+
+- **78% cost savings** vs individual certificates ($328/year vs $1,500/year)
+- **Professional URLs** with valid SSL (no certificate warnings)
+- **SEO improvement** with custom domain structure
+- **Automatic coverage** for new environments
+- **Future-proof** infrastructure
+
+**🔧 Technical Details:**
+
+```terraform
+# Wildcard certificates for production
+resource "aws_acm_certificate" "wildcard_website" {
+  domain_name               = "*.hibiji.com"
+  subject_alternative_names = ["hibiji.com"]
+  validation_method         = "DNS"
+}
+
+resource "aws_acm_certificate" "wildcard_api" {
+  domain_name       = "*-api.hibiji.com"
+  validation_method = "DNS"
+}
+```
+
+**📈 Priority**: High for production launch  
+**📚 Reference**: [AWS ACM Best Practices](https://docs.aws.amazon.com/acm/latest/userguide/best-practices.html)
+
+---
 
 ## 📄 License
 

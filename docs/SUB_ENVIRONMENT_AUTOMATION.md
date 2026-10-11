@@ -98,8 +98,9 @@ sub_environment = "dev04"
 domain_name     = "hibiji.com"
 
 # ECR Repository URLs
-ecr_repository_url         = "570827307849.dkr.ecr.us-west-1.amazonaws.com/dpp-backend"
-frontend_ecr_repository_url = "570827307849.dkr.ecr.us-west-1.amazonaws.com/dpp-frontend"
+# ECR Repository URLs are created dynamically by Terraform
+# No hardcoded values needed - URLs constructed from AWS account ID, region, and project name
+# Example format: {account-id}.dkr.ecr.{region}.amazonaws.com/{project-name}-{service}
 
 # Image tags (using commit SHA for versioning)
 image_tag                  = "a1b2c3d4e5f6"

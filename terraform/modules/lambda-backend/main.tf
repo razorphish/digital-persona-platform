@@ -104,7 +104,16 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
           var.jwt_secret_arn
         ]
       },
-
+      # SQS access for ML job queuing
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl"
+        ]
+        Resource = var.ml_sqs_queue_arn != null ? [var.ml_sqs_queue_arn] : []
+      }
     ]
   })
 }
@@ -137,6 +146,7 @@ resource "aws_lambda_function" "api" {
       DATABASE_SECRET_ARN    = var.database_secret_arn
       CORS_ORIGIN           = var.cors_origin
       S3_UPLOADS_BUCKET     = var.s3_uploads_bucket_name
+      ML_SQS_QUEUE_URL      = var.ml_sqs_queue_url != null ? var.ml_sqs_queue_url : ""
       AWS_ACCOUNT_ID        = data.aws_caller_identity.current.account_id
       # AWS_REGION is reserved by AWS Lambda and cannot be set manually
     }, var.additional_environment_variables)

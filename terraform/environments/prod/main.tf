@@ -5,18 +5,19 @@
 
 terraform {
   required_version = ">= 1.0"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
   }
-  
+
   backend "s3" {
     bucket = "hibiji-terraform-state"
-    key    = "prod/serverless/terraform.tfstate"
     region = "us-west-1"
+    # Key will be provided via -backend-config at runtime for proper isolation
+    # Format: prod/{sub_environment}/terraform.tfstate
   }
 }
 
@@ -56,18 +57,9 @@ variable "project_name" {
   default     = "dpp"
 }
 
-# Legacy variables (not used in serverless architecture but kept for compatibility)
-variable "ecr_repository_url" {
-  description = "ECR repository URL for backend (legacy - not used in serverless)"
-  type        = string
-  default     = ""
-}
-
-variable "frontend_ecr_repository_url" {
-  description = "ECR repository URL for frontend (legacy - not used in serverless)"
-  type        = string
-  default     = ""
-}
+# Legacy ECR variables removed - ECR repositories are now created dynamically by modules
+# AWS Batch ML module creates: module.aws_batch_ml.ecr_repository_url 
+# Backend/Frontend ECR repos would be created by their respective modules when needed
 
 variable "image_tag" {
   description = "Image tag (legacy - not used in serverless)"
@@ -90,7 +82,7 @@ variable "alert_emails" {
 # Local values
 locals {
   resource_prefix = "${var.environment}-${var.sub_environment}-${var.project_name}"
-  
+
   common_tags = {
     Environment    = var.environment
     SubEnvironment = var.sub_environment
@@ -99,7 +91,7 @@ locals {
     Architecture   = "Serverless"
     CreatedAt      = timestamp()
   }
-  
+
   # Domain configuration
   api_domain     = "${var.sub_environment}-api.${var.domain_name}"
   website_domain = "${var.sub_environment}.${var.domain_name}"
@@ -180,6 +172,11 @@ resource "aws_db_subnet_group" "database" {
     Name = "${local.resource_prefix}-db-subnet-group"
     Type = "DatabaseSubnetGroup"
   })
+
+  lifecycle {
+    # Prevent recreation if subnet group already exists
+    ignore_changes = [name]
+  }
 }
 
 # Database security group
@@ -216,25 +213,25 @@ resource "aws_security_group" "database" {
 
 # Aurora Serverless v2 cluster
 resource "aws_rds_cluster" "database" {
-  cluster_identifier     = "${local.resource_prefix}-cluster"
-  engine                = "aurora-postgresql"
-  engine_mode           = "provisioned"
-  engine_version        = "15.10"
-  database_name         = "digital_persona"
-  master_username       = "dpp_admin"
-  master_password       = random_password.database_password.result
-  backup_retention_period = 7
-  preferred_backup_window = "07:00-09:00"
+  cluster_identifier           = "${local.resource_prefix}-cluster"
+  engine                       = "aurora-postgresql"
+  engine_mode                  = "provisioned"
+  engine_version               = "15.10"
+  database_name                = "digital_persona"
+  master_username              = "dpp_admin"
+  master_password              = random_password.database_password.result
+  backup_retention_period      = 7
+  preferred_backup_window      = "07:00-09:00"
   preferred_maintenance_window = "sun:09:00-sun:10:00"
-  
+
   db_subnet_group_name   = aws_db_subnet_group.database.name
   vpc_security_group_ids = [aws_security_group.database.id]
-  
+
   serverlessv2_scaling_configuration {
     max_capacity = 1
     min_capacity = 0.5
   }
-  
+
   skip_final_snapshot = var.environment != "prod"
   deletion_protection = var.environment == "prod"
 
@@ -267,8 +264,8 @@ resource "aws_s3_bucket" "uploads" {
   bucket = "${local.resource_prefix}-uploads"
 
   tags = merge(local.common_tags, {
-    Name = "${local.resource_prefix}-uploads"
-    Type = "S3Bucket"
+    Name    = "${local.resource_prefix}-uploads"
+    Type    = "S3Bucket"
     Purpose = "FileUploads"
   })
 }
@@ -351,6 +348,35 @@ module "s3_website" {
   build_retention_days   = 30
 }
 
+# RDS Proxy for Connection Pooling
+module "rds_proxy" {
+  source = "../../modules/rds-proxy"
+
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  aws_region      = var.aws_region
+  common_tags     = local.common_tags
+
+  # Network configuration
+  vpc_id                      = aws_vpc.main.id
+  subnet_ids                  = aws_subnet.private[*].id
+  lambda_security_group_ids   = [aws_security_group.lambda.id]
+  database_security_group_ids = [aws_security_group.database.id]
+
+  # Database configuration
+  database_cluster_identifier = aws_rds_cluster.database.cluster_identifier
+  database_secret_arn         = aws_secretsmanager_secret.database_password.arn
+
+  # RDS Proxy settings optimized for production
+  idle_client_timeout          = 1800 # 30 minutes
+  max_connections_percent      = 80   # Higher for production
+  max_idle_connections_percent = 40   # Lower idle for efficiency
+  connection_borrow_timeout    = 120  # 2 minutes
+  require_tls                  = true # Enable TLS for production
+  log_retention_days           = 30   # Longer retention for production
+}
+
 # Lambda Backend
 module "lambda_backend" {
   source = "../../modules/lambda-backend"
@@ -365,12 +391,14 @@ module "lambda_backend" {
   lambda_timeout     = 30
   lambda_memory_size = 512
 
-  # Environment variables
-  database_url   = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${aws_rds_cluster.database.endpoint}:${aws_rds_cluster.database.port}/${aws_rds_cluster.database.database_name}"
-  cors_origin    = "https://${module.s3_website.cloudfront_domain_name}"
+  # Environment variables - Using RDS Proxy for connection pooling
+  database_url     = "postgresql://${aws_rds_cluster.database.master_username}:${random_password.database_password.result}@${module.rds_proxy.proxy_endpoint}:${module.rds_proxy.proxy_port}/${aws_rds_cluster.database.database_name}"
+  cors_origin      = "https://${module.s3_website.cloudfront_domain_name}"
+  ml_sqs_queue_url = module.aws_batch_ml.sqs_queue_url
+  ml_sqs_queue_arn = module.aws_batch_ml.sqs_queue_arn
 
   # AWS resources
-  database_secret_arn     = aws_secretsmanager_secret.database_password.arn
+  database_secret_arn    = aws_secretsmanager_secret.database_password.arn
   jwt_secret_arn         = aws_secretsmanager_secret.jwt_secret.arn
   s3_uploads_bucket_arn  = aws_s3_bucket.uploads.arn
   s3_uploads_bucket_name = aws_s3_bucket.uploads.bucket
@@ -424,9 +452,9 @@ module "api_gateway" {
   # CORS configuration
   cors_allow_origins = [
     "https://${module.s3_website.cloudfront_domain_name}",
-    "https://${local.website_domain}",  # Custom domain
-    "http://localhost:3000",  # Development
-    "http://localhost:3100"   # Docker development
+    "https://${local.website_domain}", # Custom domain
+    "http://localhost:3000",           # Development
+    "http://localhost:3100"            # Docker development
   ]
 
   stage_name         = "v1"
@@ -440,11 +468,11 @@ module "api_gateway" {
 # DNS Records for this sub-environment
 resource "aws_route53_record" "website" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.website_domain  # qa03.hibiji.com
+  name    = local.website_domain # qa03.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [module.s3_website.cloudfront_domain_name]
-  
+
   lifecycle {
     ignore_changes = [records]
   }
@@ -452,11 +480,11 @@ resource "aws_route53_record" "website" {
 
 resource "aws_route53_record" "api" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.api_domain  # qa03-api.hibiji.com
+  name    = local.api_domain # qa03-api.hibiji.com
   type    = "CNAME"
   ttl     = 300
   records = [replace(replace(module.api_gateway.api_url, "https://", ""), "/v1", "")]
-  
+
   lifecycle {
     ignore_changes = [records]
   }
@@ -500,4 +528,72 @@ output "uploads_bucket_name" {
 output "domain_name" {
   description = "Domain name for the environment"
   value       = local.website_domain
+}
+
+# AWS Batch ML Processing for AI/ML workloads
+module "aws_batch_ml" {
+  source = "../../modules/aws-batch-ml"
+
+  environment     = var.environment
+  sub_environment = var.sub_environment
+  project_name    = var.project_name
+  aws_region      = var.aws_region
+  common_tags     = local.common_tags
+
+  # Network configuration
+  vpc_id     = aws_vpc.main.id
+  subnet_ids = aws_subnet.private[*].id
+
+  # Database configuration
+  database_secret_arn = aws_secretsmanager_secret.database_password.arn
+
+  # Batch compute configuration (production optimized)
+  min_vcpus           = 0
+  max_vcpus           = 50
+  desired_vcpus       = 2 # Always-ready capacity for production
+  instance_types      = ["m5.large", "m5.xlarge", "m5.2xlarge", "c5.xlarge", "c5.2xlarge"]
+  use_spot_instances  = false # On-demand for production reliability
+  spot_bid_percentage = null
+
+  # Job configuration
+  job_vcpus  = 4
+  job_memory = 8192
+
+  # Logging
+  log_retention_days = 90
+  log_level          = "WARN" # Production logging
+}
+
+# RDS Proxy outputs
+output "rds_proxy_endpoint" {
+  description = "RDS Proxy endpoint for database connections"
+  value       = module.rds_proxy.proxy_endpoint
+  sensitive   = true
+}
+
+output "rds_proxy_name" {
+  description = "RDS Proxy name"
+  value       = module.rds_proxy.proxy_name
+}
+
+output "rds_proxy_port" {
+  description = "RDS Proxy port"
+  value       = module.rds_proxy.proxy_port
+}
+
+# AWS Batch ML outputs
+output "ml_sqs_queue_url" {
+  description = "SQS queue URL for ML job requests"
+  value       = module.aws_batch_ml.sqs_queue_url
+  sensitive   = true
+}
+
+output "ml_ecr_repository_url" {
+  description = "ECR repository URL for ML service container images"
+  value       = module.aws_batch_ml.ecr_repository_url
+}
+
+output "ml_batch_job_queue_name" {
+  description = "Batch job queue name for ML processing"
+  value       = module.aws_batch_ml.batch_job_queue_name
 } 

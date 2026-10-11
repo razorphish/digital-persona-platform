@@ -107,11 +107,16 @@ jobs:
           FUNCTION_NAME="$MAIN_ENV-$ENVIRONMENT-dpp-api"
           S3_BUCKET="$MAIN_ENV-$ENVIRONMENT-dpp-website"
 
-          # Generate API URL dynamically based on environment pattern
-          DOMAIN_NAME="${ENVIRONMENT}.hibiji.com"
-
-          # Determine HIBIJI_API_URL based on existing resources or prediction
-          API_URL="https://${ENVIRONMENT}-api.hibiji.com/v1"
+          # Generate URLs based on environment
+          if [[ "$ENVIRONMENT" == "prod" ]]; then
+            # Production URLs for main branch
+            DOMAIN_NAME="www.hibiji.com"
+            API_URL="https://api.hibiji.com/v1"
+          else
+            # Standard pattern for numbered environments
+            DOMAIN_NAME="${ENVIRONMENT}.hibiji.com"
+            API_URL="https://${ENVIRONMENT}-api.hibiji.com/v1"
+          fi
 
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "main_env=$MAIN_ENV" >> $GITHUB_OUTPUT
@@ -198,6 +203,27 @@ jobs:
           echo "backend-hash=$HASH" >> $GITHUB_OUTPUT
           echo "📋 Build hash: $HASH"
 
+      - name: Verify Lambda build output
+        run: |
+          echo "🔍 Verifying Lambda build artifacts..."
+
+          if [ ! -f "apps/server/lambda-dist/index.js" ]; then
+            echo "❌ Lambda index.js not found"
+            echo "📁 Lambda-dist contents:"
+            ls -la apps/server/lambda-dist/ || echo "lambda-dist directory not found"
+            exit 1
+          fi
+
+          if [ ! -f "apps/server/lambda-dist/package.json" ]; then
+            echo "❌ Lambda package.json not found"
+            exit 1
+          fi
+
+          INDEX_SIZE=$(stat -c%s "apps/server/lambda-dist/index.js" 2>/dev/null || stat -f%z "apps/server/lambda-dist/index.js")
+          echo "✅ Lambda artifacts verified:"
+          echo "   📄 index.js: ${INDEX_SIZE} bytes"
+          echo "   📄 package.json: $(stat -c%s "apps/server/lambda-dist/package.json" 2>/dev/null || stat -f%z "apps/server/lambda-dist/package.json") bytes"
+
       - name: Upload backend artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -250,6 +276,31 @@ jobs:
           echo "frontend-hash=$HASH" >> $GITHUB_OUTPUT
           echo "📋 Build hash: $HASH"
 
+      - name: Verify Frontend build output
+        run: |
+          echo "🔍 Verifying Frontend build artifacts..."
+
+          if [ ! -d "apps/web/out" ]; then
+            echo "❌ Frontend build output directory not found"
+            echo "📁 Web directory contents:"
+            ls -la apps/web/ || echo "web directory not found"
+            exit 1
+          fi
+
+          if [ ! -f "apps/web/out/index.html" ]; then
+            echo "❌ Frontend index.html not found"
+            echo "📁 Build output contents:"
+            ls -la apps/web/out/ || echo "out directory empty"
+            exit 1
+          fi
+
+          FILE_COUNT=$(find apps/web/out -type f | wc -l)
+          TOTAL_SIZE=$(du -sh apps/web/out | cut -f1)
+          echo "✅ Frontend artifacts verified:"
+          echo "   📁 Output directory: apps/web/out/"
+          echo "   📄 Files: ${FILE_COUNT}"
+          echo "   💾 Total size: ${TOTAL_SIZE}"
+
       - name: Upload frontend artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -282,13 +333,13 @@ jobs:
         with:
           terraform_version: "1.5.0"
 
-      - name: Cache Terraform
-        uses: actions/cache@v4
-        with:
-          path: |
-            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/.terraform
-            terraform/environments/${{ needs.detect-environment.outputs.main_env }}/.terraform.lock.hcl
-          key: ${{ runner.os }}-terraform-serverless-${{ needs.detect-environment.outputs.main_env }}-${{ hashFiles('terraform/**/*.tf') }}
+      - name: Update IAM Permissions (if needed)
+        run: |
+          echo "🔐 Checking and updating IAM permissions for new AWS services..."
+          # Install jq for JSON processing
+          sudo apt-get update && sudo apt-get install -y jq
+          # Run the IAM update script
+          ./scripts/update-iam-permissions.sh
 
       - name: Terraform Init and Plan
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
@@ -297,8 +348,9 @@ jobs:
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
           PROJECT_NAME: "dpp"
         run: |
-          echo "🚀 Step 1: Terraform Initialization..."
-          terraform init
+          echo "🚀 Step 1: Terraform Initialization with isolated backend..."
+          # Use dynamic backend key for proper sub-environment isolation
+          terraform init -backend-config="key=$MAIN_ENV/$ENVIRONMENT/terraform.tfstate" -reconfigure
 
           echo "🎯 Step 2: Variables Configuration..."
           echo "Environment: $ENVIRONMENT"
@@ -317,42 +369,154 @@ jobs:
           echo "📋 Step 3: Terraform Planning..."
           terraform plan -var-file="environment.auto.tfvars" -out=tfplan
 
-      - name: Import Existing Resources
+      - name: Handle Existing Resources
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
         env:
           ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
           MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
           PROJECT_NAME: "dpp"
         run: |
-          echo "📥 Step 3: Importing existing resources into Terraform state..."
+          echo "📥 Step 3: Handling existing AWS resources..."
 
-          # Helper function for safe imports
-          safe_import() {
-            local resource_address="$1"
-            local resource_id="$2"
-            local resource_type="$3"
-            local description="$4"
+                    # Check and import existing RDS DB Subnet Group if it exists
+          SUBNET_GROUP_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-db-subnet-group"
+          echo "🔍 Checking for existing DB Subnet Group: $SUBNET_GROUP_NAME"
+
+          # Get current VPC ID that Terraform will use
+          CURRENT_VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-vpc" --query "Vpcs[0].VpcId" --output text)
+          echo "🌐 Current VPC for this environment: $CURRENT_VPC_ID"
+
+          if aws rds describe-db-subnet-groups --db-subnet-group-name "$SUBNET_GROUP_NAME" --output text >/dev/null 2>&1; then
+            # Check if the existing subnet group is in the correct VPC
+            EXISTING_VPC_ID=$(aws rds describe-db-subnet-groups --db-subnet-group-name "$SUBNET_GROUP_NAME" --query "DBSubnetGroups[0].VpcId" --output text)
+            echo "🔍 Existing subnet group VPC: $EXISTING_VPC_ID"
             
-            echo "🔍 Checking if $description exists in state..."
-            if ! terraform state show "$resource_address" >/dev/null 2>&1; then
-              echo "📥 Importing $description: $resource_id"
-              if terraform import "$resource_address" "$resource_id" 2>/dev/null; then
-                echo "✅ Successfully imported $description"
-              else
-                echo "⚠️ Failed to import $description (may not exist or lack permissions)"
-              fi
+            if [ "$EXISTING_VPC_ID" = "$CURRENT_VPC_ID" ]; then
+              echo "✅ DB Subnet Group is in correct VPC, importing to Terraform state..."
+              terraform import aws_db_subnet_group.database "$SUBNET_GROUP_NAME" || echo "⚠️ Import failed or already in state"
             else
-              echo "✅ $description already in state"
+              echo "❌ DB Subnet Group is in wrong VPC (${EXISTING_VPC_ID} vs ${CURRENT_VPC_ID})"
+              echo "🗑️ Deleting orphaned subnet group to prevent conflicts..."
+              aws rds delete-db-subnet-group --db-subnet-group-name "$SUBNET_GROUP_NAME" || echo "⚠️ Failed to delete orphaned subnet group"
+              echo "✅ Will create new subnet group in correct VPC"
+            fi
+          else
+            echo "✅ DB Subnet Group does not exist, will be created"
+          fi
+
+                    # Legacy resource cleanup will be handled manually
+
+          # Check and import existing CloudFront Origin Access Control
+          OAC_NAME="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-oac"
+          echo "🔍 Checking for existing Origin Access Control: $OAC_NAME"
+
+          # Get OAC ID if it exists
+          OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='$OAC_NAME'].Id" --output text 2>/dev/null || echo "")
+
+          if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
+            echo "📦 Origin Access Control exists with ID: $OAC_ID, importing to Terraform state..."
+            terraform import module.s3_website.aws_cloudfront_origin_access_control.website "$OAC_ID" || echo "⚠️ Import failed or already in state"
+          else
+            echo "✅ Origin Access Control does not exist, will be created"
+          fi
+
+          # Check for other common conflicting resources
+          echo "🔍 Checking for other potential resource conflicts..."
+
+          # Check S3 buckets
+          WEBSITE_BUCKET="${MAIN_ENV}-${ENVIRONMENT}-${PROJECT_NAME}-website"
+          if aws s3api head-bucket --bucket "$WEBSITE_BUCKET" >/dev/null 2>&1; then
+            echo "📦 S3 bucket $WEBSITE_BUCKET exists, importing..."
+            terraform import module.s3_website.aws_s3_bucket.website "$WEBSITE_BUCKET" || echo "⚠️ Import failed or already in state"
+          fi
+
+          echo "✅ Resource conflict handling completed"
+
+      - name: Verify and Create ACM Certificates
+        working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
+        env:
+          ENVIRONMENT: ${{ needs.detect-environment.outputs.environment }}
+          MAIN_ENV: ${{ needs.detect-environment.outputs.main_env }}
+          PROJECT_NAME: "dpp"
+        run: |
+          echo "🔐 Step 4: Verifying ACM certificates for custom domains..."
+
+          # Define domain names for this environment
+          if [ "$ENVIRONMENT" = "prod" ]; then
+            WEBSITE_DOMAIN="www.hibiji.com"
+            API_DOMAIN="api.hibiji.com"
+          else
+            WEBSITE_DOMAIN="${ENVIRONMENT}.hibiji.com"
+            API_DOMAIN="${ENVIRONMENT}-api.hibiji.com"
+          fi
+
+          echo "🌐 Target domains:"
+          echo "   📄 Website: $WEBSITE_DOMAIN"
+          echo "   🔗 API: $API_DOMAIN"
+
+          # Function to check if certificate exists for domain
+          check_certificate() {
+            local domain=$1
+            local cert_arn=$(aws acm list-certificates --region us-east-1 \
+              --query "CertificateSummaryList[?DomainName=='$domain' && Status=='ISSUED'].CertificateArn" \
+              --output text 2>/dev/null || echo "")
+            
+            if [ -n "$cert_arn" ] && [ "$cert_arn" != "None" ]; then
+              echo "✅ Certificate exists for $domain: $cert_arn"
+              return 0
+            else
+              echo "❌ No valid certificate found for $domain"
+              return 1
             fi
           }
 
-          # Import Route53 hosted zone (shared across environments)
-          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones --query 'HostedZones[?Name==`hibiji.com.`].Id' --output text | sed 's|/hostedzone/||')
-          if [ ! -z "$HOSTED_ZONE_ID" ] && [ "$HOSTED_ZONE_ID" != "None" ]; then
-            safe_import "data.aws_route53_zone.main" "$HOSTED_ZONE_ID" "hosted_zone" "Route53 hosted zone"
+          # Check website certificate
+          echo "🔍 Checking website certificate..."
+          if ! check_certificate "$WEBSITE_DOMAIN"; then
+            echo "⚠️ Website certificate missing for $WEBSITE_DOMAIN"
+            echo "ℹ️ Note: For production deployment, create wildcard certificate *.hibiji.com"
+            echo "ℹ️ Current setup uses CloudFront default SSL (functional but not professional)"
           fi
 
-          echo "✅ Resource import completed"
+          # Check API certificate  
+          echo "🔍 Checking API certificate..."
+          if ! check_certificate "$API_DOMAIN"; then
+            echo "⚠️ API certificate missing for $API_DOMAIN"
+            echo "ℹ️ Note: For production deployment, create wildcard certificate *-api.hibiji.com"
+            echo "ℹ️ Current setup uses API Gateway default SSL (functional but not professional)"
+          fi
+
+          # Check for wildcard certificates (production recommendation)
+          echo "🔍 Checking for production-ready wildcard certificates..."
+
+          WILDCARD_WEB=$(aws acm list-certificates --region us-east-1 \
+            --query "CertificateSummaryList[?DomainName=='*.hibiji.com' && Status=='ISSUED'].CertificateArn" \
+            --output text 2>/dev/null || echo "")
+            
+          WILDCARD_API=$(aws acm list-certificates --region us-east-1 \
+            --query "CertificateSummaryList[?DomainName=='*-api.hibiji.com' && Status=='ISSUED'].CertificateArn" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -n "$WILDCARD_WEB" ] && [ "$WILDCARD_WEB" != "None" ]; then
+            echo "🌟 Production-ready wildcard certificate found: *.hibiji.com"
+          else
+            echo "💡 Recommendation: Create wildcard certificate *.hibiji.com for production"
+          fi
+
+          if [ -n "$WILDCARD_API" ] && [ "$WILDCARD_API" != "None" ]; then
+            echo "🌟 Production-ready wildcard certificate found: *-api.hibiji.com"  
+          else
+            echo "💡 Recommendation: Create wildcard certificate *-api.hibiji.com for production"
+          fi
+
+          echo ""
+          echo "📋 Certificate Status Summary:"
+          echo "   🏢 Environment: $ENVIRONMENT"
+          echo "   🌐 Using AWS default SSL certificates (functional)"
+          echo "   💡 For production: Implement wildcard certificates as documented in README.md"
+          echo "   📚 See 'Production Readiness TODOs' section for implementation details"
+          echo ""
+          echo "✅ Certificate verification completed"
 
       - name: Apply Terraform Configuration
         working-directory: terraform/environments/${{ needs.detect-environment.outputs.main_env }}
@@ -363,56 +527,75 @@ jobs:
         run: |
           echo "🏗️ Step 4: Applying Terraform configuration..."
 
-          # Get plan exit code to check if changes are needed
-          PLAN_EXIT_CODE=0
-          terraform plan -var-file="environment.auto.tfvars" -detailed-exitcode -out=tfplan || PLAN_EXIT_CODE=$?
+          # Debug: Show current backend configuration
+          echo "🔍 DEBUG: Checking terraform backend state..."
+          echo "Expected backend key: $MAIN_ENV/$ENVIRONMENT/terraform.tfstate"
 
-          if [ $PLAN_EXIT_CODE -eq 2 ]; then
-            echo "🚀 Step 4: Applying Terraform configuration..."
+          # Clean any existing terraform state to ensure fresh initialization
+          echo "🧹 Cleaning any cached terraform state..."
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
 
-            # First attempt: Full apply with timeout
-            echo "🎯 Attempt 1: Full Terraform apply..."
-            if timeout 1800 terraform apply -auto-approve -lock-timeout=300s tfplan; then
-              echo "✅ Full Terraform apply completed successfully!"
-            else
-              echo "⚠️ Full apply failed, trying targeted deployment..."
+          # Re-initialize with explicit backend configuration
+          echo "🔄 Re-initializing terraform with isolated backend..."
+          terraform init -backend-config="key=$MAIN_ENV/$ENVIRONMENT/terraform.tfstate" -reconfigure
+
+                    # Run terraform plan and parse output to detect changes
+          echo "📊 Running terraform plan to detect changes..."
+          terraform plan -var-file="environment.auto.tfvars" -out=tfplan > plan_output.txt 2>&1
+          PLAN_EXIT_CODE=$?
+
+          # Show plan output
+          cat plan_output.txt
+
+          # Parse plan output to detect changes (terraform exit code is buggy)
+          CHANGES_DETECTED="false"
+          if grep -q "Plan: [1-9]" plan_output.txt || grep -q "to add" plan_output.txt; then
+            CHANGES_DETECTED="true"
+          fi
+
+          echo "📋 Terraform plan exit code: $PLAN_EXIT_CODE"
+          echo "📋 Changes detected: $CHANGES_DETECTED"
+          echo "📋 Logic: Parsing plan output for 'Plan: [1-9]' or 'to add'"
+
+          if [ "$CHANGES_DETECTED" = "true" ]; then
+            echo "🚀 Changes detected! Applying Terraform configuration..."
+            echo "📊 Resources will be created/modified"
+
+            # Robust apply with retry mechanism (no targeted fallback)
+            APPLY_SUCCESS="false"
+            for attempt in 1 2 3; do
+              echo "🎯 Attempt $attempt/3: Full Terraform apply..."
               
-              # Second attempt: Core infrastructure first
-              echo "🏗️ Attempt 2: Core infrastructure deployment..."
-              
-              # Apply VPC and networking first
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_vpc.main \
-                -target=aws_subnet.private \
-                -target=aws_internet_gateway.main \
-                -target=aws_security_group.database \
-                -target=aws_security_group.lambda || echo "⚠️ VPC deployment issues"
-              
-              # Apply secrets and database
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_secretsmanager_secret.jwt_secret \
-                -target=aws_secretsmanager_secret.database_password \
-                -target=aws_secretsmanager_secret_version.jwt_secret \
-                -target=aws_secretsmanager_secret_version.database_password \
-                -target=aws_db_subnet_group.database \
-                -target=aws_rds_cluster.database \
-                -target=aws_rds_cluster_instance.database || echo "⚠️ Database deployment issues"
-              
-              # Apply S3 buckets
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_s3_bucket.uploads \
-                -target=module.s3_website \
-                -target=module.lambda_backend.aws_s3_bucket.lambda_deployments || echo "⚠️ S3 deployment issues"
-              
-              # Apply serverless components
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=module.lambda_backend \
-                -target=module.api_gateway || echo "⚠️ Serverless deployment issues"
-              
-              # Apply DNS records last
-              terraform apply -auto-approve -lock-timeout=300s \
-                -target=aws_route53_record.website \
-                -target=aws_route53_record.api || echo "⚠️ DNS deployment issues"
+              if terraform apply -auto-approve -lock-timeout=600s tfplan; then
+                echo "✅ Full Terraform apply completed successfully!"
+                APPLY_SUCCESS="true"
+                break
+              else
+                APPLY_EXIT_CODE=$?
+                echo "❌ Attempt $attempt failed with exit code: $APPLY_EXIT_CODE"
+                
+                if [ $attempt -lt 3 ]; then
+                  echo "⏳ Waiting 30 seconds before retry..."
+                  sleep 30
+                  
+                  # Refresh the plan for the retry
+                  echo "🔄 Refreshing Terraform plan for retry..."
+                  terraform plan -var-file="environment.auto.tfvars" -out=tfplan
+                else
+                  echo "💥 All apply attempts failed!"
+                  echo "🔍 Common solutions:"
+                  echo "   • Check AWS resource limits and quotas"
+                  echo "   • Verify IAM permissions are sufficient"
+                  echo "   • Check for resource naming conflicts"
+                  echo "   • Review Terraform state for inconsistencies"
+                  exit 1
+                fi
+              fi
+            done
+            
+            if [ "$APPLY_SUCCESS" = "false" ]; then
+              echo "❌ Terraform apply failed after 3 attempts"
+              exit 1
             fi
           else
             echo "✅ No infrastructure changes needed (plan exit code: $PLAN_EXIT_CODE)"

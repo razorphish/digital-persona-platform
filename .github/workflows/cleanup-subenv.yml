@@ -71,8 +71,9 @@ jobs:
         run: |
           echo "🧹 Destroying infrastructure for ${{ env.ENVIRONMENT }}..."
 
-          # Initialize Terraform
-          terraform init
+          # Initialize Terraform with proper backend configuration
+          echo "🔧 Configuring Terraform backend for ${{ env.MAIN_ENV }}/${{ env.ENVIRONMENT }}..."
+          terraform init -backend-config="key=${{ env.MAIN_ENV }}/${{ env.ENVIRONMENT }}/terraform.tfstate" -reconfigure
 
           # Create tfvars file
           cat > environment.auto.tfvars << EOF
@@ -86,12 +87,13 @@ jobs:
 
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "🔍 DRY RUN: Showing what would be destroyed..."
-            terraform plan -destroy -var-file="environment.auto.tfvars"
+            timeout 900 terraform plan -destroy -var-file="environment.auto.tfvars"
           else
             echo "🚨 DESTROYING infrastructure..."
             
             if [ "${{ github.event.inputs.force_cleanup }}" = "true" ]; then
-              terraform destroy -auto-approve -var-file="environment.auto.tfvars"
+              echo "⏰ Running terraform destroy with 30-minute timeout..."
+              timeout 1800 terraform destroy -auto-approve -var-file="environment.auto.tfvars" -lock-timeout=600s
             else
               echo "❌ Manual approval required. Set force_cleanup=true to proceed."
               exit 1
@@ -99,133 +101,20 @@ jobs:
           fi
 
       - name: Clean up orphaned AWS resources
-        if: github.event.inputs.dry_run != 'true' && github.event.inputs.force_cleanup == 'true'
+        if: always() && github.event.inputs.dry_run != 'true' && github.event.inputs.force_cleanup == 'true'
+        # Run comprehensive cleanup even if Terraform destroy fails
+        # Uses the new dynamic cleanup script for safety
         run: |
-          echo "🧹 Cleaning up orphaned AWS resources for ${{ env.ENVIRONMENT }}..."
+          echo "🧹 Using dynamic cleanup script for ${{ env.ENVIRONMENT }}..."
 
-          ENVIRONMENT="${{ env.ENVIRONMENT }}"
-          MAIN_ENV="${{ env.MAIN_ENV }}"
-          PROJECT_NAME="dpp"
+          # Install jq for JSON processing (needed for Route53 record cleanup)
+          sudo apt-get update && sudo apt-get install -y jq
 
-          # Clean up Lambda functions
-          echo "🧹 Cleaning up Lambda functions..."
-          LAMBDA_FUNCTIONS=$(aws lambda list-functions \
-            --query "Functions[?starts_with(FunctionName, '${MAIN_ENV}-${ENVIRONMENT}')].FunctionName" \
-            --output text)
+          # Make the script executable
+          chmod +x scripts/dynamic-cleanup-environment.sh
 
-          for func in $LAMBDA_FUNCTIONS; do
-            if [ -n "$func" ] && [ "$func" != "None" ]; then
-              echo "🗑️ Deleting Lambda function: $func"
-              aws lambda delete-function --function-name "$func" || echo "⚠️ Failed to delete Lambda function: $func"
-            fi
-          done
-
-          # Clean up API Gateway v2 APIs
-          echo "🧹 Cleaning up API Gateway v2 APIs..."
-          API_IDS=$(aws apigatewayv2 get-apis \
-            --query "Items[?starts_with(Name, '${MAIN_ENV}-${ENVIRONMENT}')].ApiId" \
-            --output text)
-
-          for api_id in $API_IDS; do
-            if [ -n "$api_id" ] && [ "$api_id" != "None" ]; then
-              echo "🗑️ Deleting API Gateway: $api_id"
-              aws apigatewayv2 delete-api --api-id "$api_id" || echo "⚠️ Failed to delete API Gateway: $api_id"
-            fi
-          done
-
-          # Clean up S3 buckets
-          echo "🧹 Cleaning up S3 buckets..."
-          S3_BUCKETS=$(aws s3api list-buckets \
-            --query "Buckets[?starts_with(Name, '${MAIN_ENV}-${ENVIRONMENT}')].Name" \
-            --output text)
-
-          for bucket in $S3_BUCKETS; do
-            if [ -n "$bucket" ] && [ "$bucket" != "None" ]; then
-              echo "🗑️ Emptying and deleting S3 bucket: $bucket"
-              aws s3 rm s3://$bucket --recursive || echo "⚠️ Failed to empty bucket: $bucket"
-              aws s3api delete-bucket --bucket "$bucket" || echo "⚠️ Failed to delete bucket: $bucket"
-            fi
-          done
-
-          # Clean up CloudWatch Log Groups
-          echo "🧹 Cleaning up CloudWatch Log Groups..."
-          LOG_GROUPS=$(aws logs describe-log-groups \
-            --query "logGroups[?contains(logGroupName, '${ENVIRONMENT}')].logGroupName" \
-            --output text)
-
-          for log_group in $LOG_GROUPS; do
-            if [ -n "$log_group" ] && [ "$log_group" != "None" ]; then
-              echo "🗑️ Deleting log group: $log_group"
-              aws logs delete-log-group --log-group-name "$log_group" || echo "⚠️ Failed to delete log group: $log_group"
-            fi
-          done
-
-          # Clean up Secrets Manager secrets
-          echo "🧹 Cleaning up Secrets Manager secrets..."
-          SECRETS=$(aws secretsmanager list-secrets \
-            --query "SecretList[?starts_with(Name, '${MAIN_ENV}-${ENVIRONMENT}')].Name" \
-            --output text)
-
-          for secret in $SECRETS; do
-            if [ -n "$secret" ] && [ "$secret" != "None" ]; then
-              echo "🗑️ Deleting secret: $secret"
-              aws secretsmanager delete-secret --secret-id "$secret" --force-delete-without-recovery || echo "⚠️ Failed to delete secret: $secret"
-            fi
-          done
-
-          # Clean up RDS instances and clusters
-          echo "🧹 Cleaning up RDS resources..."
-          RDS_CLUSTERS=$(aws rds describe-db-clusters \
-            --query "DBClusters[?starts_with(DBClusterIdentifier, '${ENVIRONMENT}')].DBClusterIdentifier" \
-            --output text)
-
-          for cluster in $RDS_CLUSTERS; do
-            if [ -n "$cluster" ] && [ "$cluster" != "None" ]; then
-              echo "🗑️ Deleting RDS cluster: $cluster"
-              # Delete cluster instances first
-              CLUSTER_INSTANCES=$(aws rds describe-db-clusters \
-                --db-cluster-identifier "$cluster" \
-                --query "DBClusters[0].DBClusterMembers[*].DBInstanceIdentifier" \
-                --output text)
-              
-              for instance in $CLUSTER_INSTANCES; do
-                if [ -n "$instance" ] && [ "$instance" != "None" ]; then
-                  echo "🗑️ Deleting RDS instance: $instance"
-                  aws rds delete-db-instance --db-instance-identifier "$instance" --skip-final-snapshot || echo "⚠️ Failed to delete RDS instance: $instance"
-                fi
-              done
-              
-              # Wait for instances to be deleted before deleting cluster
-              echo "⏳ Waiting for instances to be deleted..."
-              sleep 60
-              
-              aws rds delete-db-cluster --db-cluster-identifier "$cluster" --skip-final-snapshot || echo "⚠️ Failed to delete RDS cluster: $cluster"
-            fi
-          done
-
-          # Clean up CloudFront distributions
-          echo "🧹 Cleaning up CloudFront distributions..."
-          DISTRIBUTIONS=$(aws cloudfront list-distributions \
-            --query "DistributionList.Items[?contains(Aliases.Items || [''], '${ENVIRONMENT}')].{Id:Id,DomainName:DomainName}" \
-            --output text)
-
-          if [ -n "$DISTRIBUTIONS" ] && [ "$DISTRIBUTIONS" != "None" ]; then
-            echo "$DISTRIBUTIONS" | while read id domain; do
-              if [ -n "$id" ] && [ "$id" != "None" ]; then
-                echo "🗑️ Disabling CloudFront distribution: $id ($domain)"
-                
-                # Get current distribution config
-                aws cloudfront get-distribution-config --id "$id" --query 'DistributionConfig' > dist_config.json
-                ETAG=$(aws cloudfront get-distribution-config --id "$id" --query 'ETag' --output text)
-                
-                # Disable distribution
-                jq '.Enabled = false' dist_config.json > dist_config_disabled.json
-                aws cloudfront update-distribution --id "$id" --distribution-config file://dist_config_disabled.json --if-match "$ETAG" || echo "⚠️ Failed to disable distribution: $id"
-                
-                echo "⏳ Distribution disabled. Manual deletion required after propagation."
-              fi
-            done
-          fi
+          # Run the dynamic cleanup script with force flag (skip confirmation in CI)
+          FORCE_CLEANUP=true PROJECT_NAME=dpp ./scripts/dynamic-cleanup-environment.sh "${{ env.ENVIRONMENT }}"
 
       - name: Cleanup Summary
         if: always()
@@ -241,19 +130,26 @@ jobs:
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "✅ Dry run completed - no resources were deleted"
           elif [ "${{ github.event.inputs.force_cleanup }}" = "true" ]; then
-            echo "✅ Cleanup completed for environment: ${{ env.ENVIRONMENT }}"
+            echo "✅ Dynamic cleanup completed for environment: ${{ env.ENVIRONMENT }}"
             echo ""
-            echo "📋 Resources cleaned up:"
-            echo "  • Terraform-managed infrastructure"
+            echo "🎯 Cleanup Method: Safe environment-specific script with wildcard protection"
+            echo "📋 Resources cleaned up (dynamically scoped to ${{ env.ENVIRONMENT }}):"
+            echo "  • All Terraform-managed infrastructure"
+            echo "  • AWS Batch resources (Job Queues → Compute Environments)"
+            echo "  • SQS queues (main + dead letter queues)"
             echo "  • Lambda functions"
-            echo "  • API Gateway v2 APIs"
-            echo "  • S3 buckets"
-            echo "  • CloudWatch Log Groups"
-            echo "  • Secrets Manager secrets"
             echo "  • RDS clusters and instances"
-            echo "  • CloudFront distributions (disabled)"
+            echo "  • DB Subnet Groups (current pattern only)"
+            echo "  • RDS Proxy endpoints (current pattern only)"
+            echo "  • S3 buckets (with versioned object cleanup)"
+            echo "  • Route53 DNS records"
+            echo "  • VPC infrastructure (subnets, gateways, security groups)"
+            echo "  • IAM roles and policies"
+            echo "  • ECR repositories"
+            echo "  • Network interfaces (ENIs)"
             echo ""
-            echo "⚠️ Note: CloudFront distributions require manual deletion after propagation"
+            echo "🔒 Safety: Only resources matching exact '${{ env.MAIN_ENV }}-${{ env.ENVIRONMENT }}-dpp*' pattern deleted"
+            echo "✅ Wildcard Safe: Won't interfere with other environments (${env.ENVIRONMENT}0, ${env.ENVIRONMENT}1, etc.)"
           else
             echo "❌ Cleanup was not performed (force_cleanup not enabled)"
           fi
