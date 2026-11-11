@@ -16,9 +16,9 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.848.0",
-    "@aws-sdk/s3-request-presigner": "^3.848.0",
-    "@aws-sdk/client-sqs": "^3.848.0",
+    "@aws-sdk/client-s3": "^3.1166.0",
+    "@aws-sdk/s3-request-presigner": "^3.1166.0",
+    "@aws-sdk/client-sqs": "^3.1166.0",
     "@digital-persona/database": "*",
     "@digital-persona/shared": "*",
     "@trpc/server": "^10.45.0",
